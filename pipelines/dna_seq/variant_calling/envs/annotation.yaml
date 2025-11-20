@@ -1,0 +1,8 @@
+name: annotation
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - snpeff=5.1
+  - bcftools=1.17
+  - htslib=1.17

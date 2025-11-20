@@ -1,0 +1,35 @@
+# DNA-seq Variant Calling Pipeline Configuration
+
+# Sample information
+samples:
+  - sample1
+  - sample2
+  # Add more samples here
+
+# Reference genome and known sites
+reference:
+  genome: "/path/to/reference/genome.fa"
+  known_sites: "/path/to/known/sites.vcf.gz"
+
+# SnpEff genome database
+snpeff_genome: "hg38"
+
+# Pipeline parameters
+trim:
+  min_length: 50
+  quality_cutoff: 20
+
+align:
+  threads: 8
+
+variant_calling:
+  threads: 4
+  min_quality: 20
+
+filtering:
+  # Hard filtering thresholds
+  QD: 2.0
+  FS: 60.0
+  MQ: 40.0
+  MQRankSum: -12.5
+  ReadPosRankSum: -8.0

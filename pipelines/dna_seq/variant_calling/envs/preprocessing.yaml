@@ -1,0 +1,7 @@
+name: preprocessing
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - fastp=0.23.4
+  - trimmomatic=0.39

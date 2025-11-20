@@ -1,0 +1,8 @@
+name: variant_calling
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - gatk4=4.4.0.0
+  - samtools=1.17
+  - bcftools=1.17
