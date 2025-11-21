@@ -47,9 +47,11 @@ rule all:
 
 rule fastqc_raw:
     input:
-        "../../../data/raw/chip_seq/{sample}.fastq.gz"
+        r1="../../../data/raw/chip_seq/{sample}_R1.fastq.gz",
+        r2="../../../data/raw/chip_seq/{sample}_R2.fastq.gz"
     output:
-        f"{QC_DIR}/fastqc_raw/{{sample}}_fastqc.html"
+        r1=f"{QC_DIR}/fastqc_raw/{{sample}}_R1_fastqc.html",
+        r2=f"{QC_DIR}/fastqc_raw/{{sample}}_R2_fastqc.html"
     conda:
         "envs/qc.yaml"
     threads: 2
@@ -58,15 +60,17 @@ rule fastqc_raw:
     shell:
         """
         mkdir -p {QC_DIR}/fastqc_raw
-        fastqc -t {threads} {input} -o {QC_DIR}/fastqc_raw/ 2> {log}
+        fastqc -t {threads} {input.r1} {input.r2} -o {QC_DIR}/fastqc_raw/ 2> {log}
         """
 
 
 rule trim_reads:
     input:
-        "../../../data/raw/chip_seq/{sample}.fastq.gz"
+        r1="../../../data/raw/chip_seq/{sample}_R1.fastq.gz",
+        r2="../../../data/raw/chip_seq/{sample}_R2.fastq.gz"
     output:
-        fastq=f"{PROCESSED_DIR}/{{sample}}.trimmed.fastq.gz",
+        r1=f"{PROCESSED_DIR}/{{sample}}_R1.trimmed.fastq.gz",
+        r2=f"{PROCESSED_DIR}/{{sample}}_R2.trimmed.fastq.gz",
         html=f"{QC_DIR}/fastp/{{sample}}.html",
         json=f"{QC_DIR}/fastp/{{sample}}.json"
     conda:
@@ -76,7 +80,8 @@ rule trim_reads:
         f"{QC_DIR}/logs/trim/{{sample}}.log"
     shell:
         """
-        fastp -i {input} -o {output.fastq} \\
+        fastp -i {input.r1} -I {input.r2} \\
+              -o {output.r1} -O {output.r2} \\
               --thread {threads} \\
               --html {output.html} \\
               --json {output.json} \\
@@ -90,7 +95,8 @@ rule trim_reads:
 
 rule align_reads:
     input:
-        fastq=f"{PROCESSED_DIR}/{{sample}}.trimmed.fastq.gz",
+        r1=f"{PROCESSED_DIR}/{{sample}}_R1.trimmed.fastq.gz",
+        r2=f"{PROCESSED_DIR}/{{sample}}_R2.trimmed.fastq.gz",
         ref=REFERENCE
     output:
         bam=temp(f"{PROCESSED_DIR}/{{sample}}.sorted.bam")
@@ -101,7 +107,7 @@ rule align_reads:
         f"{QC_DIR}/logs/align/{{sample}}.log"
     shell:
         """
-        bwa mem -t {threads} {input.ref} {input.fastq} 2> {log} | \\
+        bwa mem -t {threads} {input.ref} {input.r1} {input.r2} 2> {log} | \\
         samtools sort -@ {threads} -o {output.bam} - 2>> {log}
         samtools index {output.bam}
         """
