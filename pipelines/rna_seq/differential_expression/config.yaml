@@ -1,23 +1,21 @@
 # RNA-seq Differential Expression Pipeline Configuration
 
-# Sample groups and replicates
+# Sample groups and replicates (using Yeast RNA-seq data - paired-end)
 samples:
   treatment:
-    - treat_rep1
-    - treat_rep2
-    - treat_rep3
+    - mut_rep1    # Yeast snf2 mutant replicate 1
+    - mut_rep2    # Yeast snf2 mutant replicate 2
   control:
-    - ctrl_rep1
-    - ctrl_rep2
-    - ctrl_rep3
+    - wt_rep1     # Yeast wild type replicate 1
+    - wt_rep2     # Yeast wild type replicate 2
 
-# Reference genome and annotations
+# Reference genome and annotations (Yeast S. cerevisiae)
 reference:
-  genome: "/home/sdodl001_odu_edu/references/genomes/hg38/hg38.fa"
-  gtf: "/home/sdodl001_odu_edu/references/annotations/gencode.v45.annotation.gtf"
+  genome: "/home/sdodl001_odu_edu/references/genomes/yeast/sacCer3.fa"
+  gtf: "/home/sdodl001_odu_edu/references/annotations/yeast/sacCer3.gtf"
   
 # STAR index directory
-star_index: "/home/sdodl001_odu_edu/references/indexes/star"
+star_index: "/home/sdodl001_odu_edu/references/indexes/star_yeast"
 
 # Pipeline parameters
 trim:

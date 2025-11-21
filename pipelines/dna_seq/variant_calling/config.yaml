@@ -1,26 +1,31 @@
-# DNA-seq Variant Calling Pipeline Configuration - Test Run
+# DNA-seq Variant Calling Pipeline Configuration
 
+# Sample information (Human exome sequencing)
 samples:
-  - sample1
+  - sample1  # HapMap individual exome data
 
+# Reference genome and known sites
 reference:
   genome: "/home/sdodl001_odu_edu/references/genomes/hg38/hg38.fa"
-  known_sites: "/home/sdodl001_odu_edu/references/known_sites/Homo_sapiens_assembly38.dbsnp138.vcf.gz"
+  known_sites: "/home/sdodl001_odu_edu/references/known_sites/dbsnp_146.hg38.vcf.gz"
 
+# SnpEff genome database
 snpeff_genome: "hg38"
 
+# Pipeline parameters
 trim:
   min_length: 50
   quality_cutoff: 20
 
 align:
-  threads: 4
+  threads: 8
 
 variant_calling:
-  threads: 2
+  threads: 4
   min_quality: 20
 
 filtering:
+  # Hard filtering thresholds
   QD: 2.0
   FS: 60.0
   MQ: 40.0

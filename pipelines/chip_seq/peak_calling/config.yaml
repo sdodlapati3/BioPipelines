@@ -1,13 +1,12 @@
 # ChIP-seq Peak Calling Pipeline Configuration
 
-# Samples and inputs
+# Samples and inputs (H3K4me3 ChIP-seq from human cells)
 samples:
-  - sample1
-  - sample2
-  - sample3
+  - h3k4me3_rep1  # 3.4G paired-end
+  - h3k4me3_rep2  # 4.0G paired-end
 
 # Input control sample
-input_control: "input"
+input_control: "input_control"  # 3.8G paired-end
 
 # Reference genome
 reference:

@@ -1,9 +1,8 @@
 # ATAC-seq Chromatin Accessibility Analysis Configuration
 
 samples:
-  - sample1
-  - sample2  
-  - sample3
+  - new_sample1  # 14G paired-end
+  - new_sample2  # downloading
 
 reference:
   genome: "/home/sdodl001_odu_edu/references/genomes/hg38/hg38.fa"
