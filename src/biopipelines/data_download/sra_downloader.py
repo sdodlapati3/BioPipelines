@@ -43,6 +43,14 @@ class SRADownloader:
         except (subprocess.CalledProcessError, FileNotFoundError):
             return False
     
+    def _check_sra_tools(self) -> dict:
+        """Check which SRA tools are available"""
+        return {
+            'prefetch': self._check_tool('prefetch'),
+            'fasterq-dump': self._check_tool('fasterq-dump'),
+            'fastq-dump': self._check_tool('fastq-dump')
+        }
+    
     def download(
         self,
         accession: str,
@@ -146,30 +154,126 @@ class SRADownloader:
         accession: str,
         output_dir: Path
     ) -> List[Path]:
-        """Download and convert from SRA using sra-tools"""
-        logger.info(f"Using fasterq-dump to download {accession}")
+        """
+        Download and convert from SRA using sra-tools
         
-        cmd = [
-            "fasterq-dump",
-            accession,
-            "--outdir", str(output_dir),
-            "--split-files",  # Split into R1/R2 for paired-end
-            "--progress",
-            "--threads", "4"
-        ]
+        Uses the most reliable method:
+        1. prefetch to download .sra file
+        2. fasterq-dump for fast conversion (with fallback to fastq-dump)
+        3. gzip compression
+        """
+        import tempfile
+        import shutil
         
-        subprocess.run(cmd, check=True)
+        logger.info(f"Downloading {accession} using SRA tools")
         
-        # Find downloaded files
-        downloaded = list(output_dir.glob(f"{accession}*.fastq"))
+        # Check available tools
+        tools = self._check_sra_tools()
         
-        # Compress files
+        if not any(tools.values()):
+            raise RuntimeError(
+                "No SRA tools available. Install with: "
+                "conda install -c bioconda sra-tools"
+            )
+        
+        # Use temporary directory for .sra files
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            
+            # Step 1: Prefetch .sra file (most reliable)
+            if tools['prefetch']:
+                logger.info(f"Prefetching {accession}...")
+                cmd = ["prefetch", accession, "-O", str(tmpdir_path)]
+                try:
+                    subprocess.run(cmd, check=True, capture_output=True, text=True)
+                    sra_file = tmpdir_path / accession / f"{accession}.sra"
+                    
+                    if not sra_file.exists():
+                        # Try alternate location
+                        sra_file = tmpdir_path / f"{accession}.sra"
+                    
+                    if not sra_file.exists():
+                        raise FileNotFoundError(f"Prefetch succeeded but .sra file not found")
+                        
+                except subprocess.CalledProcessError as e:
+                    logger.warning(f"Prefetch failed: {e.stderr}")
+                    sra_file = None
+            else:
+                sra_file = None
+            
+            # Step 2: Convert to FASTQ
+            downloaded = []
+            
+            # Try fasterq-dump first (faster)
+            if tools['fasterq-dump'] and sra_file and sra_file.exists():
+                logger.info(f"Converting with fasterq-dump...")
+                cmd = [
+                    "fasterq-dump",
+                    str(sra_file),
+                    "--outdir", str(output_dir),
+                    "--split-files",
+                    "--threads", "4",
+                    "--progress"
+                ]
+                
+                try:
+                    subprocess.run(cmd, check=True, capture_output=True, text=True)
+                    downloaded = list(output_dir.glob(f"{accession}*.fastq"))
+                    logger.info(f"fasterq-dump created {len(downloaded)} files")
+                except subprocess.CalledProcessError as e:
+                    logger.warning(f"fasterq-dump failed: {e.stderr}")
+                    downloaded = []
+            
+            # Fallback to fastq-dump
+            if not downloaded and tools['fastq-dump']:
+                logger.info(f"Using fastq-dump as fallback...")
+                cmd = [
+                    "fastq-dump",
+                    "--split-files",
+                    "--outdir", str(output_dir)
+                ]
+                
+                if sra_file and sra_file.exists():
+                    cmd.append(str(sra_file))
+                else:
+                    cmd.append(accession)
+                
+                try:
+                    subprocess.run(cmd, check=True, capture_output=True, text=True)
+                    downloaded = list(output_dir.glob(f"{accession}*.fastq"))
+                    logger.info(f"fastq-dump created {len(downloaded)} files")
+                except subprocess.CalledProcessError as e:
+                    logger.error(f"fastq-dump failed: {e.stderr}")
+                    raise RuntimeError(f"All SRA download methods failed for {accession}")
+            
+            if not downloaded:
+                raise RuntimeError(f"No FASTQ files generated for {accession}")
+        
+        # Step 3: Compress files
         compressed = []
         for fastq in downloaded:
+            if fastq.suffix == '.gz':
+                compressed.append(fastq)
+                continue
+                
             gzipped = fastq.with_suffix(fastq.suffix + '.gz')
-            logger.info(f"Compressing {fastq}")
-            subprocess.run(["gzip", str(fastq)], check=True)
-            compressed.append(gzipped)
+            
+            if gzipped.exists():
+                logger.info(f"Compressed file already exists: {gzipped}")
+                fastq.unlink()  # Remove uncompressed
+                compressed.append(gzipped)
+            else:
+                logger.info(f"Compressing {fastq.name}...")
+                subprocess.run(["gzip", str(fastq)], check=True)
+                compressed.append(gzipped)
+        
+        # Validate files
+        for f in compressed:
+            size_mb = f.stat().st_size / (1024 * 1024)
+            if size_mb < 1:
+                logger.warning(f"File {f.name} is very small ({size_mb:.2f} MB)")
+            else:
+                logger.info(f"Downloaded {f.name}: {size_mb:.1f} MB")
         
         return compressed
 

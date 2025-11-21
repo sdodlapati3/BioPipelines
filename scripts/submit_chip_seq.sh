@@ -19,10 +19,15 @@ echo "CPUs: $SLURM_CPUS_PER_TASK"
 echo "========================================="
 
 # Activate conda environment
-source ~/miniconda3/bin/activate ~/envs/biopipelines
+source ~/miniconda3/etc/profile.d/conda.sh
+conda activate ~/envs/biopipelines
 
 # Navigate to pipeline directory
 cd ~/BioPipelines/pipelines/chip_seq/peak_calling
+
+# Setup cleanup trap to unlock on exit/cancel
+trap 'echo "Job interrupted, cleaning up locks..."; snakemake --unlock 2>/dev/null; exit 130' INT TERM
+trap 'if [ $? -ne 0 ]; then echo "Job failed, cleaning up locks..."; snakemake --unlock 2>/dev/null; fi' EXIT
 
 # Run Snakemake with all available CPUs
 echo "Starting Snakemake pipeline with $SLURM_CPUS_PER_TASK cores..."

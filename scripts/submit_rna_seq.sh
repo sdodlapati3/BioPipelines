@@ -21,6 +21,10 @@ echo "========================================="
 # Activate conda environment
 source ~/miniconda3/bin/activate ~/envs/biopipelines
 
+# Setup cleanup trap to unlock on exit/cancel
+trap 'echo "Job interrupted, cleaning up locks..."; cd ~/BioPipelines/pipelines/rna_seq/differential_expression && snakemake --unlock 2>/dev/null; exit 130' INT TERM
+trap 'if [ $? -ne 0 ]; then echo "Job failed, cleaning up locks..."; cd ~/BioPipelines/pipelines/rna_seq/differential_expression && snakemake --unlock 2>/dev/null; fi' EXIT
+
 # Clean conda cache to prevent corrupted package issues
 echo "Cleaning conda cache..."
 conda clean --packages -y 2>/dev/null || true

@@ -329,40 +329,78 @@ ego <- enrichGO(
 
 ### Key Output Files
 
-#### 1. **DESeq2 Results Table**
+**All outputs are in**: `/scratch/sdodl001/BioPipelines/data/results/rna_seq/`
+
+#### 1. **DESeq2 Results Table** (`de_analysis/deseq2_results.csv`)
+```csv
+baseMean,log2FoldChange,lfcSE,stat,pvalue,padj,gene
+6481.87,4.73,0.11,44.74,0,0,YDR384C
+4410.39,5.43,0.12,45.28,0,0,YDR256C
+4244.49,6.81,0.15,44.33,0,0,YGL205W
 ```
-gene_id         baseMean  log2FC  lfcSE   pvalue     padj
-ENSG00000223972 45.2      2.3     0.4     1.2e-6     0.003
-ENSG00000227232 98.5      -1.8    0.3     4.5e-5     0.021
-```
+
+**Example output from yeast pipeline** (wt vs mut comparison):
+- Found **3,497 significant genes** (padj < 0.05)
+- File size: ~737KB (all genes tested)
+- Top gene: YMR303C with log2FC=7.84 (185-fold upregulation!)
 
 **Columns explained**:
-- **baseMean**: Average expression level
-- **log2FoldChange**: Effect size
-  - log2FC=1 → 2x upregulated
-  - log2FC=-1 → 2x downregulated
-  - log2FC=2 → 4x upregulated
-- **lfcSE**: Standard error of log2FC
-- **padj**: FDR-corrected p-value (< 0.05 = significant)
+- **baseMean**: Average expression across all samples
+  - Example: 6481.87 = well-expressed gene
+  - Low (<10) = lowly expressed, higher variability
+- **log2FoldChange**: Effect size (mut vs wt)
+  - log2FC=4.73 → 2^4.73 = 26.5-fold increase in mut
+  - log2FC=-4.84 → 28.6-fold decrease in mut
+  - Positive = upregulated in treatment/mut
+- **lfcSE**: Standard error (smaller = more confident)
+- **padj**: FDR-corrected p-value
+  - 0 means < machine precision (extremely significant)
+  - Use threshold of 0.05 or 0.01
 
-#### 2. **Volcano Plot**
-Visual representation of DE genes:
-- X-axis: log2 Fold Change
-- Y-axis: -log10(padj)
-- Red dots: Significantly DE genes
+**Normalized counts** (`de_analysis/normalized_counts.csv`):
+- Size-factor normalized expression values
+- Use for heatmaps and visualization
+- File size: ~478KB
 
-#### 3. **MA Plot**
-- X-axis: Average expression
+#### 2. **Visualization Outputs** (all in `de_analysis/`)
+
+**Volcano Plot** (`volcano_plot.png`, 61KB):
+- X-axis: log2 Fold Change (-10 to +10)
+- Y-axis: -log10(padj) (up to 300+)
+- Red dots: padj < 0.05, |log2FC| > 1
+- Shows ~3000+ significant genes highlighted
+
+**MA Plot** (`ma_plot.png`, 33KB):
+- X-axis: Average expression (baseMean)
 - Y-axis: log2 Fold Change
-- Shows expression-dependent effects
+- Blue dots: Significant genes
+- Shows expression-dependent patterns
 
-#### 4. **Heatmap**
-Clustered expression of top DE genes across samples.
+**PCA Plot** (`pca_plot.png`, 14KB):
+- PC1 vs PC2 (top 500 most variable genes)
+- Should show clear separation between wt and mut groups
+- Points clustered by condition = good replicability
 
-#### 5. **PCA Plot**
-Shows sample clustering:
-- Replicates should cluster together
-- Conditions should separate
+**Heatmap** (`heatmap.png`, 26KB):
+- Top 50 most significant DE genes
+- Rows: Genes, Columns: Samples
+- Hierarchical clustering shows gene expression patterns
+- Color scale: blue (low) to red (high)
+
+#### 3. **Quality Control Report** (`multiqc_report.html`, 1.4MB)
+- Interactive HTML report
+- Includes FastQC, alignment stats, feature counts
+- **Open in browser to view**:
+  ```bash
+  # Download from cluster
+  scp user@cluster:/scratch/sdodl001/BioPipelines/data/results/rna_seq/multiqc_report.html .
+  ```
+
+#### 4. **Processed Data**
+Located in `/scratch/sdodl001/BioPipelines/data/processed/rna_seq/`:
+- `*.Aligned.sortedByCoord.out.bam`: Aligned reads (222-379MB per sample)
+- `*.Aligned.sortedByCoord.out.bam.bai`: BAM indices
+- Count matrix in `/scratch/sdodl001/BioPipelines/data/results/rna_seq/counts/feature_counts.txt` (361KB)
 
 ### Quality Control Checks
 
@@ -413,40 +451,56 @@ BRCA1: log2FC = -3.2, padj = 1e-8, baseMean = 450
 ```yaml
 samples:
   treatment:
-    - treat_rep1
-    - treat_rep2
-    - treat_rep3
+    - mut_rep1
+    - mut_rep2
   control:
-    - ctrl_rep1
-    - ctrl_rep2
-    - ctrl_rep3
+    - wt_rep1
+    - wt_rep2
 
 reference:
-  genome: "/path/to/hg38.fa"
-  gtf: "/path/to/gencode.v45.gtf"
-  star_index: "/path/to/star_index"
+  genome: "/scratch/sdodl001/BioPipelines/references/genomes/yeast/sacCer3.fa"
+  gtf: "/scratch/sdodl001/BioPipelines/references/annotations/yeast/sacCer3.gtf"
+
+star_index: "/scratch/sdodl001/BioPipelines/references/indexes/star_yeast"
 ```
+
+**Important notes**:
+- All data paths should point to `/scratch` for performance
+- Sample names in config must match FASTQ filenames without `_R1/_R2.fastq.gz`
+- Use `check.names=FALSE` in DESeq2 to preserve sample names with special characters
 
 2. **Ensure STAR index exists**:
 ```bash
 # Check if index exists
-ls /path/to/star_index/
+ls /scratch/sdodl001/BioPipelines/references/indexes/star_yeast/
 
-# If not, build it first
-sbatch ~/BioPipelines/scripts/build_star_index.sh
+# If not, build it first (takes ~1-2 hours)
+sbatch ~/BioPipelines/scripts/build_star_index_yeast.sh
 ```
 
 3. **Submit pipeline**:
 ```bash
-cd ~/BioPipelines/pipelines/rna_seq/differential_expression
-sbatch ~/BioPipelines/scripts/submit_rna_seq.sh
+# Submit from BioPipelines directory
+cd ~/BioPipelines
+sbatch scripts/submit_rna_seq.sh
 ```
 
 4. **Monitor progress**:
 ```bash
-squeue --me
-tail -f slurm_*.err
+# Check job status
+squeue -u $USER
+
+# Monitor errors (check for exit code)
+tail -f ~/BioPipelines/slurm_*.err
+
+# Check Snakemake progress
+grep "of .* steps" ~/BioPipelines/slurm_*.err
 ```
+
+**Expected runtime**: ~30 minutes to 2 hours depending on:
+- Number of samples (4 samples: ~30-45 min)
+- Read depth
+- STAR index availability
 
 ### Experimental Design Considerations
 
@@ -470,21 +524,47 @@ tail -f slurm_*.err
 - Wrong reference genome version
 - Poor read quality
 - rRNA contamination
+- **Check**: `grep "Uniquely mapped" slurm_*.err`
+
+**Pipeline fails with "Directory cannot be locked"**:
+```bash
+# Unlock Snakemake working directory
+conda activate ~/envs/biopipelines
+cd ~/BioPipelines/pipelines/rna_seq/differential_expression
+snakemake --unlock
+```
+
+**DESeq2 fails with column name errors**:
+- Sample names with `/` or special characters cause R to mangle names
+- **Fix**: Ensure `check.names=FALSE` in `read.table()` calls
+- Example error: "mut_rep1 not found" but column is "X.scratch.sdodl001..."
+
+**Submit script fails immediately (job exits in <10 seconds)**:
+- Conda activation issue
+- **Fix**: Use `source ~/miniconda3/etc/profile.d/conda.sh` not `/bin/activate`
+- Check `slurm_*.out` for activation errors
+
+**Home directory full (100% usage)**:
+- Move data to `/scratch` not home
+- **Fix**: All paths in configs should use `/scratch/sdodl001/BioPipelines/`
+- Create symlinks: `ln -s /scratch/sdodl001/BioPipelines/data/raw ~/BioPipelines/data/raw`
 
 **Too few DE genes**:
 - High biological variability
 - Subtle treatment effect
 - Insufficient sample size
+- **Check PCA plot**: If samples don't separate, effect is weak
 
 **Too many DE genes (>5000)**:
-- Very strong treatment effect
+- Very strong treatment effect (normal for some conditions)
 - Batch effects
 - Sample swaps/mislabeling
+- **Our example**: 3,497 genes is reasonable for wt vs mutant yeast
 
 **PCA shows no separation**:
 - Treatment has weak effect
-- Check sample labels
-- Consider alternative analysis
+- Check sample labels in config
+- Verify FASTQ files match expected samples
 
 ---
 

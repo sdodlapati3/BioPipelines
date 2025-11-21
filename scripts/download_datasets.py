@@ -48,7 +48,7 @@ def main():
     # Define datasets to download
     datasets = {
         'rna_seq': {
-            'dir': Path.home() / 'BioPipelines/data/raw/rna_seq',
+            'dir': Path('/scratch/sdodl001/BioPipelines/data/raw/rna_seq'),
             'accessions': [
                 ('ERR458493', 'wt_rep1'),  # Yeast WT replicate 1
                 ('ERR458494', 'wt_rep2'),  # Yeast WT replicate 2
@@ -57,7 +57,7 @@ def main():
             ]
         },
         'chip_seq': {
-            'dir': Path.home() / 'BioPipelines/data/raw/chip_seq',
+            'dir': Path('/scratch/sdodl001/BioPipelines/data/raw/chip_seq'),
             'accessions': [
                 # ENCODE GM12878 H3K4me3 ChIP-seq (human, hg38-compatible)
                 ('SRR1552484', 'h3k4me3_rep1'),  # ENCODE ENCSR000AKP rep1
@@ -66,7 +66,7 @@ def main():
             ]
         },
         'atac_seq': {
-            'dir': Path.home() / 'BioPipelines/data/raw/atac_seq',
+            'dir': Path('/scratch/sdodl001/BioPipelines/data/raw/atac_seq'),
             'accessions': [
                 ('SRR891268', 'sample1'),
                 ('SRR891269', 'sample2'),

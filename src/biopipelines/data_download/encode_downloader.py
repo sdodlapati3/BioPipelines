@@ -63,8 +63,14 @@ class ENCODEDownloader:
         # Get download URL
         download_url = f"{self.BASE_URL}{metadata['href']}"
         
-        # Determine output filename
-        filename = metadata.get('submitted_file_name') or f"{file_id}.fastq.gz"
+        # Determine output filename (extract just the basename, not full path)
+        from pathlib import Path as PathLib
+        submitted_name = metadata.get('submitted_file_name', '')
+        if submitted_name:
+            filename = PathLib(submitted_name).name  # Extract just the filename
+        else:
+            filename = f"{file_id}.fastq.gz"
+        
         output_subdir = self.output_dir / dataset_type
         output_subdir.mkdir(parents=True, exist_ok=True)
         output_path = output_subdir / filename
