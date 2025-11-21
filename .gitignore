@@ -53,9 +53,11 @@ data/references/*
 .snakemake/
 *.log
 
-# SLURM job files
+# Slurm job outputs
 slurm_*.out
 slurm_*.err
+slurm-*.out
+slurm-*.err
 
 # Results and benchmarks
 benchmarks/results/*
