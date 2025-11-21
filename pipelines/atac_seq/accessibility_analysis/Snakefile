@@ -107,7 +107,8 @@ rule filter_bam:
         """
         samtools view -@ {threads} -b -q 30 -F 1804 {input} | \\
         samtools view -@ {threads} -b -f 2 - | \\
-        grep -v chrM | \\
+        samtools view -h - | grep -v chrM | \\
+        samtools view -@ {threads} -b - | \\
         samtools sort -@ {threads} -o {output} -
         samtools index {output}
         """

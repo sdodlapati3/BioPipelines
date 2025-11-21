@@ -70,8 +70,8 @@ rule fastqc_raw:
 # Trimming - fastp
 rule trim_reads:
     input:
-        r1="../../../data/raw/{sample}_R1.fastq.gz",
-        r2="../../../data/raw/{sample}_R2.fastq.gz"
+        r1=f"{RAW_DIR}/{{sample}}_R1.fastq.gz",
+        r2=f"{RAW_DIR}/{{sample}}_R2.fastq.gz"
     output:
         r1=f"{PROCESSED_DIR}/{{sample}}_R1.trimmed.fastq.gz",
         r2=f"{PROCESSED_DIR}/{{sample}}_R2.trimmed.fastq.gz",
@@ -121,13 +121,12 @@ rule align_reads:
         """
 
 
-# Mark Duplicates - Picard
+# Mark Duplicates - GATK
 rule mark_duplicates:
     input:
         bam=f"{PROCESSED_DIR}/{{sample}}.sorted.bam"
     output:
         bam=f"{PROCESSED_DIR}/{{sample}}.dedup.bam",
-        bai=f"{PROCESSED_DIR}/{{sample}}.dedup.bai",
         metrics=f"{QC_DIR}/picard/{{sample}}.dedup_metrics.txt"
     conda:
         "envs/alignment.yaml"
@@ -143,8 +142,6 @@ rule mark_duplicates:
             --CREATE_INDEX true \\
             --VALIDATION_STRINGENCY LENIENT \\
             2> {log}
-        # Index already created by gatk MarkDuplicates
-        mv {output.bam}.bai {output.bai}
         """
 
 
@@ -178,8 +175,7 @@ rule apply_bqsr:
         ref=REFERENCE,
         table=f"{PROCESSED_DIR}/{{sample}}.recal_data.table"
     output:
-        bam=f"{PROCESSED_DIR}/{{sample}}.recal.bam",
-        bai=f"{PROCESSED_DIR}/{{sample}}.recal.bam.bai"
+        bam=f"{PROCESSED_DIR}/{{sample}}.recal.bam"
     conda:
         "envs/variant_calling.yaml"
     threads: 4
@@ -187,11 +183,12 @@ rule apply_bqsr:
         f"{QC_DIR}/logs/bqsr/{{sample}}_apply.log"
     shell:
         """
-        gatk ApplyBQSR \
-            -R {input.ref} \
-            -I {input.bam} \
-            --bqsr-recal-file {input.table} \
-            -O {output.bam} \
+        gatk ApplyBQSR \\
+            -R {input.ref} \\
+            -I {input.bam} \\
+            --bqsr-recal-file {input.table} \\
+            --create-output-bam-index true \\
+            -O {output.bam} \\
             2> {log}
         """
 

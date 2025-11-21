@@ -75,8 +75,8 @@ rule fastqc_raw:
 # Trimming - fastp
 rule trim_reads:
     input:
-        r1="../../../data/raw/rna_seq/{sample}_R1.fastq.gz",
-        r2="../../../data/raw/rna_seq/{sample}_R2.fastq.gz"
+        r1=f"{RAW_DIR}/{{sample}}_R1.fastq.gz",
+        r2=f"{RAW_DIR}/{{sample}}_R2.fastq.gz"
     output:
         r1=f"{PROCESSED_DIR}/{{sample}}_R1.trimmed.fastq.gz",
         r2=f"{PROCESSED_DIR}/{{sample}}_R2.trimmed.fastq.gz",
