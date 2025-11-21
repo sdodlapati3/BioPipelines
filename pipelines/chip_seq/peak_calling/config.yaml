@@ -10,7 +10,7 @@ input_control: "input_control"  # 3.8G paired-end
 
 # Reference genome
 reference:
-  genome: "/scratch/sdodl001/BioPipelines/references/genomes/hg38/hg38.fa"
+  genome: "/scratch/sdodl001/BioPipelines/data/references/hg38.fa"
   genome_size: "hs"  # or provide number for MACS2
   blacklist: "/scratch/sdodl001/BioPipelines/references/annotations/hg38-blacklist.v2.bed"
 

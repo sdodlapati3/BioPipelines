@@ -4,16 +4,10 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  # Visualization and reporting
-  - r-base=4.3
-  - r-rmarkdown
-  - r-ggplot2
-  - r-plotly
-  - r-dt
-  - r-knitr
-  - bioconductor-genomicranges
-  - bioconductor-rtracklayer
-  - python>=3.10
-  - matplotlib>=3.5.0
-  - seaborn
-  - pandas
+  # Python visualization (minimal for faster resolution)
+  - python=3.10
+  - matplotlib=3.7
+  - seaborn=0.12
+  - pandas=2.0
+  - numpy
+  - scipy

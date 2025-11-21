@@ -10,15 +10,14 @@ dependencies:
   - cooltools=0.5.4
   - pygenometracks=3.8  # Hi-C track plots
   
-  # Plotting libraries
-  - matplotlib>=3.5.0
-  - seaborn
+  # Plotting libraries (pinned versions for compatibility)
+  - python=3.10
+  - matplotlib=3.7
+  - seaborn=0.12
   - plotly
   - bokeh
   
-  # Report generation
-  - python>=3.10
-  - pandas
+  # Report generation (removed pillow - causing conflicts)
+  - pandas=2.0
   - numpy
   - jinja2
-  - pillow
