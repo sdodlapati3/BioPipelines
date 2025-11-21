@@ -217,7 +217,8 @@ rule create_bigwig:
 
 rule multiqc:
     input:
-        expand(f"{QC_DIR}/fastqc_raw/{{sample}}_fastqc.html", sample=ALL_SAMPLES),
+        expand(f"{QC_DIR}/fastqc_raw/{{sample}}_R1_fastqc.html", sample=ALL_SAMPLES),
+        expand(f"{QC_DIR}/fastqc_raw/{{sample}}_R2_fastqc.html", sample=ALL_SAMPLES),
         expand(f"{QC_DIR}/fastp/{{sample}}.json", sample=ALL_SAMPLES),
         expand(f"{QC_DIR}/picard/{{sample}}.dedup_metrics.txt", sample=ALL_SAMPLES)
     output:

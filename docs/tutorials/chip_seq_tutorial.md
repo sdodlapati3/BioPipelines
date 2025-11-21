@@ -514,11 +514,10 @@ Findings:
 1. **Prepare config.yaml**:
 ```yaml
 samples:
-  - sample1
-  - sample2
-  - sample3
+  - h3k4me3_rep1
+  - h3k4me3_rep2
 
-input_control: "input"
+input_control: "input_control"
 
 reference:
   genome: "/path/to/hg38.fa"
@@ -526,17 +525,21 @@ reference:
 
 peak_calling:
   q_value: 0.05
-  broad_peaks: false  # true for histones
+  broad_peaks: false  # true for histones like H3K27me3
 ```
 
-2. **Organize data**:
+2. **Organize data** (paired-end format):
 ```bash
 data/raw/chip_seq/
-├── sample1.fastq.gz
-├── sample2.fastq.gz
-├── sample3.fastq.gz
-└── input.fastq.gz
+├── h3k4me3_rep1_R1.fastq.gz
+├── h3k4me3_rep1_R2.fastq.gz
+├── h3k4me3_rep2_R1.fastq.gz
+├── h3k4me3_rep2_R2.fastq.gz
+├── input_control_R1.fastq.gz
+└── input_control_R2.fastq.gz
 ```
+
+**Note**: Pipeline now supports paired-end data (recommended). File naming must follow `{sample}_R1.fastq.gz` and `{sample}_R2.fastq.gz` pattern.
 
 3. **Submit pipeline**:
 ```bash
