@@ -44,7 +44,7 @@ try:
         os.remove(f)
         print(f"Removed old file: {f}")
     
-    files = downloader.download_encode_experiment(
+    files = downloader.download_encode_hic(
         experiment_id="ENCSR862OGI",
         file_type="fastq"
     )
