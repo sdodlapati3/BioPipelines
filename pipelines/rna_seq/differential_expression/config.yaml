@@ -11,11 +11,11 @@ samples:
 
 # Reference genome and annotations (Yeast S. cerevisiae)
 reference:
-  genome: "/home/sdodl001_odu_edu/references/genomes/yeast/sacCer3.fa"
-  gtf: "/home/sdodl001_odu_edu/references/annotations/yeast/sacCer3.gtf"
+  genome: "/scratch/sdodl001/BioPipelines/references/genomes/yeast/sacCer3.fa"
+  gtf: "/scratch/sdodl001/BioPipelines/references/annotations/yeast/sacCer3.gtf"
   
 # STAR index directory
-star_index: "/home/sdodl001_odu_edu/references/indexes/star_yeast"
+star_index: "/scratch/sdodl001/BioPipelines/references/indexes/star_yeast"
 
 # Pipeline parameters
 trim:

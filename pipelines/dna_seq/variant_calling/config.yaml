@@ -6,8 +6,8 @@ samples:
 
 # Reference genome and known sites
 reference:
-  genome: "/home/sdodl001_odu_edu/references/genomes/hg38/hg38.fa"
-  known_sites: "/home/sdodl001_odu_edu/references/known_sites/dbsnp_146.hg38.vcf.gz"
+  genome: "/scratch/sdodl001/BioPipelines/references/genomes/hg38/hg38.fa"
+  known_sites: "/scratch/sdodl001/BioPipelines/references/known_sites/dbsnp_146.hg38.vcf.gz"
 
 # SnpEff genome database
 snpeff_genome: "hg38"

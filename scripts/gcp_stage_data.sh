@@ -13,7 +13,14 @@ GCS_REF_BUCKET="gs://biopipelines-references"
 
 # Job-specific directories
 JOB_ID=${SLURM_JOB_ID:-$$}
-SCRATCH_BASE="/mnt/disks/scratch"
+# Detect scratch location (GCP or cluster-specific)
+if [ -d "/mnt/disks/scratch" ]; then
+    SCRATCH_BASE="/mnt/disks/scratch"
+elif [ -d "/scratch/${USER}" ]; then
+    SCRATCH_BASE="/scratch/${USER}/BioPipelines"
+else
+    SCRATCH_BASE="${HOME}/scratch"
+fi
 SCRATCH_DIR="${SCRATCH_BASE}/${JOB_ID}"
 
 # Parse arguments

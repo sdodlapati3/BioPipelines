@@ -39,6 +39,15 @@ snakemake \
     --keep-going \
     --rerun-incomplete
 
+SNAKEMAKE_EXIT=$?
+
+if [ $SNAKEMAKE_EXIT -ne 0 ]; then
+    echo "========================================="
+    echo "Pipeline FAILED with exit code $SNAKEMAKE_EXIT"
+    echo "========================================="
+    exit $SNAKEMAKE_EXIT
+fi
+
 echo "========================================="
 echo "Pipeline complete!"
 echo "========================================="

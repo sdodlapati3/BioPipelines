@@ -31,9 +31,12 @@ REFERENCE = config["reference"]["genome"]
 KNOWN_SITES = config["reference"]["known_sites"]
 
 # Output directories
-QC_DIR = "../../results/qc"
-PROCESSED_DIR = "../../../data/processed"
-RESULTS_DIR = "../../../data/results"
+DATA_BASE = "/scratch/sdodl001/BioPipelines/data"
+QC_DIR = f"{DATA_BASE}/results/qc"
+PROCESSED_DIR = f"{DATA_BASE}/processed"
+RESULTS_DIR = f"{DATA_BASE}/results"
+RAW_DIR = f"{DATA_BASE}/raw/dna_seq"
+RAW_DIR = f"{DATA_BASE}/raw/dna_seq"
 
 # Final outputs
 rule all:
@@ -48,8 +51,8 @@ rule all:
 # Quality Control - FastQC on raw reads
 rule fastqc_raw:
     input:
-        r1="../../../data/raw/{sample}_R1.fastq.gz",
-        r2="../../../data/raw/{sample}_R2.fastq.gz"
+        r1=f"{RAW_DIR}/{{sample}}_R1.fastq.gz",
+        r2=f"{RAW_DIR}/{{sample}}_R2.fastq.gz"
     output:
         r1=f"{QC_DIR}/fastqc_raw/{{sample}}_R1_fastqc.html",
         r2=f"{QC_DIR}/fastqc_raw/{{sample}}_R2_fastqc.html"
@@ -133,16 +136,15 @@ rule mark_duplicates:
         f"{QC_DIR}/logs/dedup/{{sample}}.log"
     shell:
         """
-        picard MarkDuplicates \
-            INPUT={input.bam} \
-            OUTPUT={output.bam}.tmp \
-            METRICS_FILE={output.metrics} \
-            CREATE_INDEX=true \
-            VALIDATION_STRINGENCY=LENIENT \
+        gatk MarkDuplicates \\
+            -I {input.bam} \\
+            -O {output.bam} \\
+            -M {output.metrics} \\
+            --CREATE_INDEX true \\
+            --VALIDATION_STRINGENCY LENIENT \\
             2> {log}
-        # Add read group to the dedup BAM (required for GATK)
-        samtools addreplacerg -r '@RG\tID:{wildcards.sample}\tSM:{wildcards.sample}\tPL:ILLUMINA' -o {output.bam} {output.bam}.tmp
-        rm {output.bam}.tmp
+        # Index already created by gatk MarkDuplicates
+        mv {output.bam}.bai {output.bai}
         """
 
 

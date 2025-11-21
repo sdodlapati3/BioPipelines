@@ -33,9 +33,11 @@ REFERENCE = config["reference"]["genome"]
 GTF = config["reference"]["gtf"]
 STAR_INDEX = config["star_index"]
 
-QC_DIR = "../../../data/results/rna_seq/qc"
-PROCESSED_DIR = "../../../data/processed/rna_seq"
-RESULTS_DIR = "../../../data/results/rna_seq"
+DATA_BASE = "/scratch/sdodl001/BioPipelines/data"
+QC_DIR = f"{DATA_BASE}/results/rna_seq/qc"
+PROCESSED_DIR = f"{DATA_BASE}/processed/rna_seq"
+RESULTS_DIR = f"{DATA_BASE}/results/rna_seq"
+RAW_DIR = f"{DATA_BASE}/raw/rna_seq"
 
 # Final outputs
 rule all:
@@ -53,8 +55,8 @@ rule all:
 # Quality Control - FastQC on raw reads
 rule fastqc_raw:
     input:
-        r1="../../../data/raw/rna_seq/{sample}_R1.fastq.gz",
-        r2="../../../data/raw/rna_seq/{sample}_R2.fastq.gz"
+        r1=f"{RAW_DIR}/{{sample}}_R1.fastq.gz",
+        r2=f"{RAW_DIR}/{{sample}}_R2.fastq.gz"
     output:
         r1=f"{QC_DIR}/fastqc_raw/{{sample}}_R1_fastqc.html",
         r2=f"{QC_DIR}/fastqc_raw/{{sample}}_R2_fastqc.html"

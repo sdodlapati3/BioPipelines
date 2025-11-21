@@ -5,9 +5,9 @@ samples:
   - new_sample2  # downloading
 
 reference:
-  genome: "/home/sdodl001_odu_edu/references/genomes/hg38/hg38.fa"
-  tss_bed: "/home/sdodl001_odu_edu/references/annotations/hg38_tss.bed"
-  blacklist: "/home/sdodl001_odu_edu/references/annotations/hg38-blacklist.v2.bed"
+  genome: "/scratch/sdodl001/BioPipelines/references/genomes/hg38/hg38.fa"
+  tss_bed: "/scratch/sdodl001/BioPipelines/references/annotations/hg38_tss.bed"
+  blacklist: "/scratch/sdodl001/BioPipelines/references/annotations/hg38-blacklist.v2.bed"
 
 # ATAC-seq specific parameters
 trimming:

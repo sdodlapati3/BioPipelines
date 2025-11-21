@@ -28,9 +28,11 @@ ALL_SAMPLES = SAMPLES + [INPUT]
 REFERENCE = config["reference"]["genome"]
 BLACKLIST = config["reference"].get("blacklist", None)
 
-QC_DIR = "../../../data/results/chip_seq/qc"
-PROCESSED_DIR = "../../../data/processed/chip_seq"
-RESULTS_DIR = "../../../data/results/chip_seq"
+DATA_BASE = "/scratch/sdodl001/BioPipelines/data"
+QC_DIR = f"{DATA_BASE}/results/chip_seq/qc"
+PROCESSED_DIR = f"{DATA_BASE}/processed/chip_seq"
+RESULTS_DIR = f"{DATA_BASE}/results/chip_seq"
+RAW_DIR = f"{DATA_BASE}/raw/chip_seq"
 
 # Final outputs
 rule all:
@@ -47,8 +49,8 @@ rule all:
 
 rule fastqc_raw:
     input:
-        r1="../../../data/raw/chip_seq/{sample}_R1.fastq.gz",
-        r2="../../../data/raw/chip_seq/{sample}_R2.fastq.gz"
+        r1=f"{RAW_DIR}/{{sample}}_R1.fastq.gz",
+        r2=f"{RAW_DIR}/{{sample}}_R2.fastq.gz"
     output:
         r1=f"{QC_DIR}/fastqc_raw/{{sample}}_R1_fastqc.html",
         r2=f"{QC_DIR}/fastqc_raw/{{sample}}_R2_fastqc.html"
@@ -125,12 +127,12 @@ rule mark_duplicates:
         f"{QC_DIR}/logs/dedup/{{sample}}.log"
     shell:
         """
-        picard MarkDuplicates \\
-            INPUT={input} \\
-            OUTPUT={output.bam} \\
-            METRICS_FILE={output.metrics} \\
-            REMOVE_DUPLICATES=true \\
-            CREATE_INDEX=true \\
+        gatk MarkDuplicates \\
+            -I {input} \\
+            -O {output.bam} \\
+            -M {output.metrics} \\
+            --REMOVE_DUPLICATES true \\
+            --CREATE_INDEX true \\
             2> {log}
         """
 
