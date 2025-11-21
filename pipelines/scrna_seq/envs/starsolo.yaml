@@ -1,0 +1,11 @@
+name: scrna_starsolo
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.10
+  - star=2.7.11a
+  - samtools=1.18
+  - fastqc=0.12.1
+  - multiqc=1.15

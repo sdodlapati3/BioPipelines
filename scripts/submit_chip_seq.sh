@@ -20,7 +20,7 @@ echo "========================================="
 
 # Activate conda environment
 source ~/miniconda3/etc/profile.d/conda.sh
-conda activate ~/envs/biopipelines
+conda activate /home/sdodl001_odu_edu/envs/biopipelines
 
 # Navigate to pipeline directory
 cd ~/BioPipelines/pipelines/chip_seq/peak_calling
@@ -29,12 +29,10 @@ cd ~/BioPipelines/pipelines/chip_seq/peak_calling
 trap 'echo "Job interrupted, cleaning up locks..."; snakemake --unlock 2>/dev/null; exit 130' INT TERM
 trap 'if [ $? -ne 0 ]; then echo "Job failed, cleaning up locks..."; snakemake --unlock 2>/dev/null; fi' EXIT
 
-# Run Snakemake with all available CPUs
+# Run Snakemake WITHOUT per-rule conda (use base environment)
 echo "Starting Snakemake pipeline with $SLURM_CPUS_PER_TASK cores..."
 snakemake \
     --cores $SLURM_CPUS_PER_TASK \
-    --use-conda \
-    --conda-frontend conda \
     --latency-wait 60 \
     --printshellcmds \
     --keep-going \

@@ -1,0 +1,323 @@
+"""
+Single-cell RNA-seq Analysis Pipeline
+=====================================
+10x Genomics single-cell RNA-seq workflow using STARsolo and Scanpy
+
+Workflow:
+1. Quality control (FastQC)
+2. Alignment & counting (STARsolo)
+3. Cell filtering & QC
+4. Doublet detection
+5. Normalization & feature selection
+6. Dimensionality reduction (PCA, UMAP)
+7. Clustering (Leiden/Louvain)
+8. Cell type annotation
+9. Differential expression
+10. Visualization & reporting
+"""
+
+import os
+from pathlib import Path
+
+# Load configuration
+configfile: "pipelines/scrna_seq/config.yaml"
+
+# Sample info
+SAMPLES = ["sample1"]  # Can expand to multiple samples
+
+# Define output directories
+RAW_DIR = config["dirs"]["raw_data"]
+RESULTS_DIR = config["dirs"]["results"]
+LOGS_DIR = config["dirs"]["logs"]
+TEMP_DIR = config["dirs"]["temp"]
+
+# Create output directory structure
+os.makedirs(RESULTS_DIR, exist_ok=True)
+os.makedirs(LOGS_DIR, exist_ok=True)
+os.makedirs(f"{RESULTS_DIR}/qc", exist_ok=True)
+os.makedirs(f"{RESULTS_DIR}/starsolo", exist_ok=True)
+os.makedirs(f"{RESULTS_DIR}/filtered", exist_ok=True)
+os.makedirs(f"{RESULTS_DIR}/clustering", exist_ok=True)
+os.makedirs(f"{RESULTS_DIR}/annotation", exist_ok=True)
+os.makedirs(f"{RESULTS_DIR}/differential_expression", exist_ok=True)
+os.makedirs(f"{RESULTS_DIR}/plots", exist_ok=True)
+
+# Master rule
+rule all:
+    input:
+        # QC
+        expand(f"{RESULTS_DIR}/qc/{{sample}}_R1_fastqc.html", sample=SAMPLES),
+        expand(f"{RESULTS_DIR}/qc/{{sample}}_R2_fastqc.html", sample=SAMPLES),
+        
+        # Alignment & counting
+        expand(f"{RESULTS_DIR}/starsolo/{{sample}}/Solo.out/Gene/filtered/matrix.mtx", sample=SAMPLES),
+        
+        # Processing
+        expand(f"{RESULTS_DIR}/filtered/{{sample}}_filtered.h5ad", sample=SAMPLES),
+        
+        # Clustering
+        expand(f"{RESULTS_DIR}/clustering/{{sample}}_clustered.h5ad", sample=SAMPLES),
+        
+        # Annotation
+        expand(f"{RESULTS_DIR}/annotation/{{sample}}_annotated.h5ad", sample=SAMPLES),
+        
+        # Differential expression
+        expand(f"{RESULTS_DIR}/differential_expression/{{sample}}_deg.csv", sample=SAMPLES),
+        
+        # Final report
+        f"{RESULTS_DIR}/scrna_seq_report.html",
+        f"{RESULTS_DIR}/multiqc_report.html"
+
+# Rule 1: FastQC on raw reads
+rule fastqc_raw:
+    input:
+        r1 = f"{RAW_DIR}/{{sample}}_R1.fastq.gz",
+        r2 = f"{RAW_DIR}/{{sample}}_R2.fastq.gz"
+    output:
+        html1 = f"{RESULTS_DIR}/qc/{{sample}}_R1_fastqc.html",
+        html2 = f"{RESULTS_DIR}/qc/{{sample}}_R2_fastqc.html",
+        zip1 = f"{RESULTS_DIR}/qc/{{sample}}_R1_fastqc.zip",
+        zip2 = f"{RESULTS_DIR}/qc/{{sample}}_R2_fastqc.zip"
+    log:
+        f"{LOGS_DIR}/fastqc_{{sample}}.log"
+    threads: 2
+    shell:
+        """
+        fastqc {input.r1} {input.r2} \
+            -o {RESULTS_DIR}/qc \
+            -t {threads} \
+            &> {log}
+        """
+
+# Rule 2: STARsolo alignment and UMI counting
+rule starsolo_align_count:
+    input:
+        r1 = f"{RAW_DIR}/{{sample}}_R1.fastq.gz",  # Cell barcodes + UMIs (Read 1)
+        r2 = f"{RAW_DIR}/{{sample}}_R2.fastq.gz",  # cDNA (Read 2)
+        star_index = config["reference"]["star_index"],
+        whitelist = config["chemistry"]["whitelist"]
+    output:
+        matrix = f"{RESULTS_DIR}/starsolo/{{sample}}/Solo.out/Gene/filtered/matrix.mtx",
+        barcodes = f"{RESULTS_DIR}/starsolo/{{sample}}/Solo.out/Gene/filtered/barcodes.tsv",
+        features = f"{RESULTS_DIR}/starsolo/{{sample}}/Solo.out/Gene/filtered/features.tsv",
+        bam = f"{RESULTS_DIR}/starsolo/{{sample}}/Aligned.sortedByCoord.out.bam",
+        summary = f"{RESULTS_DIR}/starsolo/{{sample}}/Solo.out/Gene/Summary.csv"
+    params:
+        prefix = f"{RESULTS_DIR}/starsolo/{{sample}}/",
+        cb_start = config["starsolo"]["cb_start"],
+        cb_len = config["starsolo"]["cb_length"],
+        umi_start = config["starsolo"]["umi_start"],
+        umi_len = config["starsolo"]["umi_length"],
+        solo_type = config["starsolo"]["solo_type"],
+        solo_features = config["starsolo"]["solo_features"]
+    log:
+        f"{LOGS_DIR}/starsolo_{{sample}}.log"
+    threads: config["starsolo"]["threads"]
+    shell:
+        """
+        STAR \
+            --runThreadN {threads} \
+            --genomeDir {input.star_index} \
+            --readFilesIn {input.r2} {input.r1} \
+            --readFilesCommand zcat \
+            --outFileNamePrefix {params.prefix} \
+            --outSAMtype BAM SortedByCoordinate \
+            --outSAMattributes {config[starsolo][out_sam_attributes]} \
+            --soloType {params.solo_type} \
+            --soloFeatures {params.solo_features} \
+            --soloCBwhitelist {input.whitelist} \
+            --soloCBstart {params.cb_start} \
+            --soloCBlen {params.cb_len} \
+            --soloUMIstart {params.umi_start} \
+            --soloUMIlen {params.umi_len} \
+            --soloCBmatchWLtype {config[starsolo][solo_cb_match_wl]} \
+            --soloUMIfiltering {config[starsolo][solo_umi_filtering]} \
+            --soloCellFilter EmptyDrops_CR \
+            --limitBAMsortRAM {config[starsolo][limit_bam_sort_ram]} \
+            &> {log}
+        """
+
+# Rule 3: Load and perform initial QC
+rule initial_qc:
+    input:
+        matrix = f"{RESULTS_DIR}/starsolo/{{sample}}/Solo.out/Gene/filtered/matrix.mtx",
+        barcodes = f"{RESULTS_DIR}/starsolo/{{sample}}/Solo.out/Gene/filtered/barcodes.tsv",
+        features = f"{RESULTS_DIR}/starsolo/{{sample}}/Solo.out/Gene/filtered/features.tsv"
+    output:
+        h5ad = f"{RESULTS_DIR}/filtered/{{sample}}_raw.h5ad",
+        qc_report = f"{RESULTS_DIR}/filtered/{{sample}}_qc_metrics.csv",
+        qc_plots = directory(f"{RESULTS_DIR}/plots/{{sample}}_qc")
+    params:
+        min_counts = config["filtering"]["min_counts"],
+        max_counts = config["filtering"]["max_counts"],
+        min_genes = config["filtering"]["min_genes"],
+        max_mito = config["filtering"]["max_mito_percent"]
+    log:
+        f"{LOGS_DIR}/initial_qc_{{sample}}.log"
+    script:
+        "scripts/01_initial_qc.py"
+
+# Rule 4: Doublet detection
+rule detect_doublets:
+    input:
+        h5ad = f"{RESULTS_DIR}/filtered/{{sample}}_raw.h5ad"
+    output:
+        h5ad = f"{RESULTS_DIR}/filtered/{{sample}}_doublet_scored.h5ad",
+        doublets_csv = f"{RESULTS_DIR}/filtered/{{sample}}_doublets.csv"
+    params:
+        method = config["doublets"]["method"],
+        expected_rate = config["doublets"]["expected_doublet_rate"],
+        threshold = config["doublets"]["threshold"]
+    log:
+        f"{LOGS_DIR}/doublets_{{sample}}.log"
+    script:
+        "scripts/02_detect_doublets.py"
+
+# Rule 5: Filter cells and normalize
+rule filter_normalize:
+    input:
+        h5ad = f"{RESULTS_DIR}/filtered/{{sample}}_doublet_scored.h5ad"
+    output:
+        h5ad = f"{RESULTS_DIR}/filtered/{{sample}}_filtered.h5ad",
+        filter_report = f"{RESULTS_DIR}/filtered/{{sample}}_filtering_report.txt"
+    params:
+        min_counts = config["filtering"]["min_counts"],
+        max_counts = config["filtering"]["max_counts"],
+        min_genes = config["filtering"]["min_genes"],
+        min_cells = config["filtering"]["min_cells"],
+        max_mito = config["filtering"]["max_mito_percent"],
+        max_ribo = config["filtering"]["max_ribo_percent"],
+        target_sum = config["normalization"]["target_sum"]
+    log:
+        f"{LOGS_DIR}/filter_normalize_{{sample}}.log"
+    script:
+        "scripts/03_filter_normalize.py"
+
+# Rule 6: Feature selection and dimensionality reduction
+rule feature_selection_pca:
+    input:
+        h5ad = f"{RESULTS_DIR}/filtered/{{sample}}_filtered.h5ad"
+    output:
+        h5ad = f"{RESULTS_DIR}/filtered/{{sample}}_pca.h5ad",
+        hvg_plot = f"{RESULTS_DIR}/plots/{{sample}}_highly_variable_genes.png",
+        pca_plot = f"{RESULTS_DIR}/plots/{{sample}}_pca_variance.png"
+    params:
+        n_top_genes = config["feature_selection"]["n_top_genes"],
+        n_pcs = config["pca"]["n_components"]
+    log:
+        f"{LOGS_DIR}/feature_selection_{{sample}}.log"
+    script:
+        "scripts/04_feature_selection_pca.py"
+
+# Rule 7: Batch correction (optional)
+rule batch_correction:
+    input:
+        h5ad = f"{RESULTS_DIR}/filtered/{{sample}}_pca.h5ad"
+    output:
+        h5ad = f"{RESULTS_DIR}/filtered/{{sample}}_batch_corrected.h5ad"
+    params:
+        enable = config["batch_correction"]["enable"],
+        method = config["batch_correction"]["method"]
+    log:
+        f"{LOGS_DIR}/batch_correction_{{sample}}.log"
+    script:
+        "scripts/05_batch_correction.py"
+
+# Rule 8: Clustering
+rule clustering:
+    input:
+        h5ad = f"{RESULTS_DIR}/filtered/{{sample}}_batch_corrected.h5ad" if config["batch_correction"]["enable"] else f"{RESULTS_DIR}/filtered/{{sample}}_pca.h5ad"
+    output:
+        h5ad = f"{RESULTS_DIR}/clustering/{{sample}}_clustered.h5ad",
+        umap_plot = f"{RESULTS_DIR}/plots/{{sample}}_umap_clusters.png",
+        leiden_plots = directory(f"{RESULTS_DIR}/plots/{{sample}}_leiden_resolutions")
+    params:
+        n_neighbors = config["clustering"]["neighbors"]["n_neighbors"],
+        n_pcs = config["clustering"]["neighbors"]["n_pcs"],
+        leiden_res = config["clustering"]["leiden"]["resolution"]
+    log:
+        f"{LOGS_DIR}/clustering_{{sample}}.log"
+    script:
+        "scripts/06_clustering.py"
+
+# Rule 9: Cell type annotation
+rule annotate_celltypes:
+    input:
+        h5ad = f"{RESULTS_DIR}/clustering/{{sample}}_clustered.h5ad"
+    output:
+        h5ad = f"{RESULTS_DIR}/annotation/{{sample}}_annotated.h5ad",
+        marker_plot = f"{RESULTS_DIR}/plots/{{sample}}_marker_genes.png",
+        dotplot = f"{RESULTS_DIR}/plots/{{sample}}_dotplot_markers.png",
+        annotation_csv = f"{RESULTS_DIR}/annotation/{{sample}}_cluster_annotations.csv"
+    params:
+        method = config["annotation"]["method"],
+        marker_genes = config["annotation"]["marker_genes"]
+    log:
+        f"{LOGS_DIR}/annotation_{{sample}}.log"
+    script:
+        "scripts/07_annotate_celltypes.py"
+
+# Rule 10: Differential expression analysis
+rule differential_expression:
+    input:
+        h5ad = f"{RESULTS_DIR}/annotation/{{sample}}_annotated.h5ad"
+    output:
+        deg_csv = f"{RESULTS_DIR}/differential_expression/{{sample}}_deg.csv",
+        deg_plots = directory(f"{RESULTS_DIR}/plots/{{sample}}_deg"),
+        rank_genes = f"{RESULTS_DIR}/differential_expression/{{sample}}_rank_genes.csv"
+    params:
+        method = config["differential_expression"]["method"],
+        min_pct = config["differential_expression"]["min_pct"],
+        logfc_threshold = config["differential_expression"]["logfc_threshold"],
+        pval_cutoff = config["differential_expression"]["pval_cutoff"]
+    log:
+        f"{LOGS_DIR}/differential_expression_{{sample}}.log"
+    script:
+        "scripts/08_differential_expression.py"
+
+# Rule 11: Generate comprehensive visualizations
+rule generate_visualizations:
+    input:
+        h5ad = f"{RESULTS_DIR}/annotation/{{sample}}_annotated.h5ad"
+    output:
+        plot_dir = directory(f"{RESULTS_DIR}/plots/{{sample}}_final")
+    params:
+        plots = config["visualization"]["plots"],
+        dpi = config["visualization"]["dpi"]
+    log:
+        f"{LOGS_DIR}/visualizations_{{sample}}.log"
+    script:
+        "scripts/09_generate_visualizations.py"
+
+# Rule 12: Generate HTML report
+rule generate_report:
+    input:
+        h5ad = expand(f"{RESULTS_DIR}/annotation/{{sample}}_annotated.h5ad", sample=SAMPLES),
+        qc_metrics = expand(f"{RESULTS_DIR}/filtered/{{sample}}_qc_metrics.csv", sample=SAMPLES),
+        deg = expand(f"{RESULTS_DIR}/differential_expression/{{sample}}_deg.csv", sample=SAMPLES)
+    output:
+        html = f"{RESULTS_DIR}/scrna_seq_report.html"
+    log:
+        f"{LOGS_DIR}/report_generation.log"
+    script:
+        "scripts/10_generate_report.py"
+
+# Rule 13: MultiQC aggregation
+rule multiqc:
+    input:
+        fastqc = expand(f"{RESULTS_DIR}/qc/{{sample}}_R{{read}}_fastqc.zip", sample=SAMPLES, read=[1, 2]),
+        starsolo = expand(f"{RESULTS_DIR}/starsolo/{{sample}}/Solo.out/Gene/Summary.csv", sample=SAMPLES)
+    output:
+        html = f"{RESULTS_DIR}/multiqc_report.html"
+    params:
+        results_dir = RESULTS_DIR
+    log:
+        f"{LOGS_DIR}/multiqc.log"
+    shell:
+        """
+        multiqc {params.results_dir} \
+            -o {params.results_dir} \
+            -n multiqc_report.html \
+            -f \
+            &> {log}
+        """

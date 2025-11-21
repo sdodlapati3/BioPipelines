@@ -19,7 +19,7 @@ echo "Start time: $(date)"
 
 # Activate conda environment
 source ~/miniconda3/etc/profile.d/conda.sh
-conda activate ~/envs/biopipelines
+conda activate /home/sdodl001_odu_edu/envs/biopipelines
 
 # Navigate to pipeline directory
 cd ~/BioPipelines/pipelines/methylation/bisulfite_analysis

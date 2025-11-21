@@ -1,0 +1,193 @@
+# Single-cell RNA-seq Pipeline Configuration
+# Configuration for 10x Genomics single-cell RNA-seq analysis
+
+# Project info
+project_name: "scrna_seq_analysis"
+description: "Single-cell RNA-seq analysis using STARsolo and Scanpy"
+
+# Directories
+dirs:
+  raw_data: "data/raw/scrna_seq"
+  results: "data/results/scrna_seq"
+  references: "data/references"
+  logs: "logs/scrna_seq"
+  temp: "/scratch/$USER/BioPipelines/scrna_seq_temp"
+
+# Reference genome
+reference:
+  fasta: "data/references/hg38.fa"
+  gtf: "data/references/Homo_sapiens.GRCh38.110.gtf"
+  star_index: "data/references/star_index"
+
+# 10x Genomics chemistry (v2 or v3)
+chemistry:
+  version: "v3"  # Options: v2, v3
+  whitelist: "data/references/10x_whitelist_v3.txt"  # Cell barcode whitelist
+  
+  # Barcode structure (10x v3)
+  barcode:
+    cell_length: 16      # Cell barcode length
+    umi_length: 12       # UMI length
+    polyA_length: 8      # Minimum polyA length
+
+# STARsolo parameters (alignment & counting)
+starsolo:
+  threads: 8
+  ram_gb: 32
+  
+  # Cell barcode parameters
+  cb_whitelist: "data/references/10x_whitelist_v3.txt"
+  cb_start: 1
+  cb_length: 16
+  umi_start: 17
+  umi_length: 12
+  
+  # Output features
+  solo_type: "CB_UMI_Simple"  # Cell barcode + UMI counting
+  solo_features: "Gene"        # Count genes
+  
+  # Filtering
+  solo_cb_match_wl: "1MM_multi"  # Allow 1 mismatch to whitelist
+  solo_umi_filtering: "MultiGeneUMI"  # UMI deduplication
+  
+  # Additional parameters
+  out_sam_attributes: "NH HI nM AS CR UR CB UB GX GN sS sQ sM"
+  out_sam_type: "BAM SortedByCoordinate"
+  limit_bam_sort_ram: 30000000000
+
+# Cell filtering thresholds
+filtering:
+  # Minimum counts per cell
+  min_counts: 500
+  
+  # Maximum counts per cell (filter potential doublets)
+  max_counts: 30000
+  
+  # Minimum genes per cell
+  min_genes: 250
+  
+  # Minimum cells per gene
+  min_cells: 3
+  
+  # Maximum mitochondrial content (%)
+  max_mito_percent: 20
+  
+  # Maximum ribosomal content (%)
+  max_ribo_percent: 50
+
+# Doublet detection
+doublets:
+  method: "scrublet"  # Options: scrublet, doubletfinder
+  expected_doublet_rate: 0.06  # ~6% for 10x
+  threshold: 0.25
+
+# Normalization
+normalization:
+  method: "log1p"  # Log1p normalization
+  target_sum: 10000  # Scale to 10,000 counts per cell
+  
+# Feature selection
+feature_selection:
+  n_top_genes: 2000
+  flavor: "seurat"  # Options: seurat, cell_ranger
+  min_mean: 0.0125
+  max_mean: 3
+  min_disp: 0.5
+
+# Dimensionality reduction
+pca:
+  n_components: 50
+  svd_solver: "arpack"
+  
+# Batch correction (if multiple samples)
+batch_correction:
+  enable: false
+  method: "harmony"  # Options: harmony, bbknn, scanorama, combat
+  
+# Clustering
+clustering:
+  neighbors:
+    n_neighbors: 15
+    n_pcs: 40
+    metric: "euclidean"
+  
+  umap:
+    min_dist: 0.3
+    spread: 1.0
+    n_components: 2
+    
+  leiden:
+    resolution: [0.4, 0.6, 0.8, 1.0]  # Multiple resolutions
+    
+  louvain:
+    resolution: [0.4, 0.6, 0.8]
+
+# Cell type annotation
+annotation:
+  method: "marker_genes"  # Options: marker_genes, celltypist, sctype
+  
+  # Marker genes for PBMC dataset
+  marker_genes:
+    "CD4 T cells": ["CD3D", "CD3E", "CD4", "IL7R"]
+    "CD8 T cells": ["CD3D", "CD3E", "CD8A", "CD8B"]
+    "B cells": ["MS4A1", "CD79A", "CD79B"]
+    "NK cells": ["GNLY", "NKG7", "NCAM1", "KLRD1"]
+    "Monocytes": ["CD14", "LYZ", "S100A8", "S100A9"]
+    "Dendritic cells": ["FCER1A", "CST3"]
+    "Megakaryocytes": ["PPBP", "PF4"]
+
+# Differential expression
+differential_expression:
+  method: "wilcoxon"  # Options: wilcoxon, t-test, logreg
+  
+  # Thresholds
+  min_pct: 0.25          # Min fraction of cells expressing
+  logfc_threshold: 0.5   # Min log fold-change
+  pval_cutoff: 0.05      # P-value cutoff
+  
+  # Multiple testing correction
+  correction_method: "bonferroni"  # Options: bonferroni, fdr_bh
+
+# Trajectory inference (optional)
+trajectory:
+  enable: false
+  method: "paga"  # Options: paga, velocyto, slingshot
+  
+# Visualization
+visualization:
+  dpi: 300
+  figsize: [10, 8]
+  
+  # Color schemes
+  categorical_cmap: "tab20"
+  continuous_cmap: "viridis"
+  
+  # Plots to generate
+  plots:
+    - "qc_violin"
+    - "highest_expr_genes"
+    - "mito_scatter"
+    - "pca_variance"
+    - "umap_clusters"
+    - "umap_genes"
+    - "dotplot_markers"
+    - "heatmap_markers"
+    - "rank_genes"
+
+# QC reporting
+qc:
+  generate_html: true
+  include_plots:
+    - "reads_per_cell"
+    - "genes_per_cell"
+    - "umi_per_cell"
+    - "mito_percent"
+    - "doublet_scores"
+
+# Output formats
+output:
+  save_h5ad: true        # AnnData format
+  save_loom: false       # Loom format
+  save_seurat: false     # Seurat RDS format
+  save_csv: true         # CSV exports
+  save_plots: true       # Individual plot files
