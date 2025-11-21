@@ -38,9 +38,9 @@ RESULTS_DIR = "../../../data/results"
 # Final outputs
 rule all:
     input:
-        # Final VCF files
-        expand(f"{RESULTS_DIR}/vcf/{{sample}}.annotated.vcf.gz", sample=SAMPLES),
-        expand(f"{RESULTS_DIR}/vcf/{{sample}}.annotated.vcf.gz.tbi", sample=SAMPLES),
+        # Final VCF files (skip annotation for now due to network issues)
+        expand(f"{RESULTS_DIR}/vcf/{{sample}}.filtered.vcf.gz", sample=SAMPLES),
+        expand(f"{RESULTS_DIR}/vcf/{{sample}}.filtered.vcf.gz.tbi", sample=SAMPLES),
         # MultiQC report
         f"{RESULTS_DIR}/multiqc_report.html"
 
@@ -135,11 +135,14 @@ rule mark_duplicates:
         """
         picard MarkDuplicates \
             INPUT={input.bam} \
-            OUTPUT={output.bam} \
+            OUTPUT={output.bam}.tmp \
             METRICS_FILE={output.metrics} \
             CREATE_INDEX=true \
             VALIDATION_STRINGENCY=LENIENT \
             2> {log}
+        # Add read group to the dedup BAM (required for GATK)
+        samtools addreplacerg -r '@RG\tID:{sample}\tSM:{sample}\tPL:ILLUMINA' -o {output.bam} {output.bam}.tmp
+        rm {output.bam}.tmp
         """
 
 
@@ -188,8 +191,6 @@ rule apply_bqsr:
             --bqsr-recal-file {input.table} \
             -O {output.bam} \
             2> {log}
-        
-        samtools index -o {output.bai} {output.bam}
         """
 
 
@@ -214,8 +215,6 @@ rule call_variants:
             -O {output.vcf} \
             --native-pair-hmm-threads {threads} \
             2> {log}
-        
-        tabix -f -p vcf {output.vcf}
         """
 
 
@@ -238,8 +237,6 @@ rule filter_variants:
             --filter-expression "QD < 2.0 || FS > 60.0 || MQ < 40.0 || MQRankSum < -12.5 || ReadPosRankSum < -8.0" \
             --filter-name "basic_snp_filter" \
             2> {log}
-        
-        tabix -f -p vcf {output.vcf}
         """
 
 
@@ -262,7 +259,7 @@ rule annotate_variants:
         snpEff -v {params.genome} {input.vcf} \
             -stats {output.html} 2> {log} | \
         bgzip > {output.vcf}
-        tabix -f -p vcf {output.vcf}
+        tabix -p vcf {output.vcf}
         """
 
 
