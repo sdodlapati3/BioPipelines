@@ -1,0 +1,13 @@
+name: hic_qc
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  # QC tools
+  - fastqc>=0.12.1
+  - multiqc>=1.14
+  - preseq=3.2.0  # Library complexity
+  - python>=3.10
+  - matplotlib>=3.5.0
+  - seaborn

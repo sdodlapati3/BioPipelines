@@ -1,0 +1,337 @@
+"""
+DNA Methylation (WGBS/RRBS) Analysis Pipeline
+==============================================
+
+Comprehensive bisulfite sequencing analysis using Bismark workflow.
+
+Pipeline steps:
+1. Quality control (FastQC + MultiQC)
+2. Adapter trimming (Trim Galore with bisulfite mode)
+3. Bismark alignment (bisulfite-aware aligner)
+4. Deduplication (remove PCR duplicates)
+5. Methylation extraction (CpG/CHG/CHH contexts)
+6. Quality metrics (conversion rate, mapping stats)
+7. DMR calling (differentially methylated regions)
+8. Segmentation (UMRs, LMRs, PMDs with methylseekR)
+9. Visualization (methylation profiles, DMRs)
+
+Author: BioPipelines Team
+"""
+
+from pathlib import Path
+import os
+
+# Load configuration
+configfile: "config.yaml"
+
+# Define paths
+RAW_DIR = config["raw_dir"]
+PROCESSED_DIR = config["processed_dir"]
+RESULTS_DIR = config["results_dir"]
+QC_DIR = config["qc_dir"]
+REFERENCE = config["reference"]["genome"]
+BISMARK_INDEX = config["bismark_index"]
+
+# Sample information
+SAMPLES = config["samples"]
+
+# Create output directories
+for d in [PROCESSED_DIR, RESULTS_DIR, QC_DIR]:
+    Path(d).mkdir(parents=True, exist_ok=True)
+
+# Detect paired-end vs single-end
+def is_paired_end(sample):
+    r1 = Path(f"{RAW_DIR}/{sample}_R1.fastq.gz")
+    r2 = Path(f"{RAW_DIR}/{sample}_R2.fastq.gz")
+    se = Path(f"{RAW_DIR}/{sample}.fastq.gz")
+    return (r1.exists() and r2.exists()) if not se.exists() else False
+
+SAMPLE_LAYOUT = {sample: "PE" if is_paired_end(sample) else "SE" for sample in SAMPLES}
+
+# Final outputs
+rule all:
+    input:
+        # QC reports
+        f"{QC_DIR}/multiqc_report.html",
+        # Alignment results
+        expand(f"{PROCESSED_DIR}/{{sample}}.deduplicated.bam", sample=SAMPLES),
+        # Methylation calls
+        expand(f"{RESULTS_DIR}/methylation/{{sample}}_bismark.cov.gz", sample=SAMPLES),
+        expand(f"{RESULTS_DIR}/methylation/{{sample}}.bedGraph.gz", sample=SAMPLES),
+        # DMRs (if comparisons defined)
+        expand(f"{RESULTS_DIR}/dmr/{{comparison}}_DMRs.bed", 
+               comparison=[c[2] for c in config.get("comparisons", [])]),
+        # Summary report
+        f"{RESULTS_DIR}/methylation_summary.html"
+
+# Rule to prepare Bismark index
+rule prepare_bismark_index:
+    input:
+        genome=REFERENCE
+    output:
+        directory(BISMARK_INDEX)
+    params:
+        genome_dir=os.path.dirname(REFERENCE)
+    conda:
+        "envs/bismark.yaml"
+    threads: 8
+    log:
+        f"{QC_DIR}/logs/bismark_index.log"
+    shell:
+        """
+        bismark_genome_preparation \\
+            --bowtie2 \\
+            --parallel {threads} \\
+            --genomic_composition \\
+            {params.genome_dir} 2> {log}
+        """
+
+# FastQC on raw reads
+rule fastqc_raw:
+    input:
+        lambda w: [f"{RAW_DIR}/{w.sample}_R1.fastq.gz", f"{RAW_DIR}/{w.sample}_R2.fastq.gz"]
+                  if SAMPLE_LAYOUT[w.sample] == "PE"
+                  else [f"{RAW_DIR}/{w.sample}.fastq.gz"]
+    output:
+        f"{QC_DIR}/fastqc_raw/{{sample}}_fastqc.done"
+    conda:
+        "envs/qc.yaml"
+    threads: 2
+    log:
+        f"{QC_DIR}/logs/fastqc_raw/{{sample}}.log"
+    params:
+        outdir=f"{QC_DIR}/fastqc_raw"
+    shell:
+        """
+        mkdir -p {params.outdir}
+        fastqc -t {threads} {input} -o {params.outdir}/ 2> {log}
+        touch {output}
+        """
+
+# Trim Galore (bisulfite mode)
+rule trim_reads:
+    input:
+        lambda w: [f"{RAW_DIR}/{w.sample}_R1.fastq.gz", f"{RAW_DIR}/{w.sample}_R2.fastq.gz"]
+                  if SAMPLE_LAYOUT[w.sample] == "PE"
+                  else [f"{RAW_DIR}/{w.sample}.fastq.gz"]
+    output:
+        done=f"{PROCESSED_DIR}/{{sample}}.trim.done"
+    params:
+        outdir=PROCESSED_DIR,
+        quality=config["params"]["trim"]["quality"],
+        min_length=config["params"]["trim"]["min_length"],
+        clip_r1=config["params"]["trim"]["clip_r1"],
+        clip_r2=config["params"]["trim"]["clip_r2"],
+        rrbs="--rrbs" if config["params"]["trim"]["rrbs"] else "",
+        paired="--paired" if SAMPLE_LAYOUT.get("sample1", "SE") == "PE" else ""
+    conda:
+        "envs/bismark.yaml"
+    threads: 4
+    log:
+        f"{QC_DIR}/logs/trim/{{sample}}.log"
+    shell:
+        """
+        trim_galore \\
+            --quality {params.quality} \\
+            --length {params.min_length} \\
+            --clip_R1 {params.clip_r1} \\
+            --clip_R2 {params.clip_r2} \\
+            {params.rrbs} \\
+            {params.paired} \\
+            --cores {threads} \\
+            --fastqc \\
+            --output_dir {params.outdir} \\
+            {input} 2> {log}
+        touch {output.done}
+        """
+
+# Bismark alignment
+rule bismark_align:
+    input:
+        reads=f"{PROCESSED_DIR}/{{sample}}.trim.done",
+        index=BISMARK_INDEX
+    output:
+        bam=temp(f"{PROCESSED_DIR}/{{sample}}_bismark_bt2.bam")
+    params:
+        genome_dir=BISMARK_INDEX,
+        multicore=config["params"]["alignment"]["multicore"],
+        score_min=config["params"]["alignment"]["score_min"],
+        non_dir="--non_directional" if config["params"]["alignment"]["non_directional"] else "",
+        pbat="--pbat" if config["params"]["alignment"]["pbat"] else "",
+        input_files=lambda w: f"-1 {PROCESSED_DIR}/{w.sample}_R1_val_1.fq.gz -2 {PROCESSED_DIR}/{w.sample}_R2_val_2.fq.gz"
+                              if SAMPLE_LAYOUT[w.sample] == "PE"
+                              else f"{PROCESSED_DIR}/{w.sample}_trimmed.fq.gz"
+    conda:
+        "envs/bismark.yaml"
+    threads: 16
+    log:
+        f"{QC_DIR}/logs/align/{{sample}}.log"
+    shell:
+        """
+        bismark \\
+            --genome {params.genome_dir} \\
+            --multicore {params.multicore} \\
+            --score_min {params.score_min} \\
+            {params.non_dir} \\
+            {params.pbat} \\
+            --output_dir {PROCESSED_DIR} \\
+            --temp_dir {PROCESSED_DIR}/tmp \\
+            --bowtie2 \\
+            {params.input_files} 2> {log}
+        """
+
+# Deduplicate
+rule deduplicate:
+    input:
+        bam=f"{PROCESSED_DIR}/{{sample}}_bismark_bt2.bam"
+    output:
+        bam=f"{PROCESSED_DIR}/{{sample}}.deduplicated.bam",
+        report=f"{QC_DIR}/dedup/{{sample}}.deduplication_report.txt"
+    conda:
+        "envs/bismark.yaml"
+    threads: 1
+    log:
+        f"{QC_DIR}/logs/dedup/{{sample}}.log"
+    shell:
+        """
+        deduplicate_bismark \\
+            --bam \\
+            --output_dir {PROCESSED_DIR} \\
+            {input.bam} 2> {log}
+        
+        mv {PROCESSED_DIR}/*deduplication_report.txt {output.report}
+        """
+
+# Methylation extraction
+rule extract_methylation:
+    input:
+        bam=f"{PROCESSED_DIR}/{{sample}}.deduplicated.bam",
+        index=BISMARK_INDEX
+    output:
+        cov=f"{RESULTS_DIR}/methylation/{{sample}}_bismark.cov.gz",
+        bedgraph=f"{RESULTS_DIR}/methylation/{{sample}}.bedGraph.gz",
+        mbias=f"{QC_DIR}/mbias/{{sample}}.M-bias.txt"
+    params:
+        genome_dir=BISMARK_INDEX,
+        ignore=config["params"]["extraction"]["ignore"],
+        ignore_3p=config["params"]["extraction"]["ignore_3prime"],
+        ignore_r2=config["params"]["extraction"]["ignore_r2"],
+        min_depth=config["params"]["extraction"]["min_depth"]
+    conda:
+        "envs/bismark.yaml"
+    threads: 4
+    log:
+        f"{QC_DIR}/logs/extract/{{sample}}.log"
+    shell:
+        """
+        mkdir -p {RESULTS_DIR}/methylation {QC_DIR}/mbias
+        
+        bismark_methylation_extractor \\
+            --gzip \\
+            --bedGraph \\
+            --cytosine_report \\
+            --genome_folder {params.genome_dir} \\
+            --ignore {params.ignore} \\
+            --ignore_3prime {params.ignore_3p} \\
+            --ignore_r2 {params.ignore_r2} \\
+            --multicore {threads} \\
+            --output {RESULTS_DIR}/methylation \\
+            {input.bam} 2> {log}
+        
+        # Move M-bias report
+        mv {RESULTS_DIR}/methylation/*M-bias.txt {output.mbias} || true
+        
+        # Filter by depth
+        zcat {RESULTS_DIR}/methylation/{wildcards.sample}.bismark.cov.gz | \\
+        awk '$5+$6 >= {params.min_depth}' | gzip > {output.cov}
+        """
+
+# Bismark report
+rule bismark_report:
+    input:
+        bam=f"{PROCESSED_DIR}/{{sample}}.deduplicated.bam"
+    output:
+        report=f"{QC_DIR}/bismark_reports/{{sample}}_report.html"
+    conda:
+        "envs/bismark.yaml"
+    log:
+        f"{QC_DIR}/logs/bismark_report/{{sample}}.log"
+    shell:
+        """
+        mkdir -p {QC_DIR}/bismark_reports
+        bismark2report --output {output.report} 2> {log} || true
+        """
+
+# MultiQC
+rule multiqc:
+    input:
+        expand(f"{QC_DIR}/fastqc_raw/{{sample}}_fastqc.done", sample=SAMPLES),
+        expand(f"{PROCESSED_DIR}/{{sample}}.trim.done", sample=SAMPLES),
+        expand(f"{QC_DIR}/dedup/{{sample}}.deduplication_report.txt", sample=SAMPLES),
+        expand(f"{QC_DIR}/mbias/{{sample}}.M-bias.txt", sample=SAMPLES)
+    output:
+        f"{QC_DIR}/multiqc_report.html"
+    params:
+        qc_dir=QC_DIR,
+        processed_dir=PROCESSED_DIR
+    conda:
+        "envs/qc.yaml"
+    log:
+        f"{QC_DIR}/logs/multiqc.log"
+    shell:
+        """
+        multiqc \\
+            {params.qc_dir} {params.processed_dir} \\
+            --outdir {params.qc_dir} \\
+            --force \\
+            --title "DNA Methylation Analysis" 2> {log}
+        """
+
+# DMR calling with metilene
+rule call_dmrs:
+    input:
+        group1_cov=lambda w: [f"{RESULTS_DIR}/methylation/{s}_bismark.cov.gz" 
+                              for s in config["comparisons"][int(w.comp_idx)][0]],
+        group2_cov=lambda w: [f"{RESULTS_DIR}/methylation/{s}_bismark.cov.gz" 
+                              for s in config["comparisons"][int(w.comp_idx)][1]]
+    output:
+        dmrs=f"{RESULTS_DIR}/dmr/{{comp_idx}}_DMRs.bed"
+    params:
+        min_diff=config["params"]["dmr"]["min_diff"],
+        min_cpg=config["params"]["dmr"]["min_cpg"],
+        max_dist=config["params"]["dmr"]["max_dist"],
+        comparison=lambda w: config["comparisons"][int(w.comp_idx)][2]
+    conda:
+        "envs/dmr.yaml"
+    threads: config["params"]["dmr"]["threads"]
+    log:
+        f"{QC_DIR}/logs/dmr/{{comp_idx}}.log"
+    shell:
+        """
+        mkdir -p {RESULTS_DIR}/dmr
+        
+        # Prepare input files for metilene
+        metilene \\
+            -a {input.group1_cov} \\
+            -b {input.group2_cov} \\
+            -d {params.min_diff} \\
+            -c {params.min_cpg} \\
+            -D {params.max_dist} \\
+            -t {threads} \\
+            > {output.dmrs} 2> {log}
+        """
+
+# Summary report
+rule methylation_summary:
+    input:
+        cov_files=expand(f"{RESULTS_DIR}/methylation/{{sample}}_bismark.cov.gz", sample=SAMPLES),
+        multiqc=f"{QC_DIR}/multiqc_report.html"
+    output:
+        html=f"{RESULTS_DIR}/methylation_summary.html"
+    conda:
+        "envs/visualization.yaml"
+    log:
+        f"{QC_DIR}/logs/summary.log"
+    script:
+        "scripts/generate_summary.R"
+

@@ -1,0 +1,98 @@
+# DNA Methylation (WGBS/RRBS) Pipeline Configuration
+# =====================================================
+
+# Sample information
+samples:
+  - sample1
+  - sample2
+
+# Data directories
+data_dir: "/scratch/sdodl001/BioPipelines/data"
+raw_dir: "/scratch/sdodl001/BioPipelines/data/raw/methylation"
+processed_dir: "/scratch/sdodl001/BioPipelines/data/processed/methylation"
+results_dir: "/scratch/sdodl001/BioPipelines/data/results/methylation"
+qc_dir: "/scratch/sdodl001/BioPipelines/data/results/methylation/qc"
+
+# Reference genome
+reference:
+  genome: "/scratch/sdodl001/BioPipelines/data/references/hg38.fa"
+  name: "hg38"
+  chromosomes: ["chr1", "chr2", "chr3", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", 
+                "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr19", 
+                "chr20", "chr21", "chr22", "chrX", "chrY"]
+
+# Bismark index directory (will be created if doesn't exist)
+bismark_index: "/scratch/sdodl001/BioPipelines/data/references/bismark_index"
+
+# Analysis parameters
+params:
+  # Trimming (Trim Galore)
+  trim:
+    quality: 20
+    min_length: 50
+    clip_r1: 10  # Clip bases from 5' end of read 1
+    clip_r2: 10  # Clip bases from 5' end of read 2
+    rrbs: false  # Set to true for RRBS
+  
+  # Bismark alignment
+  alignment:
+    bowtie2: true  # Use bowtie2 (recommended)
+    multicore: 4   # Parallel alignment
+    score_min: "L,0,-0.2"  # Min alignment score
+    non_directional: false  # Set true for non-directional libraries
+    pbat: false  # Set true for PBAT protocol
+  
+  # Deduplication
+  dedup:
+    skip: false  # Set true to skip deduplication
+  
+  # Methylation extraction
+  extraction:
+    min_depth: 10  # Minimum read coverage
+    ignore: 5  # Ignore N bp from 5' end
+    ignore_3prime: 5  # Ignore N bp from 3' end
+    ignore_r2: 5  # Ignore N bp from read 2
+    merge_non_cpg: false  # Merge CpG and non-CpG contexts
+  
+  # DMR calling (metilene)
+  dmr:
+    min_diff: 0.1  # Minimum methylation difference (10%)
+    min_cpg: 10  # Minimum CpGs per DMR
+    max_dist: 300  # Maximum distance between CpGs in DMR
+    threads: 8
+
+  # Segmentation (methylseekR for UMRs/LMRs/PMDs)
+  segmentation:
+    enabled: true
+    fdr_cutoff: 0.05
+    min_cpg: 5
+
+# Comparisons for DMR analysis
+# Format: [group1_samples, group2_samples, comparison_name]
+comparisons:
+  - [["sample1"], ["sample2"], "sample1_vs_sample2"]
+  # Add more comparisons as needed
+  # - [["control1", "control2"], ["treatment1", "treatment2"], "control_vs_treatment"]
+
+# QC thresholds
+qc:
+  min_reads: 10000000  # Minimum total reads
+  min_mapping_rate: 0.6  # Minimum alignment rate (60%)
+  min_conversion_rate: 0.995  # Minimum bisulfite conversion (99.5%)
+  max_duplicate_rate: 0.4  # Maximum PCR duplicate rate (40%)
+
+# Resources
+resources:
+  threads:
+    trim: 4
+    align: 8
+    extract: 4
+    dmr: 8
+    qc: 2
+  
+  memory:
+    trim: "8G"
+    align: "32G"
+    extract: "16G"
+    dmr: "16G"
+    qc: "4G"

@@ -1,0 +1,142 @@
+# Hi-C Contact Analysis Pipeline Configuration
+# ==============================================
+
+# Sample information
+samples:
+  - sample1
+  - sample2
+
+# Data directories
+data_dir: "/scratch/sdodl001/BioPipelines/data"
+raw_dir: "/scratch/sdodl001/BioPipelines/data/raw/hic"
+processed_dir: "/scratch/sdodl001/BioPipelines/data/processed/hic"
+results_dir: "/scratch/sdodl001/BioPipelines/data/results/hic"
+qc_dir: "/scratch/sdodl001/BioPipelines/data/results/hic/qc"
+
+# Reference genome
+reference:
+  genome: "/scratch/sdodl001/BioPipelines/data/references/hg38.fa"
+  name: "hg38"
+  chromosomes: ["chr1", "chr2", "chr3", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10",
+                "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr19",
+                "chr20", "chr21", "chr22", "chrX", "chrY"]
+  
+  # Chromosome sizes file
+  chrom_sizes: "/scratch/sdodl001/BioPipelines/data/references/hg38.chrom.sizes"
+
+# Bowtie2 index
+bowtie2_index: "/scratch/sdodl001/BioPipelines/data/references/bowtie2_index/hg38"
+
+# Hi-C Protocol
+protocol:
+  enzyme: "MboI"  # Restriction enzyme: MboI, DpnII, HindIII, etc.
+  ligation_site: "GATCGATC"  # Ligation junction (for MboI)
+  
+  # Enzyme recognition sites (for validating Hi-C signal)
+  recognition_site: "GATC"  # For MboI
+  
+  # Protocol type
+  type: "in_situ"  # in_situ, dilution, dnase, micro-c
+
+# Analysis parameters
+params:
+  # Trimming
+  trim:
+    quality: 20
+    min_length: 50
+  
+  # Alignment (two-step truncation strategy)
+  alignment:
+    quality: 30  # MAPQ threshold
+    iterative_truncate: [70, 60, 50, 40, 30]  # Iterative read truncation
+    
+  # Filtering (HiC-Pro / pairtools)
+  filtering:
+    min_mapq: 30
+    max_molecule_size: 1000  # Maximum size for valid pairs (bp)
+    remove_duplicates: true
+    min_restriction_fragment_size: 100
+    max_restriction_fragment_size: 100000
+  
+  # Contact matrix generation
+  matrix:
+    resolutions: [5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000]  # Multiple resolutions
+    bin_type: "fixed"  # fixed or restriction_site
+    normalization: ["KR", "VC", "VC_SQRT"]  # Normalization methods
+    
+  # TAD calling (HiCExplorer)
+  tad:
+    min_depth: 60000  # Minimum window size for TAD calling
+    max_depth: 120000  # Maximum window size
+    step: 10000  # Step size
+    fdr: 0.05  # FDR threshold
+    delta: 0.01  # Insulation score delta
+    
+  # Loop calling (HiCCUPS or Chromosight)
+  loop:
+    min_distance: 15000  # Minimum loop size (bp)
+    max_distance: 2000000  # Maximum loop size (bp)
+    fdr: 0.1  # FDR threshold
+    enrichment: 2.0  # Minimum fold enrichment
+  
+  # Compartment calling (A/B compartments)
+  compartment:
+    resolution: 100000  # Resolution for compartment calling
+    pca_components: 3  # Number of PCA components
+  
+  # Comparison (differential analysis)
+  differential:
+    method: "multiHiCcompare"  # Method for differential analysis
+    fdr: 0.05
+    min_diff: 2.0  # Minimum fold change
+
+# Comparisons for differential analysis
+comparisons:
+  - [["sample1"], ["sample2"], "sample1_vs_sample2"]
+
+# QC thresholds
+qc:
+  min_reads: 50000000  # Minimum total read pairs (50M)
+  min_valid_pairs_pct: 0.40  # Minimum valid pairs percentage (40%)
+  max_trans_pct: 0.50  # Maximum trans (inter-chr) percentage (50%)
+  min_cis_long_range_pct: 0.20  # Minimum long-range cis (>20kb) percentage
+
+# Output formats
+output:
+  cool: true  # Generate .cool format (for cooler/HiGlass)
+  hic: true   # Generate .hic format (for Juicebox)
+  bedpe: true  # Generate BEDPE format for pairs
+
+# Visualization
+visualization:
+  chromosomes: ["chr1", "chr2", "chr3", "chr4", "chr5", "chr6"]  # Chromosomes to plot
+  regions:  # Specific regions for detailed plots
+    - "chr1:1000000-2000000"
+    - "chr2:5000000-6000000"
+  
+  plot_types:
+    - "contact_matrix"
+    - "tads"
+    - "loops"
+    - "compartments"
+    - "aggregate_peaks"
+
+# Resources
+resources:
+  threads:
+    trim: 4
+    align: 16
+    filter: 8
+    matrix: 8
+    tad: 4
+    loop: 8
+    qc: 2
+  
+  memory:
+    trim: "8G"
+    align: "32G"
+    filter: "16G"
+    matrix: "64G"
+    tad: "32G"
+    loop: "32G"
+    qc: "8G"

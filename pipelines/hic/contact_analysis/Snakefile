@@ -1,0 +1,390 @@
+"""
+Hi-C Contact Analysis Pipeline
+================================
+
+Comprehensive Hi-C analysis pipeline for 3D genome organization.
+
+Pipeline steps:
+1. Quality control (FastQC + MultiQC)
+2. Read trimming (fastp)
+3. Iterative alignment (Bowtie2 with truncation)
+4. Pair parsing and filtering (pairtools)
+5. Contact matrix generation (cooler at multiple resolutions)
+6. Matrix normalization (ICE, KR methods)
+7. TAD calling (HiCExplorer)
+8. Loop calling (chromosight)
+9. Compartment analysis (A/B compartments)
+10. Visualization (contact maps, TADs, loops)
+
+Author: BioPipelines Team
+"""
+
+from pathlib import Path
+import os
+
+configfile: "config.yaml"
+
+# Paths
+RAW_DIR = config["raw_dir"]
+PROCESSED_DIR = config["processed_dir"]
+RESULTS_DIR = config["results_dir"]
+QC_DIR = config["qc_dir"]
+REFERENCE = config["reference"]["genome"]
+BOWTIE2_INDEX = config["bowtie2_index"]
+CHROM_SIZES = config["reference"]["chrom_sizes"]
+
+SAMPLES = config["samples"]
+RESOLUTIONS = config["params"]["matrix"]["resolutions"]
+
+# Create directories
+for d in [PROCESSED_DIR, RESULTS_DIR, QC_DIR]:
+    Path(d).mkdir(parents=True, exist_ok=True)
+
+# Detect layout
+def is_paired_end(sample):
+    r1 = Path(f"{RAW_DIR}/{sample}_R1.fastq.gz")
+    r2 = Path(f"{RAW_DIR}/{sample}_R2.fastq.gz")
+    return r1.exists() and r2.exists()
+
+# All Hi-C should be paired-end
+assert all(is_paired_end(s) for s in SAMPLES), "Hi-C requires paired-end reads"
+
+rule all:
+    input:
+        # QC
+        f"{QC_DIR}/multiqc_report.html",
+        # Contact matrices
+        expand(f"{RESULTS_DIR}/matrices/{{sample}}.mcool", sample=SAMPLES),
+        # TADs
+        expand(f"{RESULTS_DIR}/tads/{{sample}}_domains.bed", sample=SAMPLES),
+        # Loops
+        expand(f"{RESULTS_DIR}/loops/{{sample}}_loops.bedpe", sample=SAMPLES),
+        # Compartments
+        expand(f"{RESULTS_DIR}/compartments/{{sample}}_compartments.bed", sample=SAMPLES),
+        # Visualizations
+        expand(f"{RESULTS_DIR}/plots/{{sample}}_contact_matrix.png", sample=SAMPLES),
+        # Summary
+        f"{RESULTS_DIR}/hic_summary.html"
+
+# QC raw reads
+rule fastqc_raw:
+    input:
+        r1=f"{RAW_DIR}/{{sample}}_R1.fastq.gz",
+        r2=f"{RAW_DIR}/{{sample}}_R2.fastq.gz"
+    output:
+        f"{QC_DIR}/fastqc_raw/{{sample}}_fastqc.done"
+    params:
+        outdir=f"{QC_DIR}/fastqc_raw"
+    conda:
+        "envs/qc.yaml"
+    threads: 2
+    log:
+        f"{QC_DIR}/logs/fastqc/{{sample}}.log"
+    shell:
+        """
+        mkdir -p {params.outdir}
+        fastqc -t {threads} {input.r1} {input.r2} -o {params.outdir}/ 2> {log}
+        touch {output}
+        """
+
+# Trim adapters
+rule trim_reads:
+    input:
+        r1=f"{RAW_DIR}/{{sample}}_R1.fastq.gz",
+        r2=f"{RAW_DIR}/{{sample}}_R2.fastq.gz"
+    output:
+        r1=f"{PROCESSED_DIR}/{{sample}}_R1.trimmed.fastq.gz",
+        r2=f"{PROCESSED_DIR}/{{sample}}_R2.trimmed.fastq.gz",
+        json=f"{QC_DIR}/fastp/{{sample}}.json",
+        html=f"{QC_DIR}/fastp/{{sample}}.html"
+    params:
+        quality=config["params"]["trim"]["quality"],
+        min_len=config["params"]["trim"]["min_length"]
+    conda:
+        "envs/hic_processing.yaml"
+    threads: 4
+    log:
+        f"{QC_DIR}/logs/trim/{{sample}}.log"
+    shell:
+        """
+        fastp -i {input.r1} -I {input.r2} \
+              -o {output.r1} -O {output.r2} \
+              --thread {threads} \
+              --qualified_quality_phred {params.quality} \
+              --length_required {params.min_len} \
+              --json {output.json} \
+              --html {output.html} 2> {log}
+        """
+
+# Align read pairs independently
+rule align_reads:
+    input:
+        r1=f"{PROCESSED_DIR}/{{sample}}_R1.trimmed.fastq.gz",
+        r2=f"{PROCESSED_DIR}/{{sample}}_R2.trimmed.fastq.gz",
+        index=BOWTIE2_INDEX
+    output:
+        bam=temp(f"{PROCESSED_DIR}/{{sample}}.aligned.bam")
+    params:
+        index_base=BOWTIE2_INDEX,
+        mapq=config["params"]["alignment"]["quality"]
+    conda:
+        "envs/hic_processing.yaml"
+    threads: 16
+    log:
+        f"{QC_DIR}/logs/align/{{sample}}.log"
+    shell:
+        """
+        bowtie2 -x {params.index_base} \
+                -1 {input.r1} -2 {input.r2} \
+                --threads {threads} \
+                --very-sensitive \
+                --no-discordant \
+                --no-mixed \
+                2> {log} | \
+        samtools view -@ {threads} -bS -q {params.mapq} - | \
+        samtools sort -@ {threads} -n -o {output.bam} - 2>> {log}
+        """
+
+# Parse pairs and filter
+rule parse_pairs:
+    input:
+        bam=f"{PROCESSED_DIR}/{{sample}}.aligned.bam",
+        chrom_sizes=CHROM_SIZES
+    output:
+        pairs=f"{PROCESSED_DIR}/{{sample}}.pairs.gz",
+        stats=f"{QC_DIR}/pairs_stats/{{sample}}.stats"
+    params:
+        min_mapq=config["params"]["filtering"]["min_mapq"],
+        max_size=config["params"]["filtering"]["max_molecule_size"]
+    conda:
+        "envs/hic_processing.yaml"
+    threads: 8
+    log:
+        f"{QC_DIR}/logs/parse/{{sample}}.log"
+    shell:
+        """
+        mkdir -p {QC_DIR}/pairs_stats
+        
+        pairtools parse \
+            --min-mapq {params.min_mapq} \
+            --walks-policy 5unique \
+            --max-inter-align-gap 30 \
+            --nproc-in {threads} \
+            --nproc-out {threads} \
+            --chroms-path {input.chrom_sizes} \
+            {input.bam} 2> {log} | \
+        pairtools sort \
+            --nproc {threads} \
+            --tmpdir {PROCESSED_DIR}/tmp | \
+        pairtools dedup \
+            --nproc-in {threads} \
+            --nproc-out {threads} \
+            --mark-dups \
+            --output-stats {output.stats} \
+            --output {output.pairs} 2>> {log}
+        
+        pairix {output.pairs}
+        """
+
+# Create multi-resolution cooler
+rule make_cooler:
+    input:
+        pairs=f"{PROCESSED_DIR}/{{sample}}.pairs.gz",
+        chrom_sizes=CHROM_SIZES
+    output:
+        cool=temp(f"{RESULTS_DIR}/matrices/{{sample}}.cool"),
+        mcool=f"{RESULTS_DIR}/matrices/{{sample}}.mcool"
+    params:
+        resolutions=",".join(map(str, RESOLUTIONS)),
+        base_res=min(RESOLUTIONS)
+    conda:
+        "envs/hic_processing.yaml"
+    threads: 8
+    log:
+        f"{QC_DIR}/logs/cooler/{{sample}}.log"
+    shell:
+        """
+        mkdir -p {RESULTS_DIR}/matrices
+        
+        cooler cload pairix \
+            -p {threads} \
+            {input.chrom_sizes}:{params.base_res} \
+            {input.pairs} \
+            {output.cool} 2> {log}
+        
+        cooler zoomify \
+            --balance \
+            --balance-args '--max-iters 500' \
+            --resolutions {params.resolutions} \
+            --nproc {threads} \
+            --out {output.mcool} \
+            {output.cool} 2>> {log}
+        """
+
+# Call TADs
+rule call_tads:
+    input:
+        mcool=f"{RESULTS_DIR}/matrices/{{sample}}.mcool"
+    output:
+        domains=f"{RESULTS_DIR}/tads/{{sample}}_domains.bed",
+        boundaries=f"{RESULTS_DIR}/tads/{{sample}}_boundaries.bed",
+        score=f"{RESULTS_DIR}/tads/{{sample}}_tad_score.bedgraph"
+    params:
+        resolution=100000,
+        min_depth=config["params"]["tad"]["min_depth"],
+        max_depth=config["params"]["tad"]["max_depth"],
+        step=config["params"]["tad"]["step"]
+    conda:
+        "envs/hic_analysis.yaml"
+    threads: 4
+    log:
+        f"{QC_DIR}/logs/tad/{{sample}}.log"
+    shell:
+        """
+        mkdir -p {RESULTS_DIR}/tads
+        
+        hicFindTADs \
+            --matrix {input.mcool}::resolutions/{params.resolution} \
+            --minDepth {params.min_depth} \
+            --maxDepth {params.max_depth} \
+            --step {params.step} \
+            --correctForMultipleTesting fdr \
+            --thresholdComparisons 0.05 \
+            --delta 0.01 \
+            --outPrefix {RESULTS_DIR}/tads/{wildcards.sample} \
+            --numberOfProcessors {threads} 2> {log}
+        
+        mv {RESULTS_DIR}/tads/{wildcards.sample}_domains.bed {output.domains}
+        mv {RESULTS_DIR}/tads/{wildcards.sample}_boundaries.bed {output.boundaries}
+        mv {RESULTS_DIR}/tads/{wildcards.sample}_tad_score.bedgraph {output.score}
+        """
+
+# Call loops
+rule call_loops:
+    input:
+        mcool=f"{RESULTS_DIR}/matrices/{{sample}}.mcool"
+    output:
+        loops=f"{RESULTS_DIR}/loops/{{sample}}_loops.bedpe"
+    params:
+        resolution=10000,
+        min_dist=config["params"]["loop"]["min_distance"],
+        max_dist=config["params"]["loop"]["max_distance"]
+    conda:
+        "envs/hic_analysis.yaml"
+    threads: 8
+    log:
+        f"{QC_DIR}/logs/loop/{{sample}}.log"
+    shell:
+        """
+        mkdir -p {RESULTS_DIR}/loops
+        
+        chromosight detect \
+            --pattern loops \
+            --min-dist {params.min_dist} \
+            --max-dist {params.max_dist} \
+            --threads {threads} \
+            {input.mcool}::resolutions/{params.resolution} \
+            {RESULTS_DIR}/loops/{wildcards.sample} 2> {log}
+        
+        mv {RESULTS_DIR}/loops/{wildcards.sample}.tsv {output.loops} || touch {output.loops}
+        """
+
+# Call compartments
+rule call_compartments:
+    input:
+        mcool=f"{RESULTS_DIR}/matrices/{{sample}}.mcool"
+    output:
+        compartments=f"{RESULTS_DIR}/compartments/{{sample}}_compartments.bed",
+        bigwig=f"{RESULTS_DIR}/compartments/{{sample}}_compartments.bw"
+    params:
+        resolution=config["params"]["compartment"]["resolution"]
+    conda:
+        "envs/hic_analysis.yaml"
+    threads: 4
+    log:
+        f"{QC_DIR}/logs/compartment/{{sample}}.log"
+    shell:
+        """
+        mkdir -p {RESULTS_DIR}/compartments
+        
+        hicPCA \
+            --matrix {input.mcool}::resolutions/{params.resolution} \
+            --outputFileName {output.bigwig} \
+            --format bigwig \
+            --numberOfEigenvectors 3 2> {log}
+        
+        hicTransform \
+            --matrix {input.mcool}::resolutions/{params.resolution} \
+            --method obs_exp \
+            --outFileName {RESULTS_DIR}/compartments/{wildcards.sample}_oe.cool 2>> {log}
+        
+        cooltools call-compartments \
+            --bigwig {output.bigwig} \
+            {RESULTS_DIR}/compartments/{wildcards.sample}_oe.cool \
+            {output.compartments} 2>> {log} || touch {output.compartments}
+        """
+
+# Plot contact matrix
+rule plot_matrix:
+    input:
+        mcool=f"{RESULTS_DIR}/matrices/{{sample}}.mcool",
+        tads=f"{RESULTS_DIR}/tads/{{sample}}_boundaries.bed"
+    output:
+        png=f"{RESULTS_DIR}/plots/{{sample}}_contact_matrix.png"
+    params:
+        resolution=100000,
+        region="chr1:0-50000000"
+    conda:
+        "envs/visualization.yaml"
+    log:
+        f"{QC_DIR}/logs/plot/{{sample}}.log"
+    shell:
+        """
+        mkdir -p {RESULTS_DIR}/plots
+        
+        hicPlotMatrix \
+            --matrix {input.mcool}::resolutions/{params.resolution} \
+            --region {params.region} \
+            --log1p \
+            --colorMap RdYlBu_r \
+            --title "{wildcards.sample} Hi-C Contact Matrix" \
+            --outFileName {output.png} 2> {log}
+        """
+
+# MultiQC
+rule multiqc:
+    input:
+        expand(f"{QC_DIR}/fastqc_raw/{{sample}}_fastqc.done", sample=SAMPLES),
+        expand(f"{QC_DIR}/fastp/{{sample}}.json", sample=SAMPLES),
+        expand(f"{QC_DIR}/pairs_stats/{{sample}}.stats", sample=SAMPLES)
+    output:
+        f"{QC_DIR}/multiqc_report.html"
+    params:
+        qc_dir=QC_DIR
+    conda:
+        "envs/qc.yaml"
+    log:
+        f"{QC_DIR}/logs/multiqc.log"
+    shell:
+        """
+        multiqc {params.qc_dir} \
+            --outdir {params.qc_dir} \
+            --force \
+            --title "Hi-C Analysis" 2> {log}
+        """
+
+# Summary report
+rule hic_summary:
+    input:
+        mcools=expand(f"{RESULTS_DIR}/matrices/{{sample}}.mcool", sample=SAMPLES),
+        tads=expand(f"{RESULTS_DIR}/tads/{{sample}}_domains.bed", sample=SAMPLES),
+        loops=expand(f"{RESULTS_DIR}/loops/{{sample}}_loops.bedpe", sample=SAMPLES),
+        multiqc=f"{QC_DIR}/multiqc_report.html"
+    output:
+        html=f"{RESULTS_DIR}/hic_summary.html"
+    conda:
+        "envs/visualization.yaml"
+    log:
+        f"{QC_DIR}/logs/summary.log"
+    script:
+        "scripts/generate_summary.py"

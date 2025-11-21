@@ -1,0 +1,17 @@
+name: methylation_bismark
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  # Core bisulfite sequencing tools
+  - bismark=0.24.2
+  - trim-galore=0.6.10
+  - cutadapt=4.4
+  
+  # Already in biopipelines, but ensure compatibility
+  - bowtie2>=2.5.0
+  - samtools>=1.17
+  - python>=3.10
+  - numpy
+  - scipy

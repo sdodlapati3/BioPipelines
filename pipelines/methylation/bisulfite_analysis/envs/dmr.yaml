@@ -1,0 +1,16 @@
+name: methylation_dmr
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  # DMR calling tools
+  - metilene=0.2.8
+  - bedtools>=2.30.0
+  - r-base=4.3
+  - bioconductor-bsseq
+  - bioconductor-dmrcaller
+  - bioconductor-methylkit
+  - r-ggplot2
+  - r-dplyr
+  - python>=3.10

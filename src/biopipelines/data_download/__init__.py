@@ -51,7 +51,11 @@ __all__ = [
     "search_encode",
     "search_sra",
     "search_geo",
-    "download_from_url"
+    "download_from_url",
+    "MethylationDownloader",
+    "HiCDownloader",
+    "search_methylation_datasets",
+    "search_hic_datasets"
 ]
 
 
@@ -71,6 +75,11 @@ class DatasetType(Enum):
     ATAC_SEQ = "atac_seq"
     WGS = "wgs"
     EXOME = "exome"
+    METHYLATION = "methylation"
+    WGBS = "wgbs"
+    RRBS = "rrbs"
+    HIC = "hic"
+    MICRO_C = "micro_c"
 
 
 class DataSource(Enum):
@@ -81,6 +90,9 @@ class DataSource(Enum):
     ENA = "ena"
     GENOMES_1000 = "1000genomes"
     UCSC = "ucsc"
+    FOURD = "4dn"
+    ROADMAP = "roadmap"
+    AIDENLAB = "aidenlab"
 
 
 @dataclass
@@ -225,6 +237,73 @@ class DataDownloader:
         
         downloader = GEODownloader(self.output_dir)
         return downloader.download_series(geo_id, dataset_type)
+    
+    def download_methylation(
+        self,
+        experiment_id: str,
+        source: str = "encode"
+    ) -> List[Path]:
+        """
+        Download DNA methylation dataset
+        
+        Parameters
+        ----------
+        experiment_id : str
+            Experiment ID
+        source : str
+            Data source (encode, roadmap)
+            
+        Returns
+        -------
+        List[Path]
+            Paths to downloaded files
+        """
+        from .methylation_downloader import MethylationDownloader
+        
+        downloader = MethylationDownloader(self.output_dir)
+        
+        if source.lower() == "encode":
+            return downloader.download_encode_experiment(experiment_id)
+        elif source.lower() == "roadmap":
+            return downloader.download_roadmap_sample(experiment_id)
+        else:
+            raise ValueError(f"Unknown source: {source}")
+    
+    def download_hic(
+        self,
+        experiment_id: str,
+        source: str = "4dn",
+        file_format: str = "pairs"
+    ) -> List[Path]:
+        """
+        Download Hi-C dataset
+        
+        Parameters
+        ----------
+        experiment_id : str
+            Experiment ID
+        source : str
+            Data source (4dn, encode, aidenlab)
+        file_format : str
+            Preferred format (fastq, pairs, hic, cool)
+            
+        Returns
+        -------
+        List[Path]
+            Paths to downloaded files
+        """
+        from .hic_downloader import HiCDownloader
+        
+        downloader = HiCDownloader(self.output_dir)
+        
+        if source.lower() == "4dn":
+            return downloader.download_4dn_experiment(experiment_id, file_format)
+        elif source.lower() == "encode":
+            return downloader.download_encode_hic(experiment_id, file_format)
+        elif source.lower() == "aidenlab":
+            return [downloader.download_aidenlab_dataset(experiment_id)]
+        else:
+            raise ValueError(f"Unknown source: {source}")
     
     def search_datasets(
         self,

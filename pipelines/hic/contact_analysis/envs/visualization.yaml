@@ -1,0 +1,24 @@
+name: hic_visualization
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  # Visualization tools
+  - cooler=0.9.3
+  - hicexplorer=3.7.2
+  - cooltools=0.5.4
+  - pygenometracks=3.8  # Hi-C track plots
+  
+  # Plotting libraries
+  - matplotlib>=3.5.0
+  - seaborn
+  - plotly
+  - bokeh
+  
+  # Report generation
+  - python>=3.10
+  - pandas
+  - numpy
+  - jinja2
+  - pillow

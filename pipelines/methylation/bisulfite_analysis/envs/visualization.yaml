@@ -1,0 +1,19 @@
+name: methylation_viz
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  # Visualization and reporting
+  - r-base=4.3
+  - r-rmarkdown
+  - r-ggplot2
+  - r-plotly
+  - r-dt
+  - r-knitr
+  - bioconductor-genomicranges
+  - bioconductor-rtracklayer
+  - python>=3.10
+  - matplotlib>=3.5.0
+  - seaborn
+  - pandas

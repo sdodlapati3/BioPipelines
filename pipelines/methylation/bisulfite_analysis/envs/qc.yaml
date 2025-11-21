@@ -1,0 +1,10 @@
+name: methylation_qc
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  # QC tools (most already in biopipelines)
+  - fastqc>=0.12.1
+  - multiqc>=1.14
+  - python>=3.10
