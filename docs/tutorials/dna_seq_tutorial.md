@@ -47,26 +47,64 @@ This tutorial will guide you through the DNA-seq variant calling pipeline, desig
 ### The Complete Workflow
 
 ```
-Raw Reads (FASTQ)
-    ↓
-1. Quality Control (FastQC)
-    ↓
-2. Read Trimming (fastp)
-    ↓
-3. Alignment to Reference (BWA-MEM)
-    ↓
-4. Mark Duplicates (Picard)
-    ↓
-5. Base Quality Recalibration (GATK BQSR)
-    ↓
-6. Variant Calling (GATK HaplotypeCaller)
-    ↓
-7. Variant Filtering
-    ↓
-8. Annotation (SnpEff)
-    ↓
-Final Annotated VCF
+┌────────────────────────────────────────────────────────────────┐
+│                  DNA-Seq Variant Calling Pipeline               │
+└────────────────────────────────────────────────────────────────┘
+
+Raw FASTQ Files (sample_R1.fastq.gz, sample_R2.fastq.gz)
+    │
+    ├──► [1] QUALITY CONTROL (FastQC + MultiQC)
+    │         └─► HTML reports with quality metrics
+    │
+    ├──► [2] READ TRIMMING (fastp)
+    │         └─► Clean FASTQ files
+    │
+    ├──► [3] ALIGNMENT TO REFERENCE (BWA-MEM)
+    │         └─► Mapped reads in BAM format
+    │              
+    │              FASTQ Format:           BAM Format:
+    │              @read_1                 Read aligned to
+    │              ATCGATCG                chr1:12345
+    │              +                       with CIGAR string
+    │              IIIIIIII                showing matches
+    │
+    ├──► [4] MARK DUPLICATES (Picard)
+    │         └─► Deduplicated BAM
+    │              (PCR duplicates flagged)
+    │
+    ├──► [5] BASE QUALITY RECALIBRATION (GATK BQSR)
+    │         └─► Recalibrated BAM
+    │              (Quality scores adjusted)
+    │
+    ├──► [6] VARIANT CALLING (GATK HaplotypeCaller)
+    │         └─► Raw VCF file
+    │              
+    │              VCF Format:
+    │              #CHROM POS REF ALT QUAL FILTER INFO
+    │              chr1   100 A   G   30   PASS   DP=50
+    │              chr1   200 C   T   45   PASS   DP=60
+    │
+    ├──► [7] VARIANT FILTERING (GATK VariantFiltration)
+    │         └─► Filtered VCF
+    │              (Low quality variants marked)
+    │
+    └──► [8] ANNOTATION (SnpEff)
+              └─► Annotated VCF + summary report
+                   (Functional impact predicted)
+
+Final Output:
+    • filtered_variants.vcf.gz  (1-2M variants)
+    • annotated_variants.vcf.gz (with gene/effect info)
+    • MultiQC reports (quality metrics)
 ```
+
+**Key File Formats**:
+
+| Format | Description | Example Content |
+|--------|-------------|-----------------|
+| **FASTQ** | Raw sequencing reads with quality scores | `@read1\nATCG\n+\nIIII` |
+| **BAM** | Binary alignment (mapped reads) | Compressed; view with `samtools view` |
+| **VCF** | Variant Call Format (mutations) | Tab-delimited: position, ref, alt alleles |
 
 ### Time Estimates
 - Small dataset (exome): 2-4 hours
@@ -165,8 +203,46 @@ bwa mem -t 8 \
 - Each read has a position, quality score, and CIGAR string (describes alignment)
 
 **Key concepts**:
-- **MAPQ score**: Mapping quality (higher = more confident alignment)
-- **CIGAR string**: Shows matches, mismatches, insertions, deletions
+
+**MAPQ score** (Mapping Quality): Phred-scaled probability that mapping is wrong
+- MAPQ=60: 99.9999% confident (1 in 1,000,000 chance of wrong position)
+- MAPQ=40: 99.99% confident
+- MAPQ=20: 99% confident
+- MAPQ=0: Reads map to multiple locations (ambiguous)
+
+**CIGAR string**: Compact representation of alignment
+```
+Read:      ATCG--ATCG (with 2bp deletion)
+Reference: ATCGAAATCG
+
+CIGAR: 4M2D4M
+       ││ │ │
+       ││ │ └─ 4 Matches
+       ││ └─── 2 Deletions
+       │└───── 4 Matches
+       └────── Start
+```
+
+**Visual Example**:
+```
+Reference genome (chr1):
+Position: 1000      1010      1020
+          |---------|---------|
+          ATCGATCGATCGATCGATCG
+
+Read alignment:
+Read1: chr1:1001  MAPQ=60  CIGAR=10M
+       ATCGATCGAT (perfect match)
+       ||||||||||
+       ATCGATCGAT
+
+Read2: chr1:1005  MAPQ=20  CIGAR=5M1I5M  
+       ATCG[A]ATCGAT (1bp insertion)
+       ||||^|||||
+       ATCG-ATCG
+       
+BAM stores: chromosome, position, CIGAR, sequence, quality
+```
 
 ---
 
@@ -179,6 +255,21 @@ bwa mem -t 8 \
 - They can cause overestimation of coverage
 - Can create false variant calls
 - We mark (not remove) them so they're ignored in variant calling
+
+**Visual Concept**:
+```
+Original DNA fragment:  ────ATCG────
+                             
+Library prep with PCR:  ────ATCG──── (original)
+                        ────ATCG──── (PCR copy 1)
+                        ────ATCG──── (PCR copy 2)
+                        ────ATCG──── (PCR copy 3)
+
+After sequencing, all 4 reads map to same position.
+Picard marks 3 as duplicates, keeps 1 for analysis.
+
+Real coverage = 1x (not 4x)
+```
 
 **Command breakdown**:
 ```bash
@@ -215,6 +306,19 @@ gatk MarkDuplicates \
 - BQSR learns error patterns and adjusts scores
 - Improves variant calling accuracy
 
+**Visual concept**:
+```
+Before BQSR:              After BQSR:
+Quality scores may        Corrected scores
+be systematically         better reflect
+inflated/deflated         true error rates
+
+Read: ATCGATCG            Read: ATCGATCG
+Qual: 40404040            Qual: 38383838
+      ^^^^^^^^                  ^^^^^^^^
+      May be too high           More accurate
+```
+
 **Two-step process**:
 
 **Step 5a: BaseRecalibrator**
@@ -231,6 +335,31 @@ gatk BaseRecalibrator \
 - `-I`: Input BAM
 - `--known-sites`: VCF of known variants (dbSNP) - used to distinguish real variants from errors
 - `-O`: Recalibration table
+
+**⚠️ Important: Chromosome Naming Compatibility**
+
+Your reference genome and dbSNP file **must use the same chromosome naming convention**:
+
+| Reference Style | dbSNP File Required | Example |
+|----------------|---------------------|---------|
+| **UCSC** (chr1, chr2, ...) | Needs `chr` prefix | `Homo_sapiens_assembly38.dbsnp138.vcf.gz` |
+| **NCBI** (1, 2, ...) | No `chr` prefix | `dbsnp_155.hg38.vcf.gz` |
+
+**Common Error**:
+```
+ERROR: Input files reference and features have incompatible contigs:
+No overlapping contigs found.
+  reference contigs = [chr1, chr2, chr3, ...]
+  features contigs = [NC_000001.11, NC_000002.12, ...]
+```
+
+**Fix**: Use matching dbSNP version. For hg38 with `chr` prefixes:
+```yaml
+# config.yaml
+reference:
+  genome: "/path/to/hg38.fa"  # Uses chr1, chr2, ...
+  known_sites: "/path/to/Homo_sapiens_assembly38.dbsnp138.vcf.gz"  # Also uses chr prefixes
+```
 
 **Step 5b: ApplyBQSR**
 ```bash
@@ -292,6 +421,45 @@ gatk HaplotypeCaller \
 **Why filter?**
 - Not all variant calls are real
 - Sequencing errors can look like variants
+- Low-quality variants can lead to false discoveries
+
+**Filtering Strategy**:
+
+```
+Raw VCF (all variant calls)
+    │
+    ├─► Quality Depth (QD) < 2.0 ────► FAIL (low_QD)
+    │
+    ├─► Fisher Strand (FS) > 60.0 ───► FAIL (strand_bias)
+    │
+    ├─► Mapping Quality (MQ) < 40 ───► FAIL (low_MQ)
+    │
+    ├─► Strand Odds Ratio (SOR) > 3 ─► FAIL (strand_bias)
+    │
+    └─► All filters passed ──────────► PASS (high confidence)
+    
+Filtered VCF (high-confidence variants only)
+```
+
+**Filter Thresholds Explained**:
+
+| Filter | Threshold | Meaning | Why Important |
+|--------|-----------|---------|---------------|
+| **QD** (Quality by Depth) | < 2.0 | Low quality per read covering position | Removes calls with weak evidence |
+| **FS** (Fisher Strand) | > 60.0 | Variants only on one strand | Indicates strand bias (technical artifact) |
+| **MQ** (Mapping Quality) | < 40.0 | Reads mapped poorly | Removes variants in repeat regions |
+| **SOR** (Strand Odds Ratio) | > 3.0 | Imbalanced strand representation | Another strand bias metric |
+
+**Visual Example**:
+```
+Position 12345:
+Raw call: A→G, QUAL=25, QD=1.8, FS=65
+
+Decision tree:
+  QD=1.8 < 2.0?  YES ──► Mark as "low_QD"
+  FS=65 > 60?    YES ──► Mark as "strand_bias"
+  
+Result: FILTER column = "low_QD;strand_bias" (FAIL)
 - Filtering improves specificity (reduces false positives)
 
 **Command breakdown**:

@@ -93,12 +93,95 @@ Open Chromatin (Euchromatin)
 ### The Complete Workflow
 
 ```
-Raw Reads (FASTQ)
-    ↓
-1. Quality Control (FastQC)
-    ↓
-2. Adapter Trimming (fastp - Nextera adapters)
-    ↓
+┌────────────────────────────────────────────────────────────────┐
+│              ATAC-seq Chromatin Accessibility Pipeline          │
+└────────────────────────────────────────────────────────────────┘
+
+Raw FASTQ Files (paired-end reads from Tn5 fragments)
+    │
+    ├──► [1] QUALITY CONTROL (FastQC + MultiQC)
+    │         └─► Check read quality, adapter content
+    │
+    ├──► [2] ADAPTER TRIMMING (fastp - Nextera adapters)
+    │         └─► Remove Tn5 adapter sequences
+    │              
+    │              Before:  ──adapter──DNA──adapter──
+    │              After:   ────────DNA────────
+    │
+    ├──► [3] ALIGNMENT (Bowtie2 - sensitive mode)
+    │         └─► Map fragments to genome
+    │              
+    │              Chromatin:
+    │              ═════════╦══════════════╦═══════════
+    │                       ║              ║
+    │                   Open regions   Nucleosome
+    │                   (many reads)   (few reads)
+    │
+    ├──► [4] POST-ALIGNMENT FILTERING
+    │         ├─► Remove unmapped reads
+    │         ├─► Remove mitochondrial reads (chrM)
+    │         ├─► Remove duplicates
+    │         └─► Keep properly paired reads
+    │
+    ├──► [5] FRAGMENT SIZE ANALYSIS
+    │         └─► Calculate insert size distribution
+    │              
+    │              Expected pattern:
+    │              Reads │     ╱╲
+    │                    │    ╱  ╲     Nucleosomal
+    │              Count │   ╱    ╲   ╱╲  ladder
+    │                    │__╱______╲_╱__╲______
+    │                       <147  295  442 bp
+    │                       NFR   1N   2N
+    │
+    ├──► [6] PEAK CALLING (MACS2)
+    │         └─► Identify accessible regions
+    │              (peaks = open chromatin)
+    │
+    └──► [7] VISUALIZATION (deepTools)
+              ├─► Create bigWig tracks
+              └─► Generate heatmaps/profiles
+
+Final Output:
+    • peaks.narrowPeak (50K-150K accessible regions)
+    • bigWig tracks (for genome browser visualization)
+    • Fragment size distribution (QC metric)
+    • MultiQC report (quality summary)
+```
+
+**Key ATAC-seq Concepts**:
+
+| Concept | Description | Biological Meaning |
+|---------|-------------|-------------------|
+| **NFR** (Nucleosome-Free Region) | Fragments <147 bp | Open chromatin (active regulatory elements) |
+| **Mono-nucleosomal** | Fragments ~147-294 bp | DNA wrapped once around histone octamer |
+| **Di-nucleosomal** | Fragments ~295-442 bp | DNA wrapped around two nucleosomes |
+| **Peak** | Region with high read density | Accessible chromatin region (promoter/enhancer) |
+| **Mitochondrial reads** | Reads mapping to chrM | Technical artifact (remove these) |
+
+**Visual: Tn5 Transposase Action**:
+```
+Closed chromatin (inaccessible):
+    ═══════════════════════════════
+    Cannot insert adapters
+
+Open chromatin (accessible):
+    ───────────────────────────────
+         ↓ Tn5 transposase
+    ──A──     ──A──     ──A──
+      │         │         │
+    Many Tn5 insertions → Many sequencing reads → Peak called
+```
+
+**Pipeline Dependencies Fix**:
+⚠️ **Important**: This pipeline requires `deeptools>=3.5.6` for compatibility with modern matplotlib versions.
+
+**Known Issue Fixed**: Earlier versions (deeptools 3.5.2) failed with:
+```
+AttributeError: module 'matplotlib.cm' has no attribute 'register_cmap'
+```
+
+**Solution**: Upgraded to deeptools 3.5.6 which uses current matplotlib API.
 3. Alignment (Bowtie2)
     ↓
 4. Filter Mitochondrial Reads
@@ -235,10 +318,32 @@ bowtie2 \
 **Purpose**: Remove highly abundant mitochondrial DNA reads.
 
 **Why filter mitochondria?**
-- Mitochondrial DNA is very accessible
-- Can represent 20-80% of reads
+- Mitochondrial DNA is very accessible (circular, no nucleosomes)
+- Can represent 20-80% of reads in ATAC-seq libraries
 - Obscures nuclear chromatin signal
 - Not biologically interesting for most analyses
+
+**Visual Concept**:
+```
+Before filtering:
+    Total reads = 10 million
+    ├─► Nuclear chromatin: 2M reads (20%)
+    └─► Mitochondrial DNA: 8M reads (80%) ← Problem!
+
+After filtering (remove chrM):
+    Usable reads = 2 million
+    └─► All nuclear chromatin (100%)
+    
+Now peak calling focuses on real regulatory elements.
+```
+
+**Quality Metrics**:
+| Mitochondrial % | Quality | Interpretation |
+|-----------------|---------|----------------|
+| <10% | Excellent | High-quality nuclei prep |
+| 10-30% | Good | Acceptable for analysis |
+| 30-50% | Fair | May reduce sensitivity |
+| >50% | Poor | Consider re-prep or deeper sequencing |
 
 **Command**:
 ```bash
@@ -373,14 +478,71 @@ Genrich \
 ```
 
 **Output**:
-- narrowPeak file
-- Summit positions
-- Peak scores
+- **narrowPeak file**: BED format with peak coordinates
+- **Summit positions**: Exact location of highest signal
+- **Peak scores**: Confidence metric for each peak
 
-**Peak interpretation**:
-- **Many peaks (50,000-150,000)**: Normal for ATAC-seq
-- Peaks at promoters, enhancers
-- Peak width ~300-800bp (larger than TF ChIP)
+**Peak Calling Visual Concept**:
+```
+Genome browser view:
+
+Chromosome 1: ──────────────────────────────────────────
+
+Read coverage:
+             ╱╲              ╱╲╱╲
+        ____╱  ╲________    ╱    ╲_____╱╲_____
+              │               │         │
+              Peak 1          Peak 2    Peak 3
+              (promoter)      (enhancer)(weak)
+              
+              High             High     Low
+              confidence       confidence   confidence
+              (many reads)     (many reads) (few reads)
+
+MACS2 calls peaks where read density significantly exceeds background.
+```
+
+**Peak Interpretation**:
+
+| Peak Count | Typical Cell Type | Biological Meaning |
+|------------|-------------------|--------------------|
+| **50K-80K** | Differentiated cells | Specific cell identity |
+| **80K-150K** | Stem cells / progenitors | Open chromatin landscape |
+| **<30K** | May indicate poor library | Re-evaluate quality |
+| **>200K** | May indicate noise | Adjust p-value threshold |
+
+**Peak Locations**:
+```
+Typical peak distribution in human genome:
+
+  30-40%  ──► Promoters (near TSS)
+  40-50%  ──► Intergenic (enhancers)
+  20-30%  ──► Introns / gene bodies
+  <5%     ──► Exons
+  
+This distribution suggests functional regulatory elements.
+```
+
+**Peak Width**:
+- **Narrow peaks (200-500bp)**: TF binding sites, promoters
+- **Broad peaks (500-1000bp)**: Active enhancers
+- **Very broad (>2kb)**: May indicate poor resolution
+
+**narrowPeak Format**:
+```
+chr1  1000  1500  peak_1  100  .  5.2  10.5  8.3  250
+│     │     │     │       │    │  │    │     │    │
+│     │     │     │       │    │  │    │     │    └─ Summit offset
+│     │     │     │       │    │  │    │     └────── q-value
+│     │     │     │       │    │  │    └──────────── p-value  
+│     │     │     │       │    │  └───────────────── Signal value
+│     │     │     │       │    └──────────────────── Strand
+│     │     │     │       └───────────────────────── Score (0-1000)
+│     │     │     └───────────────────────────────── Peak name
+│     │     └─────────────────────────────────────── End position
+│     └───────────────────────────────────────────── Start position
+└─────────────────────────────────────────────────── Chromosome
+```
 
 ---
 
@@ -390,11 +552,47 @@ Genrich \
 
 **Why fragment sizes matter?**
 Different fragment sizes reveal chromatin structure:
+
+**Visual Explanation**:
 ```
-<100bp     : Nucleosome-free regions (NFR)
-180-247bp  : Mono-nucleosome
-315-473bp  : Di-nucleosome
-473-558bp  : Tri-nucleosome
+DNA wrapped around nucleosomes:
+
+    NFR          Mono-nuc       Di-nuc         Tri-nuc
+    <147bp       147-294bp      295-442bp      443-590bp
+    
+    ────         ═══╗           ═══╗═══╗       ═══╗═══╗═══╗
+    open         ───║───        ───║───║───    ───║───║───║───
+                 ═══╝           ═══╝═══╝       ═══╝═══╝═══╝
+                 
+Fragment Size Distribution (expected):
+
+  Read │     
+ Count │    ╱╲                High peak at <147bp
+       │   ╱  ╲               (nucleosome-free)
+       │  ╱    ╲    ╱╲        
+       │ ╱      ╲  ╱  ╲       Smaller peaks at
+       │╱        ╲╱    ╲╱     ~200, ~400, ~600bp
+       └─────────────────────── Fragment Size (bp)
+         50  147  294  442  590
+```
+
+**Interpretation Guide**:
+
+| Pattern | Meaning | Quality |
+|---------|---------|---------|
+| **Strong <147bp peak** | Many NFRs (open chromatin) | ✓ Good ATAC signal |
+| **Periodic peaks** (~200, 400, 600bp) | Nucleosome ladder visible | ✓ High-quality library |
+| **Single broad peak** | Poor nucleosome resolution | ✗ May indicate degraded DNA |
+| **No <147bp peak** | Few accessible regions | ✗ Possible technical issue |
+
+**Fragment Size Categories**:
+```
+<100bp     : Sub-nucleosomal / TF-protected fragments
+100-147bp  : Nucleosome-free regions (NFR) ← Regulatory elements
+147-294bp  : Mono-nucleosome (1N)
+295-442bp  : Di-nucleosome (2N)
+443-590bp  : Tri-nucleosome (3N)
+>590bp     : Higher-order chromatin structures
 ```
 
 **Compute fragment sizes**:

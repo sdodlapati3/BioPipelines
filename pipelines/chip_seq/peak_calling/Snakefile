@@ -19,6 +19,9 @@ Usage:
 # Load configuration
 configfile: "config.yaml"
 
+import os
+from pathlib import Path
+
 # Get samples
 SAMPLES = config["samples"]
 INPUT = config["input_control"]
@@ -33,6 +36,24 @@ QC_DIR = f"{DATA_BASE}/results/chip_seq/qc"
 PROCESSED_DIR = f"{DATA_BASE}/processed/chip_seq"
 RESULTS_DIR = f"{DATA_BASE}/results/chip_seq"
 RAW_DIR = f"{DATA_BASE}/raw/chip_seq"
+
+# Auto-detect paired-end vs single-end for each sample
+def is_paired_end(sample):
+    """Check if sample has paired-end data (_R1 and _R2 files)"""
+    r1 = Path(f"{RAW_DIR}/{sample}_R1.fastq.gz")
+    r2 = Path(f"{RAW_DIR}/{sample}_R2.fastq.gz")
+    se = Path(f"{RAW_DIR}/{sample}.fastq.gz")
+    
+    if r1.exists() and r2.exists():
+        return True
+    elif se.exists():
+        return False
+    else:
+        # Default to checking for paired-end pattern
+        return r1.exists()
+
+# Determine layout for each sample
+SAMPLE_LAYOUT = {sample: "PE" if is_paired_end(sample) else "SE" for sample in ALL_SAMPLES}
 
 # Final outputs
 rule all:
@@ -49,32 +70,38 @@ rule all:
 
 rule fastqc_raw:
     input:
-        r1=f"{RAW_DIR}/{{sample}}_R1.fastq.gz",
-        r2=f"{RAW_DIR}/{{sample}}_R2.fastq.gz"
+        lambda w: [f"{RAW_DIR}/{w.sample}_R1.fastq.gz", f"{RAW_DIR}/{w.sample}_R2.fastq.gz"]
+                  if SAMPLE_LAYOUT[w.sample] == "PE"
+                  else [f"{RAW_DIR}/{w.sample}.fastq.gz"]
     output:
-        r1=f"{QC_DIR}/fastqc_raw/{{sample}}_R1_fastqc.html",
-        r2=f"{QC_DIR}/fastqc_raw/{{sample}}_R2_fastqc.html"
+        f"{QC_DIR}/fastqc_raw/{{sample}}_fastqc.done"
     conda:
         "envs/qc.yaml"
     threads: 2
     log:
         f"{QC_DIR}/logs/fastqc_raw/{{sample}}.log"
+    params:
+        outdir=f"{QC_DIR}/fastqc_raw"
     shell:
         """
-        mkdir -p {QC_DIR}/fastqc_raw
-        fastqc -t {threads} {input.r1} {input.r2} -o {QC_DIR}/fastqc_raw/ 2> {log}
+        mkdir -p {params.outdir}
+        fastqc -t {threads} {input} -o {params.outdir}/ 2> {log}
+        touch {output}
         """
-
-
 rule trim_reads:
     input:
-        r1=f"{RAW_DIR}/{{sample}}_R1.fastq.gz",
-        r2=f"{RAW_DIR}/{{sample}}_R2.fastq.gz"
+        lambda w: [f"{RAW_DIR}/{w.sample}_R1.fastq.gz", f"{RAW_DIR}/{w.sample}_R2.fastq.gz"]
+                  if SAMPLE_LAYOUT[w.sample] == "PE"
+                  else [f"{RAW_DIR}/{w.sample}.fastq.gz"]
     output:
-        r1=f"{PROCESSED_DIR}/{{sample}}_R1.trimmed.fastq.gz",
-        r2=f"{PROCESSED_DIR}/{{sample}}_R2.trimmed.fastq.gz",
         html=f"{QC_DIR}/fastp/{{sample}}.html",
-        json=f"{QC_DIR}/fastp/{{sample}}.json"
+        json=f"{QC_DIR}/fastp/{{sample}}.json",
+        done=f"{PROCESSED_DIR}/{{sample}}.trim.done"
+    params:
+        out_files=lambda w: f"-o {PROCESSED_DIR}/{w.sample}_R1.trimmed.fastq.gz -O {PROCESSED_DIR}/{w.sample}_R2.trimmed.fastq.gz"
+                           if SAMPLE_LAYOUT[w.sample] == "PE"
+                           else f"-o {PROCESSED_DIR}/{w.sample}.trimmed.fastq.gz",
+        in_files=lambda w, input: f"-i {input[0]} -I {input[1]}" if SAMPLE_LAYOUT[w.sample] == "PE" else f"-i {input[0]}"
     conda:
         "envs/preprocessing.yaml"
     threads: 4
@@ -82,8 +109,7 @@ rule trim_reads:
         f"{QC_DIR}/logs/trim/{{sample}}.log"
     shell:
         """
-        fastp -i {input.r1} -I {input.r2} \\
-              -o {output.r1} -O {output.r2} \\
+        fastp {params.in_files} {params.out_files} \\
               --thread {threads} \\
               --html {output.html} \\
               --json {output.json} \\
@@ -92,16 +118,24 @@ rule trim_reads:
               --cut_right_mean_quality 20 \\
               --length_required 50 \\
               2> {log}
+        touch {output.done}
         """
 
 
 rule align_reads:
     input:
-        r1=f"{PROCESSED_DIR}/{{sample}}_R1.trimmed.fastq.gz",
-        r2=f"{PROCESSED_DIR}/{{sample}}_R2.trimmed.fastq.gz",
+        reads=lambda w: [f"{PROCESSED_DIR}/{w.sample}_R1.trimmed.fastq.gz", 
+                        f"{PROCESSED_DIR}/{w.sample}_R2.trimmed.fastq.gz"]
+                       if SAMPLE_LAYOUT[w.sample] == "PE"
+                       else [f"{PROCESSED_DIR}/{w.sample}.trimmed.fastq.gz"],
         ref=REFERENCE
     output:
-        bam=temp(f"{PROCESSED_DIR}/{{sample}}.sorted.bam")
+        bam=temp(f"{PROCESSED_DIR}/{{sample}}.sorted.bam"),
+        bai=temp(f"{PROCESSED_DIR}/{{sample}}.sorted.bam.bai")
+    params:
+        read_args=lambda w, input: f"{input.reads[0]} {input.reads[1]}" 
+                                    if SAMPLE_LAYOUT[w.sample] == "PE" 
+                                    else input.reads[0]
     conda:
         "envs/alignment.yaml"
     threads: 8
@@ -109,7 +143,7 @@ rule align_reads:
         f"{QC_DIR}/logs/align/{{sample}}.log"
     shell:
         """
-        bwa mem -t {threads} {input.ref} {input.r1} {input.r2} 2> {log} | \\
+        bwa mem -t {threads} {input.ref} {params.read_args} 2> {log} | \\
         samtools sort -@ {threads} -o {output.bam} - 2>> {log}
         samtools index {output.bam}
         """
@@ -221,10 +255,12 @@ rule create_bigwig:
 
 rule multiqc:
     input:
-        expand(f"{QC_DIR}/fastqc_raw/{{sample}}_R1_fastqc.html", sample=ALL_SAMPLES),
-        expand(f"{QC_DIR}/fastqc_raw/{{sample}}_R2_fastqc.html", sample=ALL_SAMPLES),
-        expand(f"{QC_DIR}/fastp/{{sample}}.json", sample=ALL_SAMPLES),
-        expand(f"{QC_DIR}/picard/{{sample}}.dedup_metrics.txt", sample=ALL_SAMPLES)
+        # Dynamically include FastQC outputs based on SE/PE layout
+        lambda w: [f"{QC_DIR}/fastqc_raw/{s}_R1_fastqc.html" for s in ALL_SAMPLES if SAMPLE_LAYOUT[s] == "PE"] +
+                  [f"{QC_DIR}/fastqc_raw/{s}_R2_fastqc.html" for s in ALL_SAMPLES if SAMPLE_LAYOUT[s] == "PE"] +
+                  [f"{QC_DIR}/fastqc_raw/{s}_fastqc.html" for s in ALL_SAMPLES if SAMPLE_LAYOUT[s] == "SE"],
+        fastp=expand(f"{QC_DIR}/fastp/{{sample}}.json", sample=ALL_SAMPLES),
+        dedup=expand(f"{QC_DIR}/picard/{{sample}}.dedup_metrics.txt", sample=ALL_SAMPLES)
     output:
         f"{RESULTS_DIR}/multiqc_report.html"
     conda:
