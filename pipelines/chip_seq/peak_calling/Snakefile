@@ -96,7 +96,7 @@ rule trim_reads:
     output:
         html=f"{QC_DIR}/fastp/{{sample}}.html",
         json=f"{QC_DIR}/fastp/{{sample}}.json",
-        done=f"{PROCESSED_DIR}/{{sample}}.trim.done"
+        trimmed=f"{PROCESSED_DIR}/{{sample}}.trimmed.fastq.gz"
     params:
         out_files=lambda w: f"-o {PROCESSED_DIR}/{w.sample}_R1.trimmed.fastq.gz -O {PROCESSED_DIR}/{w.sample}_R2.trimmed.fastq.gz"
                            if SAMPLE_LAYOUT[w.sample] == "PE"
@@ -118,24 +118,20 @@ rule trim_reads:
               --cut_right_mean_quality 20 \\
               --length_required 50 \\
               2> {log}
-        touch {output.done}
         """
 
 
 rule align_reads:
     input:
-        reads=lambda w: [f"{PROCESSED_DIR}/{w.sample}_R1.trimmed.fastq.gz", 
-                        f"{PROCESSED_DIR}/{w.sample}_R2.trimmed.fastq.gz"]
-                       if SAMPLE_LAYOUT[w.sample] == "PE"
-                       else [f"{PROCESSED_DIR}/{w.sample}.trimmed.fastq.gz"],
+        trimmed=f"{PROCESSED_DIR}/{{sample}}.trimmed.fastq.gz",
         ref=REFERENCE
     output:
         bam=temp(f"{PROCESSED_DIR}/{{sample}}.sorted.bam"),
         bai=temp(f"{PROCESSED_DIR}/{{sample}}.sorted.bam.bai")
     params:
-        read_args=lambda w, input: f"{input.reads[0]} {input.reads[1]}" 
-                                    if SAMPLE_LAYOUT[w.sample] == "PE" 
-                                    else input.reads[0]
+        read_files=lambda w: f"{PROCESSED_DIR}/{w.sample}_R1.trimmed.fastq.gz {PROCESSED_DIR}/{w.sample}_R2.trimmed.fastq.gz"
+                            if SAMPLE_LAYOUT[w.sample] == "PE"
+                            else f"{PROCESSED_DIR}/{w.sample}.trimmed.fastq.gz"
     conda:
         "envs/alignment.yaml"
     threads: 8
@@ -143,7 +139,7 @@ rule align_reads:
         f"{QC_DIR}/logs/align/{{sample}}.log"
     shell:
         """
-        bwa mem -t {threads} {input.ref} {params.read_args} 2> {log} | \\
+        bwa mem -t {threads} {input.ref} {params.read_files} 2> {log} | \\
         samtools sort -@ {threads} -o {output.bam} - 2>> {log}
         samtools index {output.bam}
         """
