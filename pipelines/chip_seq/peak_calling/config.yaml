@@ -16,7 +16,7 @@ reference:
 
 # Pipeline parameters
 trimming:
-  min_length: 50
+  min_length: 20  # Set to 20 for older 36bp Illumina data
   quality_cutoff: 20
 
 alignment:

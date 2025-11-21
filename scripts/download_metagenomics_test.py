@@ -1,34 +1,35 @@
 #!/usr/bin/env python3
 """
-Download test metagenomics datasets for pipeline validation
-
-Downloads small, well-characterized metagenomic samples:
-1. Mock community (ZymoBIOMICS or similar) - known composition
-2. Human gut metagenome - representative real-world sample
-
-Total size: ~5-10 GB
+Download small metagenomics test dataset
+Human gut microbiome sample for quick pipeline testing
 """
 
 import sys
 import subprocess
+import requests
 from pathlib import Path
 
-def download_with_sra_toolkit(accession, output_dir):
-    """Download FASTQ files from SRA using fasterq-dump"""
-    print(f"\nDownloading {accession}...")
-    cmd = [
-        "fasterq-dump",
-        accession,
-        "--outdir", str(output_dir),
-        "--split-files",  # Split into R1/R2
-        "--progress"
-    ]
-    subprocess.run(cmd, check=True)
+def download_file(url, output_path):
+    """Download file with progress"""
+    print(f"Downloading from ENA: {url}")
+    response = requests.get(url, stream=True)
+    response.raise_for_status()
     
-    # Compress files
-    print(f"Compressing {accession}...")
-    for fastq in output_dir.glob(f"{accession}*.fastq"):
-        subprocess.run(["gzip", str(fastq)], check=True)
+    total_size = int(response.headers.get('content-length', 0))
+    downloaded = 0
+    block_size = 8192
+    
+    with open(output_path, 'wb') as f:
+        for chunk in response.iter_content(chunk_size=block_size):
+            if chunk:
+                f.write(chunk)
+                downloaded += len(chunk)
+                if total_size > 0:
+                    percent = (downloaded / total_size) * 100
+                    mb = downloaded / 1024 / 1024
+                    print(f"\r  Progress: {percent:.1f}% ({mb:.1f} MB)", end='', flush=True)
+    print("\n  ✓ Complete")
+
 
 def main():
     # Setup output directory
@@ -36,60 +37,68 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
     
     print("=" * 80)
-    print("Downloading Metagenomics Test Datasets")
+    print("Downloading Metagenomics Test Dataset")
     print("=" * 80)
+    print("\nDataset: Human gut microbiome (SRR1927149)")
+    print("Source: ENA (European Nucleotide Archive)")
+    print("Size: ~300-400 MB per file (subsampled)")
+    print("Technology: Illumina HiSeq")
+    print()
     
-    # Dataset 1: Human gut metagenome (small, well-studied)
-    # SRR1927149: Human gut metagenome, ~2GB, good quality
-    print("\nDataset 1: Human gut metagenome sample")
-    print("  Accession: SRR1927149")
-    print("  Description: Human gut microbiome")
-    print("  Size: ~2 GB")
-    print("  Expected: Diverse bacterial community")
+    # Use ENA for faster download (already subsampled)
+    # SRR1927149: Human gut metagenome, good quality
+    accession = "SRR1927149"
+    
+    # ENA FTP links (faster than SRA)
+    base_url = f"ftp://ftp.sra.ebi.ac.uk/vol1/fastq/SRR192/009/{accession}"
+    r1_url = f"{base_url}/{accession}_1.fastq.gz"
+    r2_url = f"{base_url}/{accession}_2.fastq.gz"
+    
+    r1_path = output_dir / "sample1_R1.fastq.gz"
+    r2_path = output_dir / "sample1_R2.fastq.gz"
     
     try:
-        download_with_sra_toolkit("SRR1927149", output_dir)
+        if not r1_path.exists():
+            print("Downloading Read 1...")
+            download_file(r1_url, r1_path)
+        else:
+            print(f"✓ Read 1 already exists: {r1_path}")
         
-        # Rename to standard format
-        (output_dir / "SRR1927149_1.fastq.gz").rename(output_dir / "sample1_R1.fastq.gz")
-        (output_dir / "SRR1927149_2.fastq.gz").rename(output_dir / "sample1_R2.fastq.gz")
+        if not r2_path.exists():
+            print("\nDownloading Read 2...")
+            download_file(r2_url, r2_path)
+        else:
+            print(f"✓ Read 2 already exists: {r2_path}")
         
-        print("✓ Downloaded and renamed to sample1_R1/R2.fastq.gz")
+        print("\n" + "=" * 80)
+        print("✓ Download Complete!")
+        print("=" * 80)
+        print(f"\nFiles in: {output_dir}/")
+        
+        # Show file sizes
+        if r1_path.exists() and r2_path.exists():
+            r1_mb = r1_path.stat().st_size / 1024 / 1024
+            r2_mb = r2_path.stat().st_size / 1024 / 1024
+            print(f"  sample1_R1.fastq.gz: {r1_mb:.1f} MB")
+            print(f"  sample1_R2.fastq.gz: {r2_mb:.1f} MB")
+        
+        print("\n📋 Next steps:")
+        print("1. Verify Kraken2 DB exists:")
+        print("   ls /scratch/.../kraken2_db/hash.k2d")
+        print("2. Update config if needed:")
+        print("   pipelines/metagenomics/taxonomic_profiling/config.yaml")
+        print("3. Submit pipeline:")
+        print("   sbatch scripts/submit_metagenomics.sh")
+        print()
+        
+        return 0
         
     except Exception as e:
-        print(f"Error downloading SRR1927149: {e}")
-        print("\nAlternative: Download manually from:")
-        print("  https://www.ebi.ac.uk/ena/browser/view/SRR1927149")
+        print(f"\n✗ Error: {e}")
+        print("\nAlternative: Use wget directly:")
+        print(f"  wget {r1_url} -O {r1_path}")
+        print(f"  wget {r2_url} -O {r2_path}")
         return 1
-    
-    # Dataset 2: Mock community (optional, for validation)
-    print("\n" + "=" * 80)
-    print("Optional: ZymoBIOMICS Mock Community")
-    print("  For validation with known composition")
-    print("  Accession: SRR17913526 (~3 GB)")
-    print("  Skip for now, uncomment if needed")
-    print("=" * 80)
-    
-    # Uncomment to download mock community:
-    # try:
-    #     download_with_sra_toolkit("SRR17913526", output_dir)
-    #     (output_dir / "SRR17913526_1.fastq.gz").rename(output_dir / "sample2_R1.fastq.gz")
-    #     (output_dir / "SRR17913526_2.fastq.gz").rename(output_dir / "sample2_R2.fastq.gz")
-    #     print("✓ Downloaded mock community sample")
-    # except Exception as e:
-    #     print(f"Error: {e}")
-    
-    print("\n" + "=" * 80)
-    print("Download Complete!")
-    print("=" * 80)
-    print(f"Files located in: {output_dir}")
-    print("\nNext steps:")
-    print("1. Download Kraken2 database:")
-    print("   kraken2-build --standard --db /scratch/.../kraken2_db")
-    print("2. Update config.yaml with database paths")
-    print("3. Submit pipeline: sbatch scripts/submit_metagenomics.sh")
-    
-    return 0
 
 if __name__ == "__main__":
     sys.exit(main())

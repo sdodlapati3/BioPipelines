@@ -115,8 +115,8 @@ rule trim_reads:
               --json {output.json} \\
               --cut_right \\
               --cut_right_window_size 4 \\
-              --cut_right_mean_quality 20 \\
-              --length_required 50 \\
+              --cut_right_mean_quality {config[trimming][quality_cutoff]} \\
+              --length_required {config[trimming][min_length]} \\
               2> {log}
         """
 
