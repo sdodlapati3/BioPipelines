@@ -59,9 +59,10 @@ def main():
         'chip_seq': {
             'dir': Path.home() / 'BioPipelines/data/raw/chip_seq',
             'accessions': [
-                ('SRR5344681', 'h3k4me3_rep1'),
-                ('SRR5344682', 'h3k4me3_rep2'),
-                ('SRR5344683', 'input_control'),
+                # ENCODE GM12878 H3K4me3 ChIP-seq (human, hg38-compatible)
+                ('SRR1552484', 'h3k4me3_rep1'),  # ENCODE ENCSR000AKP rep1
+                ('SRR1552485', 'h3k4me3_rep2'),  # ENCODE ENCSR000AKP rep2
+                ('SRR1552480', 'input_control'), # Input control
             ]
         },
         'atac_seq': {
