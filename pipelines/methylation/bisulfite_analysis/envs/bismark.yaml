@@ -5,8 +5,9 @@ channels:
   - defaults
 dependencies:
   # Core bisulfite sequencing tools
+  # Note: cutadapt installed via pip in base env to avoid xopen/conda conflicts
   - python>=3.9
   - bismark>=0.24
   - bowtie2>=2.5
-  - trim-galore>=0.6
   - samtools>=1.18
+  - fastqc>=0.12
