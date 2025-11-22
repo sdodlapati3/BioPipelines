@@ -1,0 +1,17 @@
+name: sv_calling
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  - python>=3.9
+  # SV callers - install via conda
+  - delly>=1.1
+  - manta>=1.6
+  # LUMPY not available in conda, use samtools/bcftools
+  - samtools>=1.17
+  - bcftools>=1.17
+  # SV merging
+  - survivor>=1.0
+  # Indexing
+  - tabix

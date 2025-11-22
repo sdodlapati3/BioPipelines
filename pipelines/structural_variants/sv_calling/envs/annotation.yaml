@@ -1,0 +1,9 @@
+name: sv_annotation
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  - python>=3.9
+  - bcftools>=1.17
+  - bedtools>=2.30

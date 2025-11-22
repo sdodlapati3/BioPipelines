@@ -1,0 +1,61 @@
+# Structural Variants Detection Pipeline Configuration
+# =====================================================
+
+# Sample information
+samples:
+  - sample1
+
+# Data directories
+data_dir: "/scratch/sdodl001/BioPipelines/data"
+raw_dir: "/scratch/sdodl001/BioPipelines/data/processed/dna_seq"  # Use BAM from DNA-seq pipeline
+processed_dir: "/scratch/sdodl001/BioPipelines/data/processed/structural_variants"
+results_dir: "/scratch/sdodl001/BioPipelines/data/results/structural_variants"
+qc_dir: "/scratch/sdodl001/BioPipelines/data/results/structural_variants/qc"
+
+# Reference genome
+reference:
+  genome: "/scratch/sdodl001/BioPipelines/data/references/hg38.fa"
+  name: "hg38"
+  
+# Structural variant callers
+callers:
+  # DELLY - Integrated SV caller (DEL, DUP, INV, TRA, INS)
+  delly:
+    enabled: true
+    map_quality: 20
+    mad_cutoff: 9  # Mapping quality cutoff for discordant pairs
+    
+  # Manta - Illumina SV caller (fast, accurate)
+  manta:
+    enabled: true
+    min_candidate_spanning_count: 3
+    min_scored_variant_size: 50
+    
+  # LUMPY - Probabilistic SV caller
+  lumpy:
+    enabled: true
+    min_weight: 4
+    min_non_overlap: 101
+
+# SV filtering
+filtering:
+  min_size: 50  # Minimum SV size (bp)
+  max_size: 1000000  # Maximum SV size (1Mb)
+  min_support: 3  # Minimum supporting read pairs
+  min_quality: 20  # Minimum mapping quality
+  
+# Consensus calling (require at least N callers to agree)
+consensus:
+  min_callers: 2  # Require at least 2 callers for high-confidence SVs
+  reciprocal_overlap: 0.5  # 50% reciprocal overlap for merging
+  
+# Annotation
+annotation:
+  annotate_genes: true
+  gene_overlap_fraction: 0.1  # Minimum fraction of gene overlap
+  
+# Visualization
+visualization:
+  plot_size_distribution: true
+  plot_type_distribution: true
+  circos_plot: true

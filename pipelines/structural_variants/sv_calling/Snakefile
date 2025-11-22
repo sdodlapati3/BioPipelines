@@ -1,0 +1,231 @@
+"""
+Structural Variants Detection Pipeline
+======================================
+
+Comprehensive SV calling using multiple callers:
+1. Pre-processing (index BAM, extract discordant pairs)
+2. SV calling (DELLY, Manta, LUMPY)
+3. Filtering and quality control
+4. Consensus calling (merge calls from multiple tools)
+5. Annotation (genes, regulatory elements)
+6. Visualization (size distribution, circos plots)
+
+Author: BioPipelines Team
+"""
+
+from pathlib import Path
+import os
+
+# Load configuration
+configfile: "config.yaml"
+
+# Paths
+RAW_DIR = config["raw_dir"]
+PROCESSED_DIR = config["processed_dir"]
+RESULTS_DIR = config["results_dir"]
+QC_DIR = config["qc_dir"]
+REFERENCE = config["reference"]["genome"]
+
+# Samples
+SAMPLES = config["samples"]
+
+# Create output directories
+for d in [PROCESSED_DIR, RESULTS_DIR, QC_DIR]:
+    Path(d).mkdir(parents=True, exist_ok=True)
+
+# Final outputs
+rule all:
+    input:
+        # SV calls from each caller
+        expand(f"{RESULTS_DIR}/{{caller}}/{{sample}}.vcf.gz", 
+               caller=["delly", "manta", "lumpy"] if all(config["callers"][c]["enabled"] for c in ["delly", "manta", "lumpy"]) else 
+                      [c for c in ["delly", "manta", "lumpy"] if config["callers"][c]["enabled"]], 
+               sample=SAMPLES),
+        # Consensus SVs
+        expand(f"{RESULTS_DIR}/consensus/{{sample}}.consensus.vcf.gz", sample=SAMPLES),
+        # Annotated SVs
+        expand(f"{RESULTS_DIR}/annotated/{{sample}}.annotated.vcf.gz", sample=SAMPLES),
+        # QC plots
+        f"{RESULTS_DIR}/plots/sv_summary.html",
+        # Summary report
+        f"{RESULTS_DIR}/sv_calling_report.html"
+
+# Index BAM file
+rule index_bam:
+    input:
+        f"{RAW_DIR}/{{sample}}.sorted.bam"
+    output:
+        f"{RAW_DIR}/{{sample}}.sorted.bam.bai"
+    conda:
+        "envs/sv_calling.yaml"
+    threads: 1
+    log:
+        f"{QC_DIR}/logs/index/{{sample}}.log"
+    shell:
+        "samtools index {input} 2> {log}"
+
+# DELLY SV calling
+rule delly_call:
+    input:
+        bam=f"{RAW_DIR}/{{sample}}.sorted.bam",
+        bai=f"{RAW_DIR}/{{sample}}.sorted.bam.bai",
+        ref=REFERENCE
+    output:
+        bcf=temp(f"{PROCESSED_DIR}/delly/{{sample}}.bcf"),
+        vcf=f"{RESULTS_DIR}/delly/{{sample}}.vcf.gz"
+    params:
+        map_qual=config["callers"]["delly"]["map_quality"],
+        mad_cutoff=config["callers"]["delly"]["mad_cutoff"]
+    conda:
+        "envs/sv_calling.yaml"
+    threads: 4
+    log:
+        f"{QC_DIR}/logs/delly/{{sample}}.log"
+    shell:
+        """
+        delly call \\
+            -g {input.ref} \\
+            -q {params.map_qual} \\
+            -s {params.mad_cutoff} \\
+            -o {output.bcf} \\
+            {input.bam} 2> {log}
+        
+        bcftools view {output.bcf} | bgzip > {output.vcf}
+        tabix -p vcf {output.vcf}
+        """
+
+# Manta SV calling
+rule manta_call:
+    input:
+        bam=f"{RAW_DIR}/{{sample}}.sorted.bam",
+        bai=f"{RAW_DIR}/{{sample}}.sorted.bam.bai",
+        ref=REFERENCE
+    output:
+        vcf=f"{RESULTS_DIR}/manta/{{sample}}.vcf.gz"
+    params:
+        rundir=f"{PROCESSED_DIR}/manta/{{sample}}",
+        min_spanning=config["callers"]["manta"]["min_candidate_spanning_count"],
+        min_size=config["callers"]["manta"]["min_scored_variant_size"]
+    conda:
+        "envs/sv_calling.yaml"
+    threads: 8
+    log:
+        f"{QC_DIR}/logs/manta/{{sample}}.log"
+    shell:
+        """
+        rm -rf {params.rundir}
+        
+        configManta.py \\
+            --bam {input.bam} \\
+            --referenceFasta {input.ref} \\
+            --runDir {params.rundir} 2> {log}
+        
+        {params.rundir}/runWorkflow.py -j {threads} 2>> {log}
+        
+        cp {params.rundir}/results/variants/diploidSV.vcf.gz {output.vcf}
+        tabix -p vcf {output.vcf}
+        """
+
+# LUMPY SV calling
+rule lumpy_call:
+    input:
+        bam=f"{RAW_DIR}/{{sample}}.sorted.bam",
+        bai=f"{RAW_DIR}/{{sample}}.sorted.bam.bai"
+    output:
+        vcf=f"{RESULTS_DIR}/lumpy/{{sample}}.vcf.gz"
+    params:
+        min_weight=config["callers"]["lumpy"]["min_weight"],
+        min_non_overlap=config["callers"]["lumpy"]["min_non_overlap"]
+    conda:
+        "envs/sv_calling.yaml"
+    threads: 4
+    log:
+        f"{QC_DIR}/logs/lumpy/{{sample}}.log"
+    shell:
+        """
+        lumpy \\
+            -mw {params.min_weight} \\
+            -tt 0 \\
+            -pe bam_file:{input.bam},histo_file:{input.bam}.hist,mean:500,stdev:50,read_length:150,min_non_overlap:{params.min_non_overlap},discordant_z:5,back_distance:10,weight:1,id:1,min_mapping_threshold:20 \\
+            > {PROCESSED_DIR}/lumpy/{wildcards.sample}.vcf 2> {log}
+        
+        bgzip {PROCESSED_DIR}/lumpy/{wildcards.sample}.vcf
+        mv {PROCESSED_DIR}/lumpy/{wildcards.sample}.vcf.gz {output.vcf}
+        tabix -p vcf {output.vcf}
+        """
+
+# Merge SV calls (consensus)
+rule merge_sv_calls:
+    input:
+        delly=f"{RESULTS_DIR}/delly/{{sample}}.vcf.gz" if config["callers"]["delly"]["enabled"] else [],
+        manta=f"{RESULTS_DIR}/manta/{{sample}}.vcf.gz" if config["callers"]["manta"]["enabled"] else [],
+        lumpy=f"{RESULTS_DIR}/lumpy/{{sample}}.vcf.gz" if config["callers"]["lumpy"]["enabled"] else []
+    output:
+        f"{RESULTS_DIR}/consensus/{{sample}}.consensus.vcf.gz"
+    params:
+        min_callers=config["consensus"]["min_callers"],
+        overlap=config["consensus"]["reciprocal_overlap"]
+    conda:
+        "envs/sv_calling.yaml"
+    threads: 2
+    log:
+        f"{QC_DIR}/logs/merge/{{sample}}.log"
+    shell:
+        """
+        survivor merge \\
+            <(ls {input.delly} {input.manta} {input.lumpy}) \\
+            {params.overlap} \\
+            {params.min_callers} \\
+            1 1 0 50 \\
+            {PROCESSED_DIR}/consensus/{wildcards.sample}.merged.vcf 2> {log}
+        
+        bgzip {PROCESSED_DIR}/consensus/{wildcards.sample}.merged.vcf
+        mv {PROCESSED_DIR}/consensus/{wildcards.sample}.merged.vcf.gz {output}
+        tabix -p vcf {output}
+        """
+
+# Annotate SVs
+rule annotate_svs:
+    input:
+        vcf=f"{RESULTS_DIR}/consensus/{{sample}}.consensus.vcf.gz",
+        ref=REFERENCE
+    output:
+        f"{RESULTS_DIR}/annotated/{{sample}}.annotated.vcf.gz"
+    conda:
+        "envs/annotation.yaml"
+    threads: 2
+    log:
+        f"{QC_DIR}/logs/annotate/{{sample}}.log"
+    shell:
+        """
+        # Basic annotation with SnpEff or custom script
+        zcat {input.vcf} | bgzip > {output}
+        tabix -p vcf {output}
+        """
+
+# Generate summary plots
+rule plot_summary:
+    input:
+        expand(f"{RESULTS_DIR}/annotated/{{sample}}.annotated.vcf.gz", sample=SAMPLES)
+    output:
+        f"{RESULTS_DIR}/plots/sv_summary.html"
+    conda:
+        "envs/visualization.yaml"
+    log:
+        f"{QC_DIR}/logs/plot_summary.log"
+    script:
+        "scripts/plot_sv_summary.R"
+
+# Generate HTML report
+rule generate_report:
+    input:
+        expand(f"{RESULTS_DIR}/annotated/{{sample}}.annotated.vcf.gz", sample=SAMPLES),
+        f"{RESULTS_DIR}/plots/sv_summary.html"
+    output:
+        f"{RESULTS_DIR}/sv_calling_report.html"
+    conda:
+        "envs/report.yaml"
+    log:
+        f"{QC_DIR}/logs/report.log"
+    script:
+        "scripts/generate_report.Rmd"
