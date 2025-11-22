@@ -163,8 +163,7 @@ rule kraken2_classify:
     output:
         report=f"{RESULTS_DIR}/taxonomy/kraken2/{{sample}}_report.txt",
         output=f"{RESULTS_DIR}/taxonomy/kraken2/{{sample}}_output.txt"
-    conda:
-        "envs/profiling.yaml"
+    # Note: No conda directive - uses run: block which doesn't support conda
     threads: config["resources"]["threads"]["kraken2"]
     log:
         f"{QC_DIR}/logs/kraken2/{{sample}}.log"
