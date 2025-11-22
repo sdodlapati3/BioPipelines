@@ -214,7 +214,7 @@ rule plot_summary:
     log:
         f"{QC_DIR}/logs/plot_summary.log"
     script:
-        "scripts/plot_sv_summary.R"
+        "scripts/plot_sv_summary.py"
 
 # Generate HTML report
 rule generate_report:
@@ -228,4 +228,4 @@ rule generate_report:
     log:
         f"{QC_DIR}/logs/report.log"
     script:
-        "scripts/generate_report.Rmd"
+        "scripts/generate_report.py"
