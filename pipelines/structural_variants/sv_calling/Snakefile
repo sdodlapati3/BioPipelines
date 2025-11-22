@@ -96,7 +96,7 @@ rule manta_call:
         rundir=f"{PROCESSED_DIR}/manta/{{sample}}",
         min_spanning=config["callers"]["manta"]["min_candidate_spanning_count"],
         min_size=config["callers"]["manta"]["min_scored_variant_size"],
-        wrapper=str(Path(__file__).parents[2] / "tools" / "manta_wrapper.sh")
+        wrapper=os.path.expanduser("~/BioPipelines/tools/manta_wrapper.sh")
     # Note: Uses Manta 1.6.0 pre-built binary with Python 2.7 wrapper (no conda conflicts)
     threads: 8
     log:
