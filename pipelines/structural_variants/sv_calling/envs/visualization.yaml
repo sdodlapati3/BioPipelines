@@ -1,12 +1,9 @@
 name: sv_visualization
 channels:
-  - bioconda
   - conda-forge
   - defaults
 dependencies:
-  - r-base>=4.2
-  - r-ggplot2
-  - r-dplyr
   - python>=3.9
-  - matplotlib
-  - seaborn
+  - pandas
+  # Note: matplotlib, seaborn from base env
+  # Note: R packages (r-base, r-ggplot2, r-dplyr) have conflicts - skip for now
