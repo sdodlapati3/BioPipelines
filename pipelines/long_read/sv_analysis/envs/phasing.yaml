@@ -1,10 +1,11 @@
 name: long_read_phasing
 channels:
-  - conda-forge
   - bioconda
+  - conda-forge
   - defaults
 dependencies:
   - python>=3.9
   - whatshap>=1.7
   - bcftools>=1.17
   - tabix>=1.17
+  - htslib>=1.17
