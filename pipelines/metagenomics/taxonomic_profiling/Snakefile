@@ -231,8 +231,8 @@ rule metaphlan_profile:
         metaphlan {input.r1},{input.r2} \
                   --input_type fastq \
                   --nproc {threads} \
-                  --bowtie2db {params.db} \
-                  --bowtie2out {output.bowtie2out} \
+                  --db_dir {params.db} \
+                  --mapout {output.bowtie2out} \
                   --tax_lev {params.level} \
                   -o {output.profile} \
                   2> {log}
