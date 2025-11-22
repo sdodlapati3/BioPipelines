@@ -127,9 +127,8 @@ rule trim_reads:
         min_length=config["params"]["trim"]["min_length"],
         clip_r1=config["params"]["trim"]["clip_r1"],
         clip_r2=config["params"]["trim"]["clip_r2"],
-        rrbs="--rrbs" if config["params"]["trim"]["rrbs"] else "",
-        # Don't pass --clip_R2 when using --rrbs (RRBS automatically sets --clip_r2 2)
-        clip_r2_flag=lambda w: "" if config["params"]["trim"]["rrbs"] else f"--clip_R2 {config['params']['trim']['clip_r2']}",
+        # Don't use --rrbs flag (trim_galore bug with --rrbs + --paired)
+        # Instead, manually clip R1 (10bp) and R2 (10bp) which includes RRBS's 2bp
         paired=lambda w: "--paired" if SAMPLE_LAYOUT[w.sample] == "PE" else "",
         r2_file=lambda w: f"{RAW_DIR}/{w.sample}_R2.fastq.gz" if SAMPLE_LAYOUT[w.sample] == "PE" else ""
     # Note: No conda directive - uses trim_galore from base environment
@@ -142,8 +141,7 @@ rule trim_reads:
             --quality {params.quality} \\
             --length {params.min_length} \\
             --clip_R1 {params.clip_r1} \\
-            {params.clip_r2_flag} \\
-            {params.rrbs} \\
+            --clip_R2 {params.clip_r2} \\
             {params.paired} \\
             --cores {threads} \\
             --fastqc \\
