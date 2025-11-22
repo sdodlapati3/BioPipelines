@@ -143,6 +143,7 @@ rule trim_reads:
             --clip_R1 {params.clip_r1} \\
             --clip_R2 {params.clip_r2} \\
             {params.paired} \\
+            --retain_unpaired \\
             --cores {threads} \\
             --fastqc \\
             --output_dir {params.outdir} \\
