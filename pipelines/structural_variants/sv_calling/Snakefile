@@ -56,8 +56,7 @@ rule index_bam:
         bam=f"{RAW_DIR}/{{sample}}.recal.bam"
     output:
         bai=f"{RAW_DIR}/{{sample}}.recal.bam.bai"
-    conda:
-        "envs/sv_calling.yaml"
+    # Note: Uses samtools from base environment
     threads: 1
     log:
         f"{QC_DIR}/logs/index/{{sample}}.log"
