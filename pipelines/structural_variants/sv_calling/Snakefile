@@ -36,8 +36,10 @@ for d in [PROCESSED_DIR, RESULTS_DIR, QC_DIR]:
 # Final outputs
 rule all:
     input:
-        # BAM indices (minimal working pipeline)
-        expand(f"{RAW_DIR}/{{sample}}.recal.bam.bai", sample=SAMPLES)
+        # BAM indices
+        expand(f"{RAW_DIR}/{{sample}}.recal.bam.bai", sample=SAMPLES),
+        # Manta SV calls
+        expand(f"{RESULTS_DIR}/manta/{{sample}}.vcf.gz", sample=SAMPLES)
 
 # Index BAM file
 rule index_bam:
@@ -93,9 +95,9 @@ rule manta_call:
     params:
         rundir=f"{PROCESSED_DIR}/manta/{{sample}}",
         min_spanning=config["callers"]["manta"]["min_candidate_spanning_count"],
-        min_size=config["callers"]["manta"]["min_scored_variant_size"]
-    conda:
-        "envs/sv_calling.yaml"
+        min_size=config["callers"]["manta"]["min_scored_variant_size"],
+        wrapper=str(Path(__file__).parents[2] / "tools" / "manta_wrapper.sh")
+    # Note: Uses Manta 1.6.0 pre-built binary with Python 2.7 wrapper (no conda conflicts)
     threads: 8
     log:
         f"{QC_DIR}/logs/manta/{{sample}}.log"
@@ -103,7 +105,7 @@ rule manta_call:
         """
         rm -rf {params.rundir}
         
-        configManta.py \\
+        {params.wrapper} \\
             --bam {input.bam} \\
             --referenceFasta {input.ref} \\
             --runDir {params.rundir} 2> {log}
