@@ -32,11 +32,8 @@ snakemake --unlock 2>/dev/null || true
 trap 'echo "Job interrupted or failed..."; snakemake --unlock 2>/dev/null; exit 130' INT TERM
 trap 'if [ $? -ne 0 ]; then snakemake --unlock 2>/dev/null; fi' EXIT
 
-# Run Snakemake with conda environments
+# Run Snakemake (using base environment tools)
 snakemake \
-    --use-conda \
-    --conda-frontend conda \
-    --conda-prefix ~/.snakemake/conda \
     --cores $SLURM_CPUS_PER_TASK \
     --rerun-incomplete \
     --keep-going \

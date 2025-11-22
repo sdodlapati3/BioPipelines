@@ -31,13 +31,11 @@ echo "Running on node: $(hostname)"
 echo "Working directory: $(pwd)"
 echo "Conda environment: $CONDA_PREFIX"
 
-# Run Snakemake pipeline
+# Run Snakemake pipeline (using base environment tools)
 snakemake \
     --snakefile Snakefile \
     --configfile config.yaml \
     --cores ${SLURM_CPUS_PER_TASK} \
-    --use-conda \
-    --conda-prefix ~/envs/conda_envs \
     --keep-going \
     --rerun-incomplete \
     --printshellcmds \
