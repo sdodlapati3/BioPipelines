@@ -4,18 +4,11 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  # Visualization
-  - krona=2.8.1
-  - r-base=4.3
-  - r-ggplot2
-  - r-pheatmap
-  - r-vegan
-  - r-phyloseq
-  
-  # Python visualization
-  - python=3.10
-  - matplotlib=3.7
-  - seaborn=0.12
+  # Minimal visualization - just python tools, no R
+  - krona>=2.8
+  - python>=3.9
+  - matplotlib
+  - seaborn
   - plotly
-  - pandas=2.0
+  - pandas
   - scipy
