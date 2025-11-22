@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/home/sdodl001_odu_edu/miniconda3/envs/manta_py27/bin/python2
 #
 # Manta - Structural Variant and Indel Caller
 # Copyright (c) 2013-2019 Illumina, Inc.
