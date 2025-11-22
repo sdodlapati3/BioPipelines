@@ -4,24 +4,15 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  # Hi-C processing tools
-  - hic-straw=1.3.1  # For .hic file manipulation
-  - pairtools=1.0.2  # Hi-C pairs processing
-  - pairix=0.3.7  # Indexing pairs files
-  - cooler=0.9.3  # Contact matrix storage
-  - hicexplorer=3.7.2  # Comprehensive Hi-C analysis
-  
-  # Core alignment tools (already in biopipelines)
-  - bowtie2>=2.5.0
-  - samtools>=1.17
-  - bwa>=0.7.17
+  # Hi-C specific tools only
+  - hic-straw>=1.3
+  - pairtools>=1.0
+  - pairix>=0.3
+  - cooler>=0.9
+  - hicexplorer>=3.7
   
   # Utilities
-  - bedtools>=2.30.0
-  - bgzip
-  - tabix
   - python>=3.10
   - numpy
-  - scipy
   - pandas
-  - pysam
+  # Note: bowtie2, samtools, bwa, bedtools, bgzip, tabix, scipy, pysam from base env

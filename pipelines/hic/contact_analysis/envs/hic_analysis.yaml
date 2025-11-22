@@ -4,24 +4,11 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  # TAD and loop calling
-  - hicexplorer=3.7.2
-  - cooltools=0.5.4  # TADs, expected, pileups
-  - chromosight=1.6.3  # Loop calling
-  
-  # Matrix operations
-  - cooler=0.9.3
-  - h5py
-  - scipy
-  - scikit-learn
-  
-  # Visualization
-  - matplotlib>=3.5.0
-  - seaborn
-  - plotly
-  
-  # Utilities
+  # Core tools only - ultra-minimal
+  - cooler>=0.9
+  - hicexplorer>=3.7
   - python>=3.10
   - numpy
   - pandas
-  - networkx
+  # Note: h5py, scipy, scikit-learn, matplotlib, seaborn from base env
+  # Note: cooltools, chromosight may have conflicts - install separately if needed
