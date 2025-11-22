@@ -15,14 +15,14 @@ dirs:
 
 # Reference genome
 reference:
-  fasta: "data/references/hg38.fa"
-  gtf: "data/references/Homo_sapiens.GRCh38.110.gtf"
-  star_index: "data/references/star_index"
+  fasta: "data/references/refdata-gex-GRCh38-2024-A/fasta/genome.fa"
+  gtf: "data/references/refdata-gex-GRCh38-2024-A/genes/genes.gtf.gz"
+  star_index: "data/references/refdata-gex-GRCh38-2024-A/star"
 
 # 10x Genomics chemistry (v2 or v3)
 chemistry:
   version: "v3"  # Options: v2, v3
-  whitelist: "data/references/10x_whitelist_v3.txt"  # Cell barcode whitelist
+  whitelist: "None"  # Use None for STAR auto-detection (EmptyDrops_CR)
   
   # Barcode structure (10x v3)
   barcode:
@@ -36,7 +36,7 @@ starsolo:
   ram_gb: 32
   
   # Cell barcode parameters
-  cb_whitelist: "data/references/10x_whitelist_v3.txt"
+  cb_whitelist: "None"
   cb_start: 1
   cb_length: 16
   umi_start: 17

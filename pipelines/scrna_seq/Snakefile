@@ -94,8 +94,7 @@ rule starsolo_align_count:
     input:
         r1 = f"{RAW_DIR}/{{sample}}_R1.fastq.gz",  # Cell barcodes + UMIs (Read 1)
         r2 = f"{RAW_DIR}/{{sample}}_R2.fastq.gz",  # cDNA (Read 2)
-        star_index = config["reference"]["star_index"],
-        whitelist = config["chemistry"]["whitelist"]
+        star_index = config["reference"]["star_index"]
     output:
         matrix = f"{RESULTS_DIR}/starsolo/{{sample}}/Solo.out/Gene/filtered/matrix.mtx",
         barcodes = f"{RESULTS_DIR}/starsolo/{{sample}}/Solo.out/Gene/filtered/barcodes.tsv",
@@ -109,7 +108,8 @@ rule starsolo_align_count:
         umi_start = config["starsolo"]["umi_start"],
         umi_len = config["starsolo"]["umi_length"],
         solo_type = config["starsolo"]["solo_type"],
-        solo_features = config["starsolo"]["solo_features"]
+        solo_features = config["starsolo"]["solo_features"],
+        whitelist = config["chemistry"]["whitelist"]
     log:
         f"{LOGS_DIR}/starsolo_{{sample}}.log"
     threads: config["starsolo"]["threads"]
@@ -125,7 +125,7 @@ rule starsolo_align_count:
             --outSAMattributes {config[starsolo][out_sam_attributes]} \
             --soloType {params.solo_type} \
             --soloFeatures {params.solo_features} \
-            --soloCBwhitelist {input.whitelist} \
+            --soloCBwhitelist {params.whitelist} \
             --soloCBstart {params.cb_start} \
             --soloCBlen {params.cb_len} \
             --soloUMIstart {params.umi_start} \
