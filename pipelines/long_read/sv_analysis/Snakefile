@@ -78,7 +78,7 @@ rule minimap2_align:
         mem_mb = lambda wildcards, attempt: int(config["resources"]["alignment_mem"].replace("G", "")) * 1024 * attempt
     shell:
         """
-        minimap2 -t {params.threads} {params.preset} {params.extra} \
+        minimap2 -t {params.threads} -x {params.preset} {params.extra} \
             {input.ref} {input.fastq} | \
         samtools view -@ {params.threads} -b -o {output.bam}
         """
