@@ -26,7 +26,8 @@ From: /home/sdodl001_odu_edu/BioPipelines/containers/images/base_1.0.0.sif
         cooltools=0.7.0 \
         bioconductor-hiccompare \
         r-strawr \
-        freetype
+        freetype \
+        libfreetype
 
     # Make scripts executable
     chmod +x /opt/biopipelines/entrypoint.sh /opt/biopipelines/run_pipeline.sh
