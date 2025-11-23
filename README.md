@@ -4,11 +4,21 @@ A comprehensive, production-ready bioinformatics repository for NGS and genomic 
 
 ## Features
 
-- **DNA-seq**: Variant calling, structural variant detection, CNV analysis
-- **RNA-seq**: Differential expression, isoform analysis, functional enrichment
-- **ChIP-seq**: Peak calling, motif analysis, differential binding
-- **ATAC-seq**: Chromatin accessibility analysis
-- **Metagenomics**: Taxonomic profiling, assembly, functional annotation
+**10 Production-Ready Pipelines** (8 fully validated, 2 core complete):
+
+- ✅ **DNA-seq**: Variant calling, structural variant detection (VALIDATED)
+- ✅ **RNA-seq**: Differential expression, isoform analysis (VALIDATED)
+- ✅ **scRNA-seq**: Single-cell analysis, clustering, cell-type annotation (VALIDATED)
+- ✅ **ChIP-seq**: Peak calling, motif analysis, differential binding (VALIDATED)
+- ✅ **ATAC-seq**: Chromatin accessibility, footprinting (VALIDATED)
+- ⚠️ **Methylation**: WGBS/RRBS bisulfite sequencing analysis (CODE VALIDATED - needs production data)
+- ⚠️ **Hi-C**: 3D genome organization, contact matrices (CORE COMPLETE - advanced tools optional)
+- ✅ **Long-read**: Nanopore/PacBio structural variant detection (VALIDATED)
+- ✅ **Metagenomics**: Taxonomic profiling with Kraken2 (VALIDATED)
+- ✅ **Structural Variants**: Multi-tool SV calling pipeline (VALIDATED)
+
+**Achievement**: 80% fully validated (8/10), 100% core functional (10/10)  
+See `PIPELINE_STATUS_FINAL.md` for detailed validation report.
 
 ## Quick Start
 
@@ -29,27 +39,72 @@ pip install -e .
 
 ### Running Your First Pipeline
 
+**Option 1: Using Unified Scripts (Recommended)**
+
 ```bash
-# DNA-seq variant calling example
+# Download test data
+conda activate biopipelines
+./scripts/download_data.py chipseq --test --output data/raw/chip_seq/
+
+# Submit pipeline to SLURM
+./scripts/submit_pipeline.sh --pipeline chip_seq --mem 32G --cores 8
+
+# Check job status
+squeue -u $USER
+
+# View results
+ls data/results/chip_seq/
+```
+
+**Option 2: Manual Execution**
+
+```bash
+# Navigate to pipeline directory
 cd pipelines/dna_seq/variant_calling
 
 # Edit config.yaml with your sample information
-# Then run the pipeline
+vim config.yaml
+
+# Run with Snakemake
 snakemake --cores 4
 ```
+
+**Available Pipelines:**
+- `atac_seq`, `chip_seq`, `dna_seq`, `rna_seq`, `scrna_seq`
+- `methylation`, `hic`, `long_read`, `metagenomics`, `sv`
+
+See `scripts/README.md` for detailed usage of unified scripts.
 
 ## Project Structure
 
 ```
 BioPipelines/
-├── pipelines/          # Snakemake/Nextflow workflows
-├── src/                # Python utilities
-├── scripts/            # Standalone scripts
-├── config/             # Configuration files
+├── pipelines/          # Analysis pipelines (Snakemake workflows)
+│   ├── dna_seq/       # Variant calling with GATK
+│   ├── rna_seq/       # Differential expression with DESeq2
+│   ├── scrna_seq/     # Single-cell analysis with Scanpy
+│   ├── chip_seq/      # Peak calling with MACS2
+│   ├── atac_seq/      # Accessibility analysis
+│   ├── methylation/   # Bisulfite sequencing
+│   ├── hic/           # 3D genome analysis
+│   ├── long_read/     # Long-read SV detection
+│   ├── metagenomics/  # Taxonomic profiling
+│   └── structural_variants/  # SV calling
+├── src/                # Python package (pip install -e .)
+│   └── biopipelines/  # Reusable modules
+├── scripts/            # Utility scripts (download, submit, build)
 ├── data/               # Data directory (gitignored)
-├── notebooks/          # Jupyter notebooks
-├── tests/              # Unit and integration tests
-└── docs/               # Documentation
+│   ├── raw/           # Input FASTQ files
+│   ├── processed/     # Intermediate files
+│   ├── references/    # Genomes, indexes, annotations
+│   └── results/       # Final outputs
+├── docs/               # Documentation
+│   ├── tutorials/     # Step-by-step guides
+│   ├── pipelines/     # Pipeline documentation
+│   └── status/        # Development status
+├── logs/               # Job logs organized by type
+├── tests/              # Test suite
+└── notebooks/          # Jupyter notebooks for exploration
 ```
 
 ## Pipelines
@@ -70,10 +125,17 @@ BioPipelines/
 
 ## Documentation
 
-- [Installation Guide](docs/installation.md)
-- [Pipeline Documentation](docs/pipelines/)
-- [Tutorials](docs/tutorials/)
-- [API Reference](docs/api/)
+- **[Architecture Review](ARCHITECTURE_REVIEW.md)** - Codebase organization and structure
+- **[Tutorials](docs/tutorials/)** - Step-by-step pipeline guides
+- **[Pipeline Status](docs/status/)** - Development and validation status
+- **[Infrastructure](docs/infrastructure/)** - HPC and cloud setup guides
+- **[API Reference](docs/api/)** - Python module documentation
+
+### Quick Links
+- [DNA-seq Tutorial](docs/tutorials/dna_seq_tutorial.md)
+- [RNA-seq Tutorial](docs/tutorials/rna_seq_tutorial.md)
+- [scRNA-seq Tutorial](docs/tutorials/scrna_seq_tutorial.md)
+- [Troubleshooting Guide](docs/status/CLEANUP_COMPLETED.md)
 
 ## Requirements
 
