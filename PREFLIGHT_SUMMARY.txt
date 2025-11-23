@@ -1,0 +1,166 @@
+════════════════════════════════════════════════════
+BioPipelines Containerization - Pre-Flight Summary
+════════════════════════════════════════════════════
+Date: $(date)
+
+✓ ALL CHECKS PASSED - Ready for pipeline submission
+
+════════════════════════════════════════════════════
+INFRASTRUCTURE VERIFIED
+════════════════════════════════════════════════════
+
+[Containers] - 12 total (21GB)
+  ✓ workflow-engine_1.0.0.sif (628MB) - Snakemake 8.20.5 + Nextflow 24.10.0
+  ✓ rna-seq_1.0.0.sif (1.5GB)
+  ✓ dna-seq_1.0.0.sif (2.1GB)
+  ✓ chip-seq_1.0.0.sif (1.8GB)
+  ✓ atac-seq_1.0.0.sif (1.7GB)
+  ✓ hic_1.0.0.sif (1.4GB)
+  ✓ long-read_1.0.0.sif (2.1GB)
+  ✓ scrna-seq_1.0.0.sif (1.8GB)
+  ✓ metagenomics_1.0.0.sif (2.3GB)
+  ✓ methylation_1.0.0.sif (2.4GB)
+  ✓ structural-variants_1.0.0.sif (1.5GB)
+  ✓ base_1.0.0.sif (1.4GB)
+
+[Snakefiles] - All migrated from conda to containers
+  ✓ No leftover conda: directives (0 found)
+  ✓ No leftover "envs/*.yaml" references (0 found)
+  ✓ 87 total container: directives across 10 pipelines
+  ✓ All rules (except "rule all") have container directives
+  
+  Pipeline breakdown:
+    - rna-seq: 8/8 rules containerized
+    - dna-seq: 10/10 rules containerized
+    - chip-seq: 8/8 rules containerized
+    - atac-seq: 8/8 rules containerized
+    - hic: 11/11 rules containerized
+    - long-read: 6/8 rules containerized (helper rules don't need containers)
+    - scrna-seq: 7/7 rules containerized
+    - metagenomics: 11/12 rules containerized
+    - methylation: 10/10 rules containerized
+    - structural-variants: 8/8 rules containerized
+
+[Path Consistency]
+  ✓ Container directory: /home/sdodl001_odu_edu/BioPipelines/containers/images
+  ✓ All Snakefile container paths match: /home/sdodl001_odu_edu/BioPipelines/containers/images/<pipeline>_1.0.0.sif
+  ✓ Snakemake profile singularity-prefix matches
+  ✓ Submission script CONTAINER_DIR matches
+  ✓ Data directory: /scratch/sdodl001/BioPipelines/data (consistent across all Snakefiles)
+
+[Singularity Environment]
+  ✓ Singularity available on login node: /cm/shared/applications/slurm/wrapper/singularity
+  ✓ Singularity available on compute nodes: verified via srun
+  ✓ PATH fix applied in submission script: export PATH="/cm/shared/applications/slurm/wrapper:\$PATH"
+  ✓ PATH variable properly escaped for runtime expansion (not script-time)
+
+[Snakemake Profile]
+  ✓ Profile exists: config/snakemake_profiles/containerized/config.yaml
+  ✓ use-singularity: True
+  ✓ Bind paths configured: /scratch/sdodl001 and /home/sdodl001_odu_edu/BioPipelines
+  ✓ Cores: 16, keep-going: True, printshellcmds: True
+
+[Submission Script]
+  ✓ Script exists: scripts/submit_pipeline_with_container.sh
+  ✓ Uses workflow-engine container to run Snakemake
+  ✓ Snakemake launches pipeline-specific containers for tools
+  ✓ No nested containers (clean separation of orchestration vs execution)
+  ✓ Proper error handling (set -euo pipefail)
+  ✓ Creates per-pipeline config override for container specification
+
+════════════════════════════════════════════════════
+DATA AVAILABILITY
+════════════════════════════════════════════════════
+
+Pipelines with test data (9):
+  ✓ rna-seq (22 files) - Yeast RNA-seq (paired-end)
+  ✓ dna-seq (2 files) - Human exome (paired-end)
+  ✓ chip-seq (7 files) - ChIP-seq data
+  ✓ atac-seq (10 files) - ATAC-seq data
+  ✓ hic (9 files) - Hi-C data (paired-end)
+  ✓ long-read (1 file) - ONT/PacBio reads
+  ✓ scrna-seq (8 files) - Single-cell RNA-seq
+  ✓ metagenomics (2 files) - Shotgun metagenomics
+  ✓ methylation (8 files) - WGBS data
+
+Pipelines without test data (1):
+  ⊘ structural-variants (will complete immediately with no inputs)
+
+════════════════════════════════════════════════════
+ARCHITECTURAL DECISIONS
+════════════════════════════════════════════════════
+
+[Workflow Engine Separation]
+  • Workflow orchestration (Snakemake/Nextflow) runs FROM workflow-engine container
+  • Tool execution runs IN pipeline-specific containers
+  • No nested containers - clean separation of concerns
+  • Enables switching between Snakemake and Nextflow for AI-agent flexibility
+
+[Container Location]
+  • Containers: ~/BioPipelines/containers/images/ (home directory - persistent)
+  • Data: /scratch/sdodl001/BioPipelines/data/ (scratch - high I/O, temporary)
+  • Rationale: Containers are code artifacts (like binaries), data is transient
+
+[Container Directives]
+  • All rules specify container: "/path/to/specific_pipeline.sif"
+  • Snakemake profile provides global Singularity settings
+  • Per-job config override ensures correct container is used
+
+════════════════════════════════════════════════════
+ISSUES FIXED DURING REVIEW
+════════════════════════════════════════════════════
+
+1. ✓ FIXED: Malformed Snakefiles had leftover "envs/*.yaml" lines after conda→container conversion
+   Solution: Removed all standalone "envs/*.yaml" lines from all Snakefiles
+
+2. ✓ FIXED: Hi-C and long-read Snakefiles didn't have container directives
+   Solution: Added container: directives to all rules
+
+3. ✓ FIXED: "rule all" in Hi-C had container directive (should not - it's just a target)
+   Solution: Removed container directives from "rule all" in all Snakefiles
+
+4. ✓ FIXED: Missing container directives in metagenomics (fastqc_raw, trim_reads, metaphlan_profile, multiqc)
+   Solution: Added missing directives
+
+5. ✓ FIXED: Missing container directives in methylation (trim_reads) and structural-variants (index_bam, manta_call)
+   Solution: Added missing directives
+
+6. ✓ VERIFIED: PATH escaping in submission script (\$PATH not $PATH)
+   Status: Correctly escaped for runtime expansion on compute nodes
+
+════════════════════════════════════════════════════
+READY TO SUBMIT
+════════════════════════════════════════════════════
+
+Command to submit individual pipeline:
+  cd ~/BioPipelines
+  bash scripts/submit_pipeline_with_container.sh <pipeline-name>
+
+Examples:
+  bash scripts/submit_pipeline_with_container.sh rna-seq
+  bash scripts/submit_pipeline_with_container.sh dna-seq
+  bash scripts/submit_pipeline_with_container.sh metagenomics
+
+Monitor jobs:
+  squeue --me
+  sacct -j <job_id>
+
+Check logs:
+  ls -lht ~/BioPipelines/logs/pipeline_runs/
+  tail -f ~/BioPipelines/logs/pipeline_runs/<job_name>.err
+
+Run preflight check anytime:
+  bash scripts/preflight_check.sh
+
+════════════════════════════════════════════════════
+NEXT STEPS AFTER SUCCESSFUL RUNS
+════════════════════════════════════════════════════
+
+1. Validate outputs in /scratch/sdodl001/BioPipelines/data/results/
+2. Check MultiQC reports for quality metrics
+3. Commit all recent changes to git
+4. Benchmark container vs conda performance (if baseline exists)
+5. Document any pipeline-specific issues discovered
+6. Proceed with AI integration layer (deferred per user request)
+
+════════════════════════════════════════════════════
