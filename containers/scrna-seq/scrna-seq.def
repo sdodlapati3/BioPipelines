@@ -15,6 +15,7 @@ From: /scratch/sdodl001/containers/base_1.0.0.sif
 
 %post
     # Install scRNA-seq specific tools (common tools now in base)
+    # Note: CellRanger requires manual installation due to licensing
     micromamba install -y -n base -c conda-forge -c bioconda \
         star=2.7.11a \
         salmon=1.10.3 \
@@ -38,6 +39,13 @@ From: /scratch/sdodl001/containers/base_1.0.0.sif
     
     # Create pipeline directory
     mkdir -p /opt/biopipelines/scrna_seq
+    
+    # Create placeholder for CellRanger (must be installed separately)
+    mkdir -p /opt/cellranger
+    echo "#!/bin/bash" > /usr/local/bin/cellranger
+    echo "echo 'ERROR: CellRanger not installed. Please install manually from 10x Genomics.'" >> /usr/local/bin/cellranger
+    echo "exit 1" >> /usr/local/bin/cellranger
+    chmod +x /usr/local/bin/cellranger
 
     # Clean up
     micromamba clean --all --yes

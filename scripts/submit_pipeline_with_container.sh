@@ -68,7 +68,7 @@ set -euo pipefail
 export PATH="/cm/shared/applications/slurm/wrapper:\$PATH"
 
 # Activate micromamba environment with snakemake
-export MAMBA_EXE='/tmp/bin/micromamba'
+export MAMBA_EXE="$HOME/bin/micromamba"
 export MAMBA_ROOT_PREFIX="$HOME/micromamba"
 eval "\$(\$MAMBA_EXE shell hook --shell bash --root-prefix \$MAMBA_ROOT_PREFIX)"
 micromamba activate

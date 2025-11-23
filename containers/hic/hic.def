@@ -21,8 +21,11 @@ From: /scratch/sdodl001/containers/base_1.0.0.sif
         hicmatrix=17.2 \
         pairix=0.3.7 \
         pairtools=1.1.0 \
+        chromosight=1.6.3 \
+        cooltools=0.7.4 \
         bioconductor-hiccompare \
-        r-strawr
+        r-strawr \
+        freetype
 
     # Make scripts executable
     chmod +x /opt/biopipelines/entrypoint.sh /opt/biopipelines/run_pipeline.sh
