@@ -30,7 +30,7 @@ echo "Output: $OUTPUT"
 echo "Log: $LOG_FILE"
 echo ""
 
-singularity build --fakeroot "$OUTPUT" scrna-seq.def 2>&1 | tee "$LOG_FILE"
+singularity build --force --fakeroot "$OUTPUT" scrna-seq.def 2>&1 | tee "$LOG_FILE"
 
 # Verify build
 if [[ -f "$OUTPUT" ]]; then
