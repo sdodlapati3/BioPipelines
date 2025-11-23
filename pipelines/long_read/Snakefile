@@ -39,6 +39,7 @@ rule all:
 
 # Rule 1: Raw read QC with NanoPlot
 rule nanoplot_qc:
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/long-read_1.0.0.sif"
     input:
         fastq = f"{RAW_DIR}/{{sample}}.fastq.gz"
     output:
@@ -85,6 +86,7 @@ rule minimap2_align:
 
 # Rule 3: Sort and index BAM
 rule sort_bam:
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/long-read_1.0.0.sif"
     input:
         bam = f"{PROCESSED_DIR}/{{sample}}.unsorted.bam"
     output:
@@ -134,6 +136,7 @@ rule sniffles2_call:
 
 # Rule 5: Call SVs with CuteSV (alternative caller)
 rule cutesv_call:
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/long-read_1.0.0.sif"
     input:
         bam = f"{PROCESSED_DIR}/{{sample}}.sorted.bam",
         bai = f"{PROCESSED_DIR}/{{sample}}.sorted.bam.bai",
@@ -164,6 +167,7 @@ rule cutesv_call:
 
 # Rule 6: Merge SV calls from multiple samples
 rule survivor_merge:
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/long-read_1.0.0.sif"
     input:
         sniffles_vcfs = expand(f"{RESULTS_DIR}/sv_calls/{{sample}}.sniffles2.vcf", sample=SAMPLES),
         cutesv_vcfs = expand(f"{RESULTS_DIR}/sv_calls/{{sample}}.cutesv.vcf", sample=SAMPLES)
@@ -188,6 +192,7 @@ rule survivor_merge:
 
 # Rule 7: Phase variants with WhatsHap
 rule whatshap_phase:
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/long-read_1.0.0.sif"
     input:
         vcf = f"{RESULTS_DIR}/sv_calls/{{sample}}.sniffles2.vcf",
         bam = f"{PROCESSED_DIR}/{{sample}}.sorted.bam",
@@ -208,6 +213,7 @@ rule whatshap_phase:
 
 # Rule 8: Generate alignment statistics
 rule alignment_stats:
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/long-read_1.0.0.sif"
     input:
         bam = f"{PROCESSED_DIR}/{{sample}}.sorted.bam"
     output:

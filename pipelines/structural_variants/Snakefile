@@ -43,6 +43,7 @@ rule all:
 
 # Index BAM file
 rule index_bam:
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/structural-variants_1.0.0.sif"
     input:
         bam=f"{RAW_DIR}/{{sample}}.recal.bam"
     output:
@@ -66,8 +67,7 @@ rule delly_call:
     params:
         map_qual=config["callers"]["delly"]["map_quality"],
         mad_cutoff=config["callers"]["delly"]["mad_cutoff"]
-    conda:
-        "envs/sv_calling.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/structural-variants_1.0.0.sif"
     threads: 4
     log:
         f"{QC_DIR}/logs/delly/{{sample}}.log"
@@ -86,6 +86,7 @@ rule delly_call:
 
 # Manta SV calling
 rule manta_call:
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/structural-variants_1.0.0.sif"
     input:
         bam=f"{RAW_DIR}/{{sample}}.recal.bam",
         bai=f"{RAW_DIR}/{{sample}}.recal.bam.bai",
@@ -127,8 +128,7 @@ rule lumpy_call:
     params:
         min_weight=config["callers"]["lumpy"]["min_weight"],
         min_non_overlap=config["callers"]["lumpy"]["min_non_overlap"]
-    conda:
-        "envs/sv_calling.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/structural-variants_1.0.0.sif"
     threads: 4
     log:
         f"{QC_DIR}/logs/lumpy/{{sample}}.log"
@@ -156,8 +156,7 @@ rule merge_sv_calls:
     params:
         min_callers=config["consensus"]["min_callers"],
         overlap=config["consensus"]["reciprocal_overlap"]
-    conda:
-        "envs/sv_calling.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/structural-variants_1.0.0.sif"
     threads: 2
     log:
         f"{QC_DIR}/logs/merge/{{sample}}.log"
@@ -182,8 +181,7 @@ rule annotate_svs:
         ref=REFERENCE
     output:
         f"{RESULTS_DIR}/annotated/{{sample}}.annotated.vcf.gz"
-    conda:
-        "envs/annotation.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/structural-variants_1.0.0.sif"
     threads: 2
     log:
         f"{QC_DIR}/logs/annotate/{{sample}}.log"
@@ -200,8 +198,7 @@ rule plot_summary:
         expand(f"{RESULTS_DIR}/annotated/{{sample}}.annotated.vcf.gz", sample=SAMPLES)
     output:
         f"{RESULTS_DIR}/plots/sv_summary.html"
-    conda:
-        "envs/visualization.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/structural-variants_1.0.0.sif"
     log:
         f"{QC_DIR}/logs/plot_summary.log"
     script:
@@ -214,8 +211,7 @@ rule generate_report:
         f"{RESULTS_DIR}/plots/sv_summary.html"
     output:
         f"{RESULTS_DIR}/sv_calling_report.html"
-    conda:
-        "envs/report.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/structural-variants_1.0.0.sif"
     log:
         f"{QC_DIR}/logs/report.log"
     script:

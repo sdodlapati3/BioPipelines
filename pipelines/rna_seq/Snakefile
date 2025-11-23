@@ -60,8 +60,7 @@ rule fastqc_raw:
     output:
         r1=f"{QC_DIR}/fastqc_raw/{{sample}}_R1_fastqc.html",
         r2=f"{QC_DIR}/fastqc_raw/{{sample}}_R2_fastqc.html"
-    conda:
-        "envs/qc.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/rna-seq_1.0.0.sif"
     threads: 2
     log:
         f"{QC_DIR}/logs/fastqc_raw/{{sample}}.log"
@@ -82,8 +81,7 @@ rule trim_reads:
         r2=f"{PROCESSED_DIR}/{{sample}}_R2.trimmed.fastq.gz",
         html=f"{QC_DIR}/fastp/{{sample}}.html",
         json=f"{QC_DIR}/fastp/{{sample}}.json"
-    conda:
-        "envs/preprocessing.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/rna-seq_1.0.0.sif"
     threads: 4
     log:
         f"{QC_DIR}/logs/trim/{{sample}}.log"
@@ -110,8 +108,7 @@ rule star_index:
         gtf=GTF
     output:
         directory(STAR_INDEX)
-    conda:
-        "envs/alignment.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/rna-seq_1.0.0.sif"
     threads: 8
     log:
         f"{QC_DIR}/logs/star_index.log"
@@ -139,8 +136,7 @@ rule align_reads:
         counts=f"{PROCESSED_DIR}/{{sample}}.ReadsPerGene.out.tab"
     params:
         prefix=f"{PROCESSED_DIR}/{{sample}}."
-    conda:
-        "envs/alignment.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/rna-seq_1.0.0.sif"
     threads: 8
     log:
         f"{QC_DIR}/logs/align/{{sample}}.log"
@@ -165,8 +161,7 @@ rule index_bam:
         f"{PROCESSED_DIR}/{{sample}}.Aligned.sortedByCoord.out.bam"
     output:
         f"{PROCESSED_DIR}/{{sample}}.Aligned.sortedByCoord.out.bam.bai"
-    conda:
-        "envs/alignment.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/rna-seq_1.0.0.sif"
     shell:
         "samtools index {input}"
 
@@ -182,8 +177,7 @@ rule quantify:
     params:
         feature_type=config["quantification"]["feature_type"],
         id_attr=config["quantification"]["id_attribute"]
-    conda:
-        "envs/quantification.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/rna-seq_1.0.0.sif"
     threads: 4
     log:
         f"{QC_DIR}/logs/quantify.log"
@@ -217,8 +211,7 @@ rule deseq2:
         padj_cutoff=config["differential_expression"]["adjusted_pvalue"],
         lfc_cutoff=config["differential_expression"]["log2_fold_change"],
         top_genes=config["plots"]["heatmap_top_genes"]
-    conda:
-        "envs/deseq2.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/rna-seq_1.0.0.sif"
     log:
         f"{QC_DIR}/logs/deseq2.log"
     script:
@@ -234,8 +227,7 @@ rule multiqc:
         f"{RESULTS_DIR}/counts/feature_counts.txt.summary"
     output:
         f"{RESULTS_DIR}/multiqc_report.html"
-    conda:
-        "envs/qc.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/rna-seq_1.0.0.sif"
     log:
         f"{QC_DIR}/logs/multiqc.log"
     shell:

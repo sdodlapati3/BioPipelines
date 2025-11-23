@@ -68,6 +68,7 @@ rule all:
 
 # QC raw reads
 rule fastqc_raw:
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/hic_1.0.0.sif"
     input:
         r1=f"{RAW_DIR}/{{sample}}_R1.fastq.gz",
         r2=f"{RAW_DIR}/{{sample}}_R2.fastq.gz"
@@ -87,6 +88,7 @@ rule fastqc_raw:
 
 # Trim adapters
 rule trim_reads:
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/hic_1.0.0.sif"
     input:
         r1=f"{RAW_DIR}/{{sample}}_R1.fastq.gz",
         r2=f"{RAW_DIR}/{{sample}}_R2.fastq.gz"
@@ -114,6 +116,7 @@ rule trim_reads:
 
 # Align read pairs independently
 rule align_reads:
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/hic_1.0.0.sif"
     input:
         r1=f"{PROCESSED_DIR}/{{sample}}_R1.trimmed.fastq.gz",
         r2=f"{PROCESSED_DIR}/{{sample}}_R2.trimmed.fastq.gz"
@@ -140,6 +143,7 @@ rule align_reads:
 
 # Parse pairs and filter
 rule parse_pairs:
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/hic_1.0.0.sif"
     input:
         bam=f"{PROCESSED_DIR}/{{sample}}.aligned.bam",
         chrom_sizes=CHROM_SIZES
@@ -179,6 +183,7 @@ rule parse_pairs:
 
 # Create multi-resolution cooler
 rule make_cooler:
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/hic_1.0.0.sif"
     input:
         pairs=f"{PROCESSED_DIR}/{{sample}}.pairs.gz",
         chrom_sizes=CHROM_SIZES
@@ -212,6 +217,7 @@ rule make_cooler:
 
 # Call TADs
 rule call_tads:
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/hic_1.0.0.sif"
     input:
         mcool=f"{RESULTS_DIR}/matrices/{{sample}}.mcool"
     output:
@@ -248,6 +254,7 @@ rule call_tads:
 
 # Call loops
 rule call_loops:
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/hic_1.0.0.sif"
     input:
         mcool=f"{RESULTS_DIR}/matrices/{{sample}}.mcool"
     output:
@@ -276,6 +283,7 @@ rule call_loops:
 
 # Call compartments
 rule call_compartments:
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/hic_1.0.0.sif"
     input:
         mcool=f"{RESULTS_DIR}/matrices/{{sample}}.mcool"
     output:
@@ -309,6 +317,7 @@ rule call_compartments:
 
 # Plot contact matrix
 rule plot_matrix:
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/hic_1.0.0.sif"
     input:
         mcool=f"{RESULTS_DIR}/matrices/{{sample}}.mcool",
         tads=f"{RESULTS_DIR}/tads/{{sample}}_boundaries.bed"
@@ -334,6 +343,7 @@ rule plot_matrix:
 
 # MultiQC
 rule multiqc:
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/hic_1.0.0.sif"
     input:
         expand(f"{QC_DIR}/fastqc_raw/{{sample}}_fastqc.done", sample=SAMPLES),
         expand(f"{QC_DIR}/fastp/{{sample}}.json", sample=SAMPLES),
@@ -355,6 +365,7 @@ rule multiqc:
 
 # Summary report
 rule hic_summary:
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/hic_1.0.0.sif"
     input:
         mcools=expand(f"{RESULTS_DIR}/matrices/{{sample}}.mcool", sample=SAMPLES),
         tads=expand(f"{RESULTS_DIR}/tads/{{sample}}_domains.bed", sample=SAMPLES),

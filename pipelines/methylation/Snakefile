@@ -73,8 +73,7 @@ rule prepare_bismark_index:
     params:
         genome_dir=os.path.dirname(REFERENCE),
         index_dir=BISMARK_INDEX
-    conda:
-        "envs/bismark.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/methylation_1.0.0.sif"
     threads: 8
     log:
         f"{QC_DIR}/logs/bismark_index.log"
@@ -100,8 +99,7 @@ rule fastqc_raw:
                   else [f"{RAW_DIR}/{w.sample}.fastq.gz"]
     output:
         f"{QC_DIR}/fastqc_raw/{{sample}}_fastqc.done"
-    conda:
-        "envs/qc.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/methylation_1.0.0.sif"
     threads: 2
     log:
         f"{QC_DIR}/logs/fastqc_raw/{{sample}}.log"
@@ -116,6 +114,7 @@ rule fastqc_raw:
 
 # Trim Galore (bisulfite mode) - uses base environment trim_galore
 rule trim_reads:
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/methylation_1.0.0.sif"
     input:
         r1=lambda w: f"{RAW_DIR}/{w.sample}_R1.fastq.gz" if SAMPLE_LAYOUT[w.sample] == "PE" else f"{RAW_DIR}/{w.sample}.fastq.gz",
         r2=lambda w: f"{RAW_DIR}/{w.sample}_R2.fastq.gz" if SAMPLE_LAYOUT[w.sample] == "PE" else []
@@ -170,8 +169,7 @@ rule bismark_align:
         expected_bam=lambda w: f"{PROCESSED_DIR}/{w.sample}_R1_val_1_bismark_bt2_pe.bam"
                                if SAMPLE_LAYOUT[w.sample] == "PE"
                                else f"{PROCESSED_DIR}/{w.sample}_trimmed_bismark_bt2.bam"
-    conda:
-        "envs/bismark.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/methylation_1.0.0.sif"
     threads: 16
     log:
         f"{QC_DIR}/logs/align/{{sample}}.log"
@@ -199,8 +197,7 @@ rule deduplicate:
     output:
         bam=f"{PROCESSED_DIR}/{{sample}}.deduplicated.bam",
         report=f"{QC_DIR}/dedup/{{sample}}.deduplication_report.txt"
-    conda:
-        "envs/bismark.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/methylation_1.0.0.sif"
     threads: 1
     log:
         f"{QC_DIR}/logs/dedup/{{sample}}.log"
@@ -229,8 +226,7 @@ rule extract_methylation:
         ignore_3p=config["params"]["extraction"]["ignore_3prime"],
         ignore_r2=config["params"]["extraction"]["ignore_r2"],
         min_depth=config["params"]["extraction"]["min_depth"]
-    conda:
-        "envs/bismark.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/methylation_1.0.0.sif"
     threads: 4
     log:
         f"{QC_DIR}/logs/extract/{{sample}}.log"
@@ -264,8 +260,7 @@ rule bismark_report:
         bam=f"{PROCESSED_DIR}/{{sample}}.deduplicated.bam"
     output:
         report=f"{QC_DIR}/bismark_reports/{{sample}}_report.html"
-    conda:
-        "envs/bismark.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/methylation_1.0.0.sif"
     log:
         f"{QC_DIR}/logs/bismark_report/{{sample}}.log"
     shell:
@@ -286,8 +281,7 @@ rule multiqc:
     params:
         qc_dir=QC_DIR,
         processed_dir=PROCESSED_DIR
-    conda:
-        "envs/qc.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/methylation_1.0.0.sif"
     log:
         f"{QC_DIR}/logs/multiqc.log"
     shell:
@@ -313,8 +307,7 @@ rule call_dmrs:
         min_cpg=config["params"]["dmr"]["min_cpg"],
         max_dist=config["params"]["dmr"]["max_dist"],
         comparison=lambda w: config["comparisons"][int(w.comp_idx)][2]
-    conda:
-        "envs/dmr.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/methylation_1.0.0.sif"
     threads: config["params"]["dmr"]["threads"]
     log:
         f"{QC_DIR}/logs/dmr/{{comp_idx}}.log"
@@ -340,8 +333,7 @@ rule methylation_summary:
         multiqc=f"{QC_DIR}/multiqc_report.html"
     output:
         html=f"{RESULTS_DIR}/methylation_summary.html"
-    conda:
-        "envs/visualization.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/methylation_1.0.0.sif"
     log:
         f"{QC_DIR}/logs/summary.log"
     script:

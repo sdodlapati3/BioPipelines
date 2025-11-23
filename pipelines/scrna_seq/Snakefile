@@ -57,8 +57,7 @@ rule cellranger_count:
     threads: config["resources"]["cellranger_threads"]
     resources:
         mem_mb = lambda wildcards, attempt: int(config["resources"]["cellranger_mem"].replace("G", "")) * 1024 * attempt
-    conda:
-        "envs/cellranger.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/scrna-seq_1.0.0.sif"
     log:
         f"{RESULTS_DIR}/logs/cellranger/{{sample}}.log"
     shell:
@@ -92,8 +91,7 @@ rule seurat_qc:
         max_genes = config["seurat"]["qc"]["max_genes"],
         max_mt = config["seurat"]["qc"]["max_mt_percent"],
         sample_name = "{sample}"
-    conda:
-        "envs/seurat.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/scrna-seq_1.0.0.sif"
     threads: config["resources"]["seurat_threads"]
     log:
         f"{RESULTS_DIR}/logs/seurat/{{sample}}_qc.log"
@@ -110,8 +108,7 @@ rule seurat_normalize:
         method = config["seurat"]["normalization"]["method"],
         scale_factor = config["seurat"]["normalization"]["scale_factor"],
         n_features = config["seurat"]["variable_features"]["n_features"]
-    conda:
-        "envs/seurat.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/scrna-seq_1.0.0.sif"
     log:
         f"{RESULTS_DIR}/logs/seurat/{{sample}}_normalize.log"
     script:
@@ -131,8 +128,7 @@ rule seurat_cluster:
         dims = config["seurat"]["clustering"]["dims"],
         resolution = config["seurat"]["clustering"]["resolution"],
         algorithm = config["seurat"]["clustering"]["algorithm"]
-    conda:
-        "envs/seurat.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/scrna-seq_1.0.0.sif"
     threads: config["resources"]["seurat_threads"]
     log:
         f"{RESULTS_DIR}/logs/seurat/{{sample}}_cluster.log"
@@ -152,8 +148,7 @@ rule seurat_markers:
         logfc_threshold = config["seurat"]["de"]["logfc_threshold"],
         min_pct = config["seurat"]["de"]["min_pct"],
         only_pos = config["seurat"]["de"]["only_pos"]
-    conda:
-        "envs/seurat.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/scrna-seq_1.0.0.sif"
     log:
         f"{RESULTS_DIR}/logs/seurat/{{sample}}_markers.log"
     script:
@@ -170,8 +165,7 @@ rule annotate_cells:
         composition = f"{RESULTS_DIR}/{{sample}}_cell_composition.txt"
     params:
         marker_genes = config["annotation"]["markers"]
-    conda:
-        "envs/seurat.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/scrna-seq_1.0.0.sif"
     log:
         f"{RESULTS_DIR}/logs/seurat/{{sample}}_annotate.log"
     script:
@@ -186,8 +180,7 @@ rule generate_report:
         markers = expand(f"{RESULTS_DIR}/markers/{{sample}}_markers.csv", sample=SAMPLES)
     output:
         report = f"{RESULTS_DIR}/scRNA_seq_analysis_report.html"
-    conda:
-        "envs/report.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/scrna-seq_1.0.0.sif"
     log:
         f"{RESULTS_DIR}/logs/report.log"
     script:

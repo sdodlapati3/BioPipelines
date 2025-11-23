@@ -72,6 +72,7 @@ rule all:
 # =============================================================================
 
 rule fastqc_raw:
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/metagenomics_1.0.0.sif"
     input:
         r1=f"{RAW_DIR}/{{sample}}_R1.fastq.gz",
         r2=f"{RAW_DIR}/{{sample}}_R2.fastq.gz"
@@ -93,6 +94,7 @@ rule fastqc_raw:
         """
 
 rule trim_reads:
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/metagenomics_1.0.0.sif"
     input:
         r1=f"{RAW_DIR}/{{sample}}_R1.fastq.gz",
         r2=f"{RAW_DIR}/{{sample}}_R2.fastq.gz"
@@ -129,8 +131,7 @@ rule remove_host:
         r1=f"{PROCESSED_DIR}/host_removed/{{sample}}_R1.clean.fastq.gz",
         r2=f"{PROCESSED_DIR}/host_removed/{{sample}}_R2.clean.fastq.gz",
         stats=f"{QC_DIR}/host_removal/{{sample}}_stats.txt"
-    conda:
-        "envs/preprocessing.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/metagenomics_1.0.0.sif"
     threads: config["resources"]["threads"]["host_removal"]
     log:
         f"{QC_DIR}/logs/host_removal/{{sample}}.log"
@@ -191,8 +192,7 @@ rule bracken_abundance:
     output:
         bracken=f"{RESULTS_DIR}/taxonomy/bracken/{{sample}}_bracken.txt",
         report=f"{RESULTS_DIR}/taxonomy/bracken/{{sample}}_bracken_report.txt"
-    conda:
-        "envs/profiling.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/metagenomics_1.0.0.sif"
     log:
         f"{QC_DIR}/logs/bracken/{{sample}}.log"
     params:
@@ -213,6 +213,7 @@ rule bracken_abundance:
         """
 
 rule metaphlan_profile:
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/metagenomics_1.0.0.sif"
     input:
         r1=f"{PROCESSED_DIR}/host_removed/{{sample}}_R1.clean.fastq.gz" if HOST_REMOVAL else f"{PROCESSED_DIR}/trimmed/{{sample}}_R1.trimmed.fastq.gz",
         r2=f"{PROCESSED_DIR}/host_removed/{{sample}}_R2.clean.fastq.gz" if HOST_REMOVAL else f"{PROCESSED_DIR}/trimmed/{{sample}}_R2.trimmed.fastq.gz"
@@ -251,8 +252,7 @@ rule humann_profile:
         genefamilies=f"{RESULTS_DIR}/function/humann/{{sample}}_genefamilies.tsv",
         pathabundance=f"{RESULTS_DIR}/function/humann/{{sample}}_pathabundance.tsv",
         pathcoverage=f"{RESULTS_DIR}/function/humann/{{sample}}_pathcoverage.tsv"
-    conda:
-        "envs/functional.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/metagenomics_1.0.0.sif"
     threads: config["resources"]["threads"]["humann"]
     log:
         f"{QC_DIR}/logs/humann/{{sample}}.log"
@@ -292,8 +292,7 @@ rule megahit_assembly:
         r2=f"{PROCESSED_DIR}/host_removed/{{sample}}_R2.clean.fastq.gz" if HOST_REMOVAL else f"{PROCESSED_DIR}/trimmed/{{sample}}_R2.trimmed.fastq.gz"
     output:
         contigs=f"{RESULTS_DIR}/assembly/{{sample}}/final.contigs.fa"
-    conda:
-        "envs/assembly.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/metagenomics_1.0.0.sif"
     threads: config["resources"]["threads"]["assembly"]
     log:
         f"{QC_DIR}/logs/assembly/{{sample}}.log"
@@ -317,8 +316,7 @@ rule metabat2_binning:
     output:
         depth=f"{RESULTS_DIR}/bins/{{sample}}/depth.txt",
         bins=directory(f"{RESULTS_DIR}/bins/{{sample}}/metabat_bins")
-    conda:
-        "envs/assembly.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/metagenomics_1.0.0.sif"
     threads: config["resources"]["threads"]["binning"]
     log:
         f"{QC_DIR}/logs/binning/{{sample}}.log"
@@ -351,8 +349,7 @@ rule checkm_quality:
         bins=f"{RESULTS_DIR}/bins/{{sample}}/metabat_bins"
     output:
         summary=f"{RESULTS_DIR}/bins/{{sample}}/checkm_summary.txt"
-    conda:
-        "envs/assembly.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/metagenomics_1.0.0.sif"
     threads: config["resources"]["threads"]["binning"]
     log:
         f"{QC_DIR}/logs/checkm/{{sample}}.log"
@@ -377,8 +374,7 @@ rule krona_visualization:
         report=f"{RESULTS_DIR}/taxonomy/kraken2/{{sample}}_report.txt"
     output:
         html=f"{RESULTS_DIR}/taxonomy/krona/{{sample}}_krona.html"
-    conda:
-        "envs/visualization.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/metagenomics_1.0.0.sif"
     log:
         f"{QC_DIR}/logs/krona/{{sample}}.log"
     shell:
@@ -387,6 +383,7 @@ rule krona_visualization:
         """
 
 rule multiqc:
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/metagenomics_1.0.0.sif"
     input:
         fastqc=expand(f"{QC_DIR}/fastqc_raw/{{sample}}_R1_fastqc.html", sample=SAMPLES),
         fastp=expand(f"{QC_DIR}/fastp/{{sample}}.json", sample=SAMPLES),

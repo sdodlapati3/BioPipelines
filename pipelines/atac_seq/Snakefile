@@ -44,8 +44,7 @@ rule fastqc:
     output:
         r1=f"{QC_DIR}/fastqc/{{sample}}_R1_fastqc.html",
         r2=f"{QC_DIR}/fastqc/{{sample}}_R2_fastqc.html"
-    conda:
-        "envs/qc.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/atac-seq_1.0.0.sif"
     threads: 2
     shell:
         "mkdir -p {QC_DIR}/fastqc && fastqc -t {threads} {input.r1} {input.r2} -o {QC_DIR}/fastqc/"
@@ -62,8 +61,7 @@ rule trim_adapters:
     params:
         adapter=config["trimming"]["nextera_adapter"],
         min_len=config["trimming"]["min_length"]
-    conda:
-        "envs/preprocessing.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/atac-seq_1.0.0.sif"
     threads: 4
     shell:
         """
@@ -83,8 +81,7 @@ rule align:
         bam=temp(f"{PROCESSED_DIR}/{{sample}}.sorted.bam")
     params:
         ref=REFERENCE.replace(".fa", "")
-    conda:
-        "envs/alignment.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/atac-seq_1.0.0.sif"
     threads: 8
     shell:
         """
@@ -100,8 +97,7 @@ rule filter_bam:
         f"{PROCESSED_DIR}/{{sample}}.sorted.bam"
     output:
         f"{PROCESSED_DIR}/{{sample}}.filtered.bam"
-    conda:
-        "envs/alignment.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/atac-seq_1.0.0.sif"
     threads: 4
     shell:
         """
@@ -125,8 +121,7 @@ rule call_peaks:
         shift=config["peak_calling"]["shift"],
         extsize=config["peak_calling"]["extsize"],
         gsize=config["peak_calling"]["genome_size"]
-    conda:
-        "envs/peak_calling.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/atac-seq_1.0.0.sif"
     shell:
         """
         macs2 callpeak -t {input} -f BAMPE -n {params.name} \\
@@ -142,8 +137,7 @@ rule fragment_sizes:
     output:
         plot=f"{RESULTS_DIR}/fragment_sizes/{{sample}}_fragment_hist.png",
         txt=f"{RESULTS_DIR}/fragment_sizes/{{sample}}_fragment_sizes.txt"
-    conda:
-        "envs/alignment.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/atac-seq_1.0.0.sif"
     shell:
         """
         samtools view {input} | \\
@@ -160,8 +154,7 @@ rule create_bigwig:
         f"{PROCESSED_DIR}/{{sample}}.filtered.bam"
     output:
         f"{RESULTS_DIR}/bigwig/{{sample}}.bw"
-    conda:
-        "envs/visualization.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/atac-seq_1.0.0.sif"
     threads: 4
     shell:
         """
@@ -176,7 +169,6 @@ rule multiqc:
         expand(f"{QC_DIR}/fastp/{{sample}}.html", sample=SAMPLES)
     output:
         f"{RESULTS_DIR}/multiqc_report.html"
-    conda:
-        "envs/qc.yaml"
+    container: "/home/sdodl001_odu_edu/BioPipelines/containers/images/atac-seq_1.0.0.sif"
     shell:
         "multiqc {QC_DIR} -o {RESULTS_DIR} -f"
