@@ -1,0 +1,115 @@
+# BioPipelines SLURM Configuration
+# Default SLURM parameters for pipeline submissions
+
+# Cluster Configuration
+cluster:
+  partition: "main"              # Default partition (adjust for your cluster)
+  account: null                  # Account name (if required by your cluster)
+  
+# Default Resource Allocations
+# These can be overridden in submit_pipeline.sh with --mem, --cores, --time flags
+
+resources:
+  default:
+    mem: "32G"                   # Default memory allocation
+    cores: 8                     # Default CPU cores
+    time: "06:00:00"             # Default time limit (HH:MM:SS)
+  
+  # Pipeline-specific defaults (optional overrides)
+  dna_seq:
+    mem: "64G"                   # DNA-seq needs more memory for GATK
+    cores: 8
+    time: "12:00:00"
+  
+  rna_seq:
+    mem: "48G"                   # RNA-seq STAR alignment is memory-intensive
+    cores: 8
+    time: "08:00:00"
+  
+  metagenomics:
+    mem: "64G"                   # Kraken2 database requires substantial memory
+    cores: 8
+    time: "08:00:00"
+  
+  chip_seq:
+    mem: "32G"
+    cores: 8
+    time: "06:00:00"
+  
+  atac_seq:
+    mem: "32G"
+    cores: 8
+    time: "06:00:00"
+  
+  scrna_seq:
+    mem: "48G"                   # Single-cell analysis can be memory-intensive
+    cores: 8
+    time: "10:00:00"
+  
+  hic:
+    mem: "64G"                   # Hi-C contact matrices require significant memory
+    cores: 8
+    time: "12:00:00"
+  
+  long_read:
+    mem: "48G"
+    cores: 8
+    time: "10:00:00"
+  
+  methylation:
+    mem: "48G"                   # Bisulfite alignment is computationally intensive
+    cores: 8
+    time: "10:00:00"
+  
+  structural_variants:
+    mem: "48G"
+    cores: 8
+    time: "08:00:00"
+
+# Email Notifications (optional)
+notifications:
+  enabled: false                 # Set to true to enable email notifications
+  email: null                    # Your email address
+  events:
+    - "END"                      # Notify when job ends
+    - "FAIL"                     # Notify on failure
+    # - "BEGIN"                  # Uncomment to notify on job start
+
+# Job Name Template
+job_name: "{pipeline}_{timestamp}"  # Format: pipeline_YYYYMMDD_HHMMSS
+
+# Output/Error Log Locations
+logs:
+  output_dir: "logs/slurm"       # Directory for .out files
+  error_dir: "logs/slurm"        # Directory for .err files
+  archive_dir: "logs/slurm/archive"  # Move old logs here
+
+# Snakemake-specific Settings
+snakemake:
+  use_conda: true                # Use conda environments (recommended)
+  conda_prefix: "~/.snakemake/conda"  # Conda environment cache location
+  keep_going: false              # Continue after rule failures
+  rerun_incomplete: true         # Rerun incomplete jobs
+  printshellcmds: true           # Print shell commands for debugging
+  
+# Quality Control Thresholds
+# Used for automated QC checks (future enhancement)
+qc_thresholds:
+  min_reads: 10000000            # Minimum reads per sample (10M)
+  min_quality: 28                # Minimum mean quality score
+  max_duplicate_rate: 0.5        # Maximum duplication rate (50%)
+  min_alignment_rate: 0.70       # Minimum alignment rate (70%)
+
+# Performance Optimization
+performance:
+  use_local_scratch: true        # Use /scratch for I/O intensive operations
+  scratch_dir: "/scratch/${USER}/BioPipelines"
+  home_dir: "~/BioPipelines"
+  cleanup_temp: true             # Remove temporary files after completion
+
+# Notes:
+# - Override any setting using command-line flags in submit_pipeline.sh
+# - Pipeline-specific configs can override these defaults
+# - Adjust partition/account based on your cluster configuration
+# - Memory units: K (kilobytes), M (megabytes), G (gigabytes)
+# - Time format: HH:MM:SS or DD-HH:MM:SS

@@ -1,0 +1,224 @@
+# BioPipelines Global Configuration
+# Common settings shared across all pipelines
+
+# Project Information
+project:
+  name: "BioPipelines"
+  version: "1.0.0"
+  description: "Comprehensive bioinformatics analysis pipelines"
+  
+# Data Locations
+# These paths should be adjusted for your environment
+paths:
+  # Primary data directory (use /scratch for performance)
+  base_dir: "/scratch/${USER}/BioPipelines"
+  
+  # Subdirectories (relative to base_dir)
+  raw_data: "data/raw"
+  processed_data: "data/processed"
+  results: "data/results"
+  references: "data/references"
+  logs: "logs"
+  
+  # Home directory (for code, configs, notebooks)
+  home_dir: "~/BioPipelines"
+
+# Reference Genomes
+# Common reference genome locations
+references:
+  human:
+    hg38:
+      genome: "data/references/genomes/human/hg38.fa"
+      gtf: "data/references/annotations/human/gencode.v44.annotation.gtf"
+      star_index: "data/references/indexes/star_hg38"
+      bwa_index: "data/references/indexes/bwa_hg38/hg38"
+      bowtie2_index: "data/references/indexes/bowtie2_hg38/hg38"
+      dbsnp: "data/references/variants/Homo_sapiens_assembly38.dbsnp138.vcf.gz"
+      blacklist: "data/references/blacklists/hg38-blacklist.v2.bed"
+      
+    hg19:
+      genome: "data/references/genomes/human/hg19.fa"
+      gtf: "data/references/annotations/human/gencode.v19.annotation.gtf"
+      star_index: "data/references/indexes/star_hg19"
+      bwa_index: "data/references/indexes/bwa_hg19/hg19"
+      bowtie2_index: "data/references/indexes/bowtie2_hg19/hg19"
+  
+  mouse:
+    mm10:
+      genome: "data/references/genomes/mouse/mm10.fa"
+      gtf: "data/references/annotations/mouse/gencode.vM25.annotation.gtf"
+      star_index: "data/references/indexes/star_mm10"
+      bwa_index: "data/references/indexes/bwa_mm10/mm10"
+      bowtie2_index: "data/references/indexes/bowtie2_mm10/mm10"
+    
+    mm39:
+      genome: "data/references/genomes/mouse/mm39.fa"
+      gtf: "data/references/annotations/mouse/gencode.vM30.annotation.gtf"
+      star_index: "data/references/indexes/star_mm39"
+  
+  yeast:
+    sacCer3:
+      genome: "data/references/genomes/yeast/sacCer3.fa"
+      gtf: "data/references/annotations/yeast/sacCer3.gtf"
+      star_index: "data/references/indexes/star_yeast"
+      bwa_index: "data/references/indexes/bwa_yeast/sacCer3"
+      bowtie2_index: "data/references/indexes/bowtie2_yeast/sacCer3"
+
+# Quality Control Settings
+qc:
+  fastqc:
+    threads: 2
+    adapters: null  # Use FastQC's built-in adapter list
+  
+  multiqc:
+    config: null    # Path to custom MultiQC config (optional)
+    title: "BioPipelines QC Report"
+  
+  # Quality thresholds for automated filtering
+  thresholds:
+    min_phred_score: 20
+    min_read_length: 25
+    max_n_content: 0.05  # Maximum N base percentage
+
+# Preprocessing Settings
+preprocessing:
+  fastp:
+    threads: 4
+    cut_right: true
+    cut_right_window_size: 4
+    quality_cutoff: 20
+    min_length: 50
+    detect_adapter: true
+  
+  trimmomatic:
+    threads: 4
+    quality_threshold: 20
+    min_length: 36
+    adapters: "TruSeq3-PE.fa"
+
+# Alignment Settings
+alignment:
+  bwa:
+    threads: 8
+    algorithm: "mem"
+    min_seed_length: 19
+    match_score: 1
+    mismatch_penalty: 4
+  
+  bowtie2:
+    threads: 8
+    mode: "very-sensitive"
+    max_insert: 2000
+  
+  star:
+    threads: 8
+    genome_load: "NoSharedMemory"
+    out_sam_type: "BAM SortedByCoordinate"
+    quant_mode: "GeneCounts"
+    max_intron_size: 1000000  # For mammalian genomes
+    overhang: 100  # Read length - 1 (for indexing)
+
+# Variant Calling Settings (DNA-seq)
+variant_calling:
+  gatk:
+    java_options: "-Xmx64g"
+    known_sites:
+      - "data/references/variants/Homo_sapiens_assembly38.dbsnp138.vcf.gz"
+      - "data/references/variants/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz"
+    filters:
+      snp:
+        QD: 2.0
+        FS: 60.0
+        MQ: 40.0
+        MQRankSum: -12.5
+        ReadPosRankSum: -8.0
+      indel:
+        QD: 2.0
+        FS: 200.0
+        ReadPosRankSum: -20.0
+
+# Peak Calling Settings (ChIP-seq, ATAC-seq)
+peak_calling:
+  macs2:
+    genome_size: "2.7e9"  # Human genome effective size
+    q_value: 0.05
+    broad_cutoff: 0.1  # For broad peaks (histone marks)
+    shift: 0
+    extsize: 200
+    keep_dup: "auto"
+
+# Differential Expression Settings (RNA-seq)
+differential_expression:
+  deseq2:
+    alpha: 0.05  # FDR threshold
+    lfc_threshold: 0  # Log2 fold change threshold
+    cooksCutoff: true
+    independent_filtering: true
+  
+  edger:
+    fdr: 0.05
+    lfc: 0
+
+# Metagenomics Settings
+metagenomics:
+  kraken2:
+    database: "data/references/kraken2_db"
+    threads: 8
+    confidence: 0.1
+  
+  bracken:
+    read_length: 150
+    level: "S"  # Species level
+
+# Conda Environment Settings
+conda:
+  channels:
+    - conda-forge
+    - bioconda
+    - defaults
+  
+  # Environment specifications
+  envs:
+    qc: "envs/qc.yaml"
+    preprocessing: "envs/preprocessing.yaml"
+    alignment: "envs/alignment.yaml"
+    peak_calling: "envs/peak_calling.yaml"
+    variant_calling: "envs/variant_calling.yaml"
+    differential_expression: "envs/differential_expression.yaml"
+
+# Logging Configuration
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "logs/pipeline.log"
+
+# Temporary Files
+temp_files:
+  cleanup: true  # Remove temporary files after successful completion
+  keep_intermediate: false  # Keep intermediate BAM files for debugging
+
+# Performance Tuning
+performance:
+  threads:
+    default: 8
+    alignment: 16  # Alignment typically benefits from more threads
+    sorting: 8
+  
+  memory:
+    java_xmx: "64g"  # Java heap size for GATK
+    sambamba: "32g"  # Memory for sambamba
+  
+  # Use local scratch for I/O intensive operations
+  local_scratch: "/scratch/${USER}/tmp"
+
+# Experimental Features (disabled by default)
+experimental:
+  use_gpu: false  # GPU acceleration (if available)
+  distributed: false  # Distributed computing (Dask, Spark)
+  caching: true  # Cache intermediate results
+
+# Notes:
+# - Override any setting in pipeline-specific config.yaml files
+# - Use ${USER} variable for username
+# - Paths can be absolute or relative to BioPipelines root
+# - All thread/memory settings can be overridden via command line
