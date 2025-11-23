@@ -1,0 +1,29 @@
+# Snakemake profile for containerized execution
+# This profile configures all jobs to run in Singularity containers
+
+# Use Singularity for all rules
+use-singularity: True
+
+# Singularity arguments (bind paths)
+singularity-args: "--bind /scratch/sdodl001:/scratch/sdodl001 --bind /home/sdodl001_odu_edu/BioPipelines:/home/sdodl001_odu_edu/BioPipelines"
+
+# Container image prefix (where containers are stored)
+singularity-prefix: "/home/sdodl001_odu_edu/BioPipelines/containers/images"
+
+# Default container for rules that don't specify one
+# This will be overridden by PIPELINE_CONTAINER environment variable
+default-resources:
+  - mem_mb=4000
+  - disk_mb=10000
+
+# Performance settings
+cores: 16
+local-cores: 4
+printshellcmds: True
+keep-going: True
+rerun-incomplete: True
+latency-wait: 60
+
+# Logging
+show-failed-logs: True
+verbose: False
