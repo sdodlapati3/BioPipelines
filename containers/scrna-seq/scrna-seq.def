@@ -31,7 +31,8 @@ From: /home/sdodl001_odu_edu/BioPipelines/containers/images/base_1.0.0.sif
         bioconductor-scater \
         bioconductor-scran \
         r-cowplot \
-        r-patchwork
+        r-patchwork \
+        wget
 
     # Install Cell Ranger from 10x Genomics
     cd /opt
