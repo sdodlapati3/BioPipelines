@@ -34,12 +34,11 @@ From: /home/sdodl001_odu_edu/BioPipelines/containers/images/base_1.0.0.sif
         r-patchwork \
         wget
 
-    # Install Cell Ranger from 10x Genomics
-    cd /opt
-    wget -O cellranger-9.0.0.tar.gz "https://cf.10xgenomics.com/releases/cell-exp/cellranger-9.0.0.tar.gz?Expires=1732496160&Key-Pair-Id=APKAI7S6A5RYOXBWRPDA&Signature=kS~qXbRISE4mVJECJvN5DQVg7qzgT3g~Q1Z2Ol0g5xJ8rK1yfIeXBkGHkf3HB9KP-~dw-l68R~8m7hZEF8nNGlk9cDxBXlhGELBWM5fykJg5pSxz5eIE1F-aq3Wl5Mb2mHdNL7oDFW6TiKoEGVa1qb6z9lFhtGTDmfPZP8TjzQ0wDMHVJl1p09TJYXdPdZIWv1k5MjGM1vPtQvRDx7Cf-MX6s5E0SjRVhb2bWoLxfV8q9Y4ZgKjNp3uC7vT2Wm0A__"
-    tar -xzf cellranger-9.0.0.tar.gz
-    rm cellranger-9.0.0.tar.gz
-    ln -s /opt/cellranger-9.0.0/bin/cellranger /usr/local/bin/cellranger
+    # Note: CellRanger requires manual download from 10x Genomics website
+    # Users must download cellranger-9.0.0.tar.gz and place in container build directory
+    # Instructions: https://www.10xgenomics.com/support/software/cell-ranger/downloads
+    # For now, container includes STARsolo as alternative for 10x data
+    echo "CellRanger can be added post-build. Using STARsolo for 10x data." > /opt/cellranger_note.txt
 
     # Make scripts executable
     chmod +x /opt/biopipelines/entrypoint.sh /opt/biopipelines/run_pipeline.sh
