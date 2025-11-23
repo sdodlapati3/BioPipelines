@@ -41,19 +41,6 @@ Examples:
 
   # Submit with custom resources
   $0 --pipeline methylation --mem 48G --cores 16 --time 08:00:00
-
-  # Submit with simple config (faster, less comprehensive)
-  $0 --pipeline dna_seq --config simple
-
-  # Rerun incomplete jobs
-  $0 --pipeline rna_seq --rerun
-
-Pipeline-specific defaults:
-  - scrna_seq: mem=64G, cores=16, time=08:00:00
-  - metagenomics: mem=128G, cores=32, time=12:00:00
-  - dna_seq: mem=48G, cores=16, time=08:00:00
-  - methylation: mem=48G, cores=8, time=06:00:00
-  - hic: mem=64G, cores=16, time=06:00:00
 EOF
     exit 1
 }
@@ -132,7 +119,7 @@ case $PIPELINE in
         ;;
 esac
 
-# Determine pipeline directory (Phase 3: Flattened structure)
+# Determine pipeline directory
 PIPELINE_DIR=""
 case $PIPELINE in
     atac_seq|chip_seq|dna_seq|rna_seq|scrna_seq|methylation|hic|long_read|metagenomics)
@@ -143,7 +130,6 @@ case $PIPELINE in
         ;;
     *)
         echo "Error: Unknown pipeline: $PIPELINE"
-        echo "Valid pipelines: atac_seq, chip_seq, dna_seq, rna_seq, scrna_seq, methylation, hic, long_read, metagenomics, sv"
         exit 1
         ;;
 esac
@@ -160,15 +146,11 @@ if [ ! -f "$PIPELINE_DIR/Snakefile" ]; then
     exit 1
 fi
 
-# Build snakemake command
-SNAKEMAKE_CMD="snakemake --cores $CORES --use-conda --conda-frontend mamba --latency-wait 60"
+# Build snakemake command with scratch conda prefix (avoids NFS locks)
+SNAKEMAKE_CMD="snakemake --cores $CORES --use-conda --conda-frontend mamba --conda-prefix /scratch/sdodl001/conda_envs --latency-wait 60"
 
 if [ "$RERUN" = true ]; then
     SNAKEMAKE_CMD="$SNAKEMAKE_CMD --rerun-incomplete"
-fi
-
-if [ "$CONFIG_TYPE" = "simple" ]; then
-    SNAKEMAKE_CMD="$SNAKEMAKE_CMD --config run_mode=simple"
 fi
 
 # Generate job name
@@ -195,14 +177,11 @@ echo "================================"
 echo "BioPipelines Job Submission"
 echo "================================"
 echo "Pipeline:    $PIPELINE"
-echo "Config:      $CONFIG_TYPE"
-echo "Partition:   $PARTITION"
+echo "Directory:   $PIPELINE_DIR"
 echo "Memory:      $MEM"
 echo "Cores:       $CORES"
-echo "Time:        $TIME"
-echo "Directory:   $PIPELINE_DIR"
+echo "Conda:       /scratch/sdodl001/conda_envs (scratch - no NFS locks)"
 echo "================================"
-echo ""
 
 cd \$SLURM_SUBMIT_DIR
 
@@ -210,28 +189,29 @@ cd \$SLURM_SUBMIT_DIR
 eval "\$(/home/sdodl001_odu_edu/miniconda3/bin/conda shell.bash hook)"
 conda activate /home/sdodl001_odu_edu/envs/biopipelines
 
-# Clean any existing locks
+# Clean scratch conda directory completely (removes any corrupted envs)
+rm -rf /scratch/sdodl001/conda_envs
+mkdir -p /scratch/sdodl001/conda_envs
+
+# Clean and unlock
 cd $PIPELINE_DIR
+rm -rf .snakemake/conda 2>/dev/null || true
 snakemake --unlock 2>/dev/null || true
 
 # Run pipeline
 echo "Starting pipeline execution..."
 $SNAKEMAKE_CMD
 
-echo ""
 echo "================================"
-echo "Pipeline completed successfully!"
+echo "Pipeline completed!"
 echo "================================"
 EOF
 )
 
 # Show what would be submitted
 if [ "$DRY_RUN" = true ]; then
-    echo "=== DRY RUN: Would submit the following job ==="
-    echo ""
+    echo "=== DRY RUN ==="
     echo "$SBATCH_SCRIPT"
-    echo ""
-    echo "=== Command: sbatch ==="
     exit 0
 fi
 
@@ -241,9 +221,6 @@ echo "$SBATCH_SCRIPT" | sbatch
 echo ""
 echo "✓ Job submitted: $JOB_NAME"
 echo "  Pipeline:  $PIPELINE"
-echo "  Config:    $CONFIG_TYPE"
 echo "  Resources: ${MEM}, ${CORES} cores, ${TIME}"
 echo "  Logs:      $LOG_DIR/${JOB_NAME}.{out,err}"
-echo ""
-echo "Monitor with: squeue -u \$USER"
-echo "Cancel with:  scancel <job_id>"
+echo "  Conda:     /scratch/sdodl001/conda_envs (scratch storage)"
