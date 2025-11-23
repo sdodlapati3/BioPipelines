@@ -24,9 +24,9 @@ From: /scratch/sdodl001/containers/base_1.0.0.sif
         anndata=0.10.9 \
         scikit-learn \
         umap-learn \
-        leiden \
+        leidenalg \
         louvain \
-        r-seurat=5.1.0 \
+        r-seurat \
         bioconductor-singlecellexperiment \
         bioconductor-scater \
         bioconductor-scran \

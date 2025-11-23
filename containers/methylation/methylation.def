@@ -17,7 +17,7 @@ From: /scratch/sdodl001/containers/base_1.0.0.sif
     # Install methylation specific tools (common tools now in base)
     micromamba install -y -n base -c conda-forge -c bioconda \
         bismark=0.24.2 \
-        bwa-meth=0.2.7 \
+        bwameth \
         methyldackel=0.6.1 \
         trim-galore=0.6.10 \
         qualimap=2.3 \

@@ -21,7 +21,7 @@ From: /scratch/sdodl001/containers/base_1.0.0.sif
         metaphlan=4.1.1 \
         humann=3.9 \
         megahit=1.2.9 \
-        metaspades=4.0.0 \
+        spades \
         prodigal=2.6.3 \
         prokka=1.14.6 \
         diamond=2.1.10 \
@@ -29,8 +29,7 @@ From: /scratch/sdodl001/containers/base_1.0.0.sif
         seqtk=1.4 \
         centrifuge=1.0.4.1 \
         krona=2.8.1 \
-        r-vegan \
-        r-phyloseq
+        r-vegan
 
     # Make scripts executable
     chmod +x /opt/biopipelines/entrypoint.sh /opt/biopipelines/run_pipeline.sh

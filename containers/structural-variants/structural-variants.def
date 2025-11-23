@@ -17,19 +17,16 @@ From: /scratch/sdodl001/containers/base_1.0.0.sif
     # Install structural variant specific tools (common tools now in base)
     micromamba install -y -n base -c conda-forge -c bioconda \
         manta=1.6.0 \
-        delly=1.2.9 \
-        lumpy-sv=0.3.1 \
-        svtyper=0.7.1 \
-        smoove=0.2.8 \
-        svim=2.0.0 \
+        delly \
+        lumpy-sv \
+        smoove \
+        svim \
         sniffles=2.4 \
-        cutesv=2.1.1 \
-        pbsv=2.9.0 \
+        cutesv \
+        pbsv \
         minimap2=2.28 \
         survivor=1.0.7 \
-        vcftools=0.1.16 \
-        vt=0.57721 \
-        svtools=0.5.1
+        vcftools=0.1.16
 
     # Make scripts executable
     chmod +x /opt/biopipelines/entrypoint.sh /opt/biopipelines/run_pipeline.sh
