@@ -86,3 +86,12 @@ htmlcov/
 *.json
 *_R2.fastq.gz
 pipelines/**/*.fastq.gz
+
+# Build artifacts
+SURVIVOR/
+cache/
+
+# Temporary files
+*.tmp
+*.swp
+*~
