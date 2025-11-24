@@ -25,13 +25,13 @@ process BISMARK_ALIGN {
         $args \\
         --parallel ${task.cpus} \\
         --genome ${index} \\
-        --basename ${prefix} \\
         -1 ${reads[0]} \\
         -2 ${reads[1]}
 
-    samtools sort -@ ${task.cpus} -o ${prefix}.bam ${prefix}_pe.bam
+    # Rename Bismark's default output to our expected name
+    samtools sort -@ ${task.cpus} -o ${prefix}.bam *_pe.bam
     samtools index ${prefix}.bam
-    rm ${prefix}_pe.bam
+    rm *_pe.bam
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
