@@ -29,11 +29,15 @@ echo "Submitting workflow: $WORKFLOW_NAME"
 echo "Unique run ID: $RUN_ID"
 
 # Submit with custom job name, unique session name, and isolated work directory
-# Using per-run work directory ensures true concurrent execution
+# Using per-run work directory AND launchDir ensures true concurrent execution
+LAUNCH_DIR="/scratch/sdodl001/BioPipelines/nf_runs/${RUN_ID}"
+mkdir -p "$LAUNCH_DIR"
+
 sbatch --job-name="nf_${WORKFLOW_NAME}" \
        --output="logs/${WORKFLOW_NAME}_%j.out" \
        --error="logs/${WORKFLOW_NAME}_%j.err" \
        scripts/submit_nextflow.sh "$WORKFLOW_FILE" \
        -name "$RUN_ID" \
        -w "/scratch/sdodl001/BioPipelines/work/${RUN_ID}" \
-       "${@:2}"
+       "${@:2}" \
+       "$LAUNCH_DIR"

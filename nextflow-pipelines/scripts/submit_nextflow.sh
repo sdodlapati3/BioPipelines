@@ -27,10 +27,23 @@ mkdir -p logs
 WORKFLOW_FILE="${1:-}"
 if [ -z "$WORKFLOW_FILE" ]; then
     echo "ERROR: No workflow file specified"
-    echo "Usage: sbatch scripts/submit_nextflow.sh <workflow.nf> [nextflow args...]"
+    echo "Usage: sbatch scripts/submit_nextflow.sh <workflow.nf> [nextflow args...] [launch_dir]"
     exit 1
 fi
-shift  # Remove first argument, rest are nextflow args
+shift  # Remove first argument
+
+# Get optional launch directory (last argument if it's a directory path)
+LAUNCH_DIR=""
+for arg in "$@"; do
+    if [[ "$arg" =~ ^/ ]] && [[ "$arg" =~ nf_runs ]]; then
+        LAUNCH_DIR="$arg"
+    fi
+done
+
+# Remove launch_dir from args if present
+if [ -n "$LAUNCH_DIR" ]; then
+    set -- "${@/$LAUNCH_DIR/}"
+fi
 
 # Check if workflow file exists
 if [ ! -f "$WORKFLOW_FILE" ]; then
@@ -53,11 +66,16 @@ echo ""
 
 # Run Nextflow workflow
 # The workflow will submit its own SLURM jobs via the executor
-cd ~/BioPipelines/nextflow-pipelines
+if [ -n "$LAUNCH_DIR" ]; then
+    cd "$LAUNCH_DIR"
+    echo "Launch directory: $LAUNCH_DIR"
+else
+    cd ~/BioPipelines/nextflow-pipelines
+fi
 
-nextflow run "$WORKFLOW_FILE" \
-    -c config/base.config \
-    -c config/containers.config \
+nextflow run ~/BioPipelines/nextflow-pipelines/"$WORKFLOW_FILE" \
+    -c ~/BioPipelines/nextflow-pipelines/config/base.config \
+    -c ~/BioPipelines/nextflow-pipelines/config/containers.config \
     "$@"
 
 EXIT_CODE=$?
