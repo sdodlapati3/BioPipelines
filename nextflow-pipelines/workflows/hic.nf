@@ -29,8 +29,9 @@ workflow {
         ]
     ).set { samples_ch }
 
-    // Reference files
-    bowtie2_index = file("/scratch/sdodl001/BioPipelines/data/references/bowtie2_index")
+    // Reference files - Bowtie2 needs directory and all index files
+    bowtie2_index_dir = file("/scratch/sdodl001/BioPipelines/data/references/bowtie2_index")
+    bowtie2_index_files = Channel.fromPath("/scratch/sdodl001/BioPipelines/data/references/bowtie2_index/hg38.*.bt2*").collect()
     chrom_sizes = file("/scratch/sdodl001/BioPipelines/data/references/hg38.chrom.sizes")
     
     // Resolution for contact matrix (10kb by default)
@@ -40,7 +41,7 @@ workflow {
     FASTQC(samples_ch)
 
     // Step 2: Alignment with Bowtie2
-    BOWTIE2_ALIGN(samples_ch, bowtie2_index)
+    BOWTIE2_ALIGN(samples_ch, [bowtie2_index_dir, bowtie2_index_files])
 
     // Step 3: Parse pairs from aligned reads
     PAIRTOOLS_PARSE(BOWTIE2_ALIGN.out.bam, chrom_sizes)

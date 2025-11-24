@@ -14,7 +14,7 @@ process BOWTIE2_ALIGN {
     
     input:
     tuple val(meta), path(reads)
-    path index
+    tuple path(index_dir), path(index_files)
     
     output:
     tuple val(meta), path('*.bam'), path('*.bam.bai'), emit: bam
@@ -34,7 +34,7 @@ process BOWTIE2_ALIGN {
     export LD_LIBRARY_PATH=\$PWD:/opt/conda/lib:\${LD_LIBRARY_PATH:-}
     
     bowtie2 \\
-        -x $index/hg38 \\
+        -x ${index_dir}/hg38 \\
         $reads_cmd \\
         --threads ${task.cpus} \\
         $args \\

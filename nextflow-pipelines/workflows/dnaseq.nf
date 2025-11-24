@@ -29,8 +29,9 @@ workflow {
         ]
     ).set { samples_ch }
 
-    // Reference files - BWA index uses the genome.fa as basename
-    bwa_index = file("/scratch/sdodl001/BioPipelines/data/references/hg38.fa")
+    // Reference files - BWA needs all index files staged
+    bwa_index_fa = file("/scratch/sdodl001/BioPipelines/data/references/hg38.fa")
+    bwa_index_files = Channel.fromPath("/scratch/sdodl001/BioPipelines/data/references/hg38.fa.{amb,ann,bwt,pac,sa}").collect()
     genome_fasta = file("/scratch/sdodl001/BioPipelines/data/references/hg38.fa")
     genome_fai = file("/scratch/sdodl001/BioPipelines/data/references/hg38.fa.fai")
     genome_dict = file("/scratch/sdodl001/BioPipelines/data/references/hg38.dict")
@@ -39,7 +40,7 @@ workflow {
     FASTQC(samples_ch)
 
     // Step 2: Alignment with BWA-MEM
-    BWAMEM_ALIGN(samples_ch, bwa_index)
+    BWAMEM_ALIGN(samples_ch, [bwa_index_fa, bwa_index_files])
 
     // Step 3: Mark Duplicates
     PICARD_MARKDUPLICATES(BWAMEM_ALIGN.out.bam)

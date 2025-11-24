@@ -6,7 +6,7 @@ process BWAMEM_ALIGN {
 
     input:
     tuple val(meta), path(reads)
-    path index
+    tuple path(index), path(index_files)
 
     output:
     tuple val(meta), path("*.bam"), path("*.bai"), emit: bam
