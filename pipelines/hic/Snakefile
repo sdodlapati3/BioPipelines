@@ -302,7 +302,7 @@ rule call_compartments:
             --matrix {input.mcool}::resolutions/{params.resolution} \
             --outputFileName {output.bigwig} \
             --format bigwig \
-            --numberOfEigenvectors 3 2> {log}
+            --whichEigenvectors 1 2 3 2> {log}
         
         hicTransform \
             --matrix {input.mcool}::resolutions/{params.resolution} \

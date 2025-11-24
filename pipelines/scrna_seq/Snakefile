@@ -64,6 +64,11 @@ rule cellranger_count:
         """
         cd {params.outdir}
         
+        # Remove existing output directory if it exists (CellRanger 10.0.0 requirement)
+        if [ -d "{wildcards.sample}" ]; then
+            rm -rf {wildcards.sample}
+        fi
+        
         # CellRanger count
         cellranger count \
             --id={wildcards.sample} \

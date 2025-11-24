@@ -65,9 +65,9 @@ params:
     
   # TAD calling (HiCExplorer)
   tad:
-    min_depth: 60000  # Minimum window size for TAD calling
-    max_depth: 120000  # Maximum window size
-    step: 10000  # Step size
+    min_depth: 500000  # Minimum window size for TAD calling (5x bin size)
+    max_depth: 1000000  # Maximum window size
+    step: 50000  # Step size
     fdr: 0.05  # FDR threshold
     delta: 0.01  # Insulation score delta
     

@@ -29,9 +29,9 @@ From: /home/sdodl001_odu_edu/BioPipelines/containers/images/base_1.0.0.sif
         freetype \
         libfreetype
 
-    # Create symlink for libfreetype in system lib directory  
-    mkdir -p /usr/lib/x86_64-linux-gnu
-    ln -sf /opt/conda/lib/libfreetype.so.6 /usr/lib/x86_64-linux-gnu/libfreetype.so.6
+    # Configure dynamic linker to find conda libraries
+    echo "/opt/conda/lib" > /etc/ld.so.conf.d/conda.conf
+    ldconfig
 
     # Make scripts executable
     chmod +x /opt/biopipelines/entrypoint.sh /opt/biopipelines/run_pipeline.sh
