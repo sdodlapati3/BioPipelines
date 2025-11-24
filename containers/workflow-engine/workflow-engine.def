@@ -30,6 +30,7 @@ From: mambaorg/micromamba:1.5.10
     export JAVA_HOME=/opt/conda
     export PATH=/opt/conda/bin:$PATH
     export WORKFLOW_ENGINE_VERSION="1.0.0"
+    export NXF_HOME=/tmp/.nextflow
 
 %runscript
     # Default: run snakemake
@@ -44,6 +45,8 @@ From: mambaorg/micromamba:1.5.10
 %test
     echo "Testing workflow engines..."
     snakemake --version
+    mkdir -p /tmp/.nextflow
+    export NXF_HOME=/tmp/.nextflow
     nextflow -version
     python --version
     echo "Workflow engine container validation passed"

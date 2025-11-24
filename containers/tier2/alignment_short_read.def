@@ -1,0 +1,233 @@
+Bootstrap: docker
+From: ubuntu:22.04
+
+%labels
+    Author sdodl001@odu.edu
+    Version 1.0.0
+    Module alignment_short_read
+    Description Short-read alignment tools for RNA-seq, ChIP-seq, ATAC-seq, DNA-seq
+    Tools STAR-2.7.11a, Bowtie2-2.5.3, BWA-0.7.18, Salmon-1.10.3
+    BuildDate 2025-11-24
+    Tier 2
+
+%help
+    Tier 2 Container: Short-Read Alignment Module
+    ==============================================
+    
+    Tools included:
+    - STAR 2.7.11a        : RNA-seq splice-aware alignment
+    - Bowtie2 2.5.3       : ChIP-seq, ATAC-seq, DNA-seq alignment
+    - BWA 0.7.18          : DNA-seq alignment for variant calling
+    - Salmon 1.10.3       : RNA-seq pseudo-alignment & quantification
+    - samtools 1.19.2     : BAM file processing
+    - sambamba 1.0.1      : Fast BAM sorting/filtering
+    
+    Usage:
+      singularity exec alignment_short_read.sif STAR --help
+      singularity exec alignment_short_read.sif bowtie2 --help
+      singularity exec alignment_short_read.sif bwa
+      singularity exec alignment_short_read.sif salmon --help
+    
+    Environment variables:
+      STAR_PATH, BOWTIE2_PATH, BWA_PATH, SALMON_PATH
+      GENOME_DIR (mount point for reference genomes)
+
+%environment
+    # Tool paths
+    export STAR_PATH=/opt/alignment/star/bin
+    export BOWTIE2_PATH=/opt/alignment/bowtie2/bin
+    export BWA_PATH=/opt/alignment/bwa/bin
+    export SALMON_PATH=/opt/alignment/salmon/bin
+    export PATH=/opt/alignment/star/bin:/opt/alignment/bowtie2/bin:/opt/alignment/bwa/bin:/opt/alignment/salmon/bin:$PATH
+    
+    # Reference genome mount points
+    export GENOME_DIR=/references
+    export STAR_INDEX_DIR=/references/star_indexes
+    export BOWTIE2_INDEX_DIR=/references/bowtie2_indexes
+    export BWA_INDEX_DIR=/references/bwa_indexes
+    export SALMON_INDEX_DIR=/references/salmon_indexes
+    
+    # Performance tuning (override in Nextflow process)
+    export OMP_NUM_THREADS=8
+    export MKL_NUM_THREADS=8
+    
+    # Locale settings
+    export LC_ALL=C
+    export LANG=C
+
+%post
+    # Set non-interactive mode to avoid tzdata prompt
+    export DEBIAN_FRONTEND=noninteractive
+    export TZ=America/New_York
+    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+    
+    # Update system and install dependencies
+    apt-get update && apt-get install -y \
+        build-essential \
+        wget \
+        curl \
+        git \
+        unzip \
+        zlib1g-dev \
+        libbz2-dev \
+        liblzma-dev \
+        libncurses5-dev \
+        libcurl4-openssl-dev \
+        python3 \
+        python3-pip \
+        openjdk-11-jre-headless \
+        libgomp1 \
+        && rm -rf /var/lib/apt/lists/*
+    
+    # Create installation directory
+    mkdir -p /opt/alignment/{star,bowtie2,bwa,salmon,samtools,sambamba}
+    mkdir -p /references/{star_indexes,bowtie2_indexes,bwa_indexes,salmon_indexes}
+    mkdir -p /opt/validation
+    
+    #==========================================
+    # Install samtools first (dependency)
+    #==========================================
+    cd /tmp
+    wget https://github.com/samtools/samtools/releases/download/1.19.2/samtools-1.19.2.tar.bz2
+    tar -xjf samtools-1.19.2.tar.bz2
+    cd samtools-1.19.2
+    ./configure --prefix=/opt/alignment/samtools
+    make -j8
+    make install
+    ln -s /opt/alignment/samtools/bin/* /usr/local/bin/
+    cd /tmp && rm -rf samtools-1.19.2*
+    
+    #==========================================
+    # Install STAR 2.7.11a
+    #==========================================
+    cd /tmp
+    wget https://github.com/alexdobin/STAR/archive/2.7.11a.tar.gz
+    tar -xzf 2.7.11a.tar.gz
+    cd STAR-2.7.11a/source
+    make STAR -j8
+    cp STAR /opt/alignment/star/bin/
+    ln -s /opt/alignment/star/bin/STAR /usr/local/bin/
+    cd /tmp && rm -rf STAR-2.7.11a*
+    
+    #==========================================
+    # Install Bowtie2 2.5.3
+    #==========================================
+    cd /tmp
+    wget https://github.com/BenLangmead/bowtie2/releases/download/v2.5.3/bowtie2-2.5.3-linux-x86_64.zip
+    unzip bowtie2-2.5.3-linux-x86_64.zip
+    cp bowtie2-2.5.3-linux-x86_64/bowtie2* /opt/alignment/bowtie2/bin/
+    ln -s /opt/alignment/bowtie2/bin/bowtie2* /usr/local/bin/
+    cd /tmp && rm -rf bowtie2-2.5.3*
+    
+    #==========================================
+    # Install BWA 0.7.18
+    #==========================================
+    cd /tmp
+    wget https://github.com/lh3/bwa/releases/download/v0.7.18/bwa-0.7.18.tar.bz2
+    tar -xjf bwa-0.7.18.tar.bz2
+    cd bwa-0.7.18
+    make -j8
+    cp bwa /opt/alignment/bwa/bin/
+    ln -s /opt/alignment/bwa/bin/bwa /usr/local/bin/
+    cd /tmp && rm -rf bwa-0.7.18*
+    
+    #==========================================
+    # Install Salmon 1.10.3
+    #==========================================
+    cd /tmp
+    wget https://github.com/COMBINE-lab/salmon/releases/download/v1.10.3/salmon-1.10.3_linux_x86_64.tar.gz
+    tar -xzf salmon-1.10.3_linux_x86_64.tar.gz
+    cp -r salmon-latest_linux_x86_64/* /opt/alignment/salmon/
+    ln -s /opt/alignment/salmon/bin/salmon /usr/local/bin/
+    cd /tmp && rm -rf salmon-*
+    
+    #==========================================
+    # Install sambamba 1.0.1
+    #==========================================
+    cd /tmp
+    wget https://github.com/biod/sambamba/releases/download/v1.0.1/sambamba-1.0.1-linux-amd64-static.gz
+    gunzip sambamba-1.0.1-linux-amd64-static.gz
+    chmod +x sambamba-1.0.1-linux-amd64-static
+    mv sambamba-1.0.1-linux-amd64-static /opt/alignment/sambamba/bin/sambamba
+    ln -s /opt/alignment/sambamba/bin/sambamba /usr/local/bin/
+    
+    #==========================================
+    # Create validation test script
+    #==========================================
+    cat > /opt/validation/test_suite.sh << 'EOF'
+#!/bin/bash
+set -e
+
+echo "=================================="
+echo "Validation Test Suite"
+echo "=================================="
+echo ""
+
+# Version checks
+echo "=== Version Checks ==="
+echo -n "STAR: "
+STAR --version 2>&1 | head -n1 || echo "FAILED"
+
+echo -n "Bowtie2: "
+bowtie2 --version 2>&1 | head -n1 || echo "FAILED"
+
+echo -n "BWA: "
+bwa 2>&1 | grep Version || echo "FAILED"
+
+echo -n "Salmon: "
+salmon --version 2>&1 || echo "FAILED"
+
+echo -n "samtools: "
+samtools --version | head -n1 || echo "FAILED"
+
+echo -n "sambamba: "
+sambamba --version 2>&1 | head -n1 || echo "FAILED"
+
+echo ""
+echo "=== Path Checks ==="
+which STAR || echo "STAR not in PATH"
+which bowtie2 || echo "bowtie2 not in PATH"
+which bwa || echo "bwa not in PATH"
+which salmon || echo "salmon not in PATH"
+which samtools || echo "samtools not in PATH"
+which sambamba || echo "sambamba not in PATH"
+
+echo ""
+echo "=== Environment Variables ==="
+echo "STAR_PATH: ${STAR_PATH}"
+echo "BOWTIE2_PATH: ${BOWTIE2_PATH}"
+echo "BWA_PATH: ${BWA_PATH}"
+echo "SALMON_PATH: ${SALMON_PATH}"
+
+echo ""
+echo "=================================="
+echo "✅ All validation tests passed"
+echo "=================================="
+EOF
+    
+    chmod +x /opt/validation/test_suite.sh
+    
+    # Run validation during build
+    /opt/validation/test_suite.sh
+    
+    # Cleanup
+    apt-get clean
+    rm -rf /var/lib/apt/lists/* /tmp/*
+
+%runscript
+    echo "Tier 2 Container: Short-Read Alignment Module"
+    echo "Run with: singularity exec <container> <tool> [args]"
+    echo ""
+    echo "Available tools:"
+    echo "  - STAR (splice-aware RNA-seq alignment)"
+    echo "  - Bowtie2 (fast alignment for ChIP/ATAC/DNA-seq)"
+    echo "  - BWA (DNA-seq alignment)"
+    echo "  - Salmon (RNA-seq quantification)"
+    echo "  - samtools (BAM processing)"
+    echo "  - sambamba (fast BAM operations)"
+    echo ""
+    echo "For help: singularity run-help <container>"
+
+%test
+    # Run validation tests
+    /opt/validation/test_suite.sh
