@@ -97,3 +97,5 @@ cache/
 *~
 containers/images/
 containers/scrna-seq/cellranger-10.0.0.tar.gz
+.nextflow*
+work/
