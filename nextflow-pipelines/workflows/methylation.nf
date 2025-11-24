@@ -29,8 +29,8 @@ workflow {
         ]
     ).set { samples_ch }
 
-    // Reference index
-    bismark_index = file("/scratch/sdodl001/BioPipelines/data/references/bismark_index")
+    // Reference index - Bismark expects the genome directory containing Bisulfite_Genome/
+    bismark_index = file("/scratch/sdodl001/BioPipelines/data/references")
 
     // Step 1: Quality Control
     FASTQC(samples_ch)
