@@ -12,6 +12,7 @@ From: /home/sdodl001_odu_edu/BioPipelines/containers/images/base_1.0.0.sif
 %files
     entrypoint.sh /opt/biopipelines/entrypoint.sh
     run_pipeline.sh /opt/biopipelines/run_pipeline.sh
+    cellranger-10.0.0.tar.gz /opt/cellranger-10.0.0.tar.gz
 
 %post
     # Install scRNA-seq specific tools (common tools now in base)
@@ -34,11 +35,12 @@ From: /home/sdodl001_odu_edu/BioPipelines/containers/images/base_1.0.0.sif
         r-patchwork \
         wget
 
-    # Note: CellRanger requires manual download from 10x Genomics website
-    # Users must download cellranger-9.0.0.tar.gz and place in container build directory
-    # Instructions: https://www.10xgenomics.com/support/software/cell-ranger/downloads
-    # For now, container includes STARsolo as alternative for 10x data
-    echo "CellRanger can be added post-build. Using STARsolo for 10x data." > /opt/cellranger_note.txt
+    # Install CellRanger from local file (downloaded from 10x Genomics)
+    cd /opt
+    tar -xzf cellranger-10.0.0.tar.gz
+    rm cellranger-10.0.0.tar.gz
+    ln -s /opt/cellranger-10.0.0/cellranger /usr/local/bin/cellranger
+    chmod +x /opt/cellranger-10.0.0/cellranger
 
     # Make scripts executable
     chmod +x /opt/biopipelines/entrypoint.sh /opt/biopipelines/run_pipeline.sh
