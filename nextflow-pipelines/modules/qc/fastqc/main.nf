@@ -36,9 +36,9 @@ process FASTQC {
     
     """
     # Fix missing libfreetype.so.6 symlink for Java font rendering
-    mkdir -p ~/.local/lib
-    ln -sf /opt/conda/lib/libfreetype.so.6.20.4 ~/.local/lib/libfreetype.so.6
-    export LD_LIBRARY_PATH=~/.local/lib:/opt/conda/lib:\${LD_LIBRARY_PATH:-}
+    # Create symlink in work directory (writable)
+    ln -sf /opt/conda/lib/libfreetype.so.6.20.4 libfreetype.so.6
+    export LD_LIBRARY_PATH=\$PWD:/opt/conda/lib:\${LD_LIBRARY_PATH:-}
     
     fastqc \\
         ${args} \\
