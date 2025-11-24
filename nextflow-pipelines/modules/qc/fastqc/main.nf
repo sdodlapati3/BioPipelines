@@ -55,6 +55,7 @@ process FASTQC {
     
     stub:
     // For testing without running actual FastQC
+    def prefix = task.ext.prefix ?: "${meta.id}"
     """
     touch ${prefix}_fastqc.html
     touch ${prefix}_fastqc.zip
