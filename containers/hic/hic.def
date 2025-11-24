@@ -41,6 +41,8 @@ From: /home/sdodl001_odu_edu/BioPipelines/containers/images/base_1.0.0.sif
 %environment
     export PIPELINE_NAME="hic"
     export PIPELINE_VERSION="1.0.0"
+    # Add conda lib to library path for libfreetype
+    export LD_LIBRARY_PATH="/opt/conda/lib:${LD_LIBRARY_PATH}"
 
 %runscript
     exec /opt/biopipelines/entrypoint.sh "$@"
