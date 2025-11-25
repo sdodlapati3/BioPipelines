@@ -1465,33 +1465,40 @@ def create_interface() -> gr.Blocks:
         </div>
         """)
         
-        # Stats Row
-        with gr.Row():
-            tools_stat = gr.Markdown("🔧 Loading...")
-            modules_stat = gr.Markdown("📦 Loading...")
-            containers_stat = gr.Markdown("🐳 12")
-            analyses_stat = gr.Markdown("🧬 38")
-        
-        # Main Tabs
+        # Main Tabs - Minimalist 3-Tab Design
         with gr.Tabs():
             
-            # ========== Chat Tab ==========
-            with gr.TabItem("💬 Chat & Generate", id="chat"):
+            # ========== WORKSPACE TAB ==========
+            with gr.TabItem("💬 Workspace", id="workspace"):
                 with gr.Row():
-                    with gr.Column(scale=3):
+                    # Main chat area (70%)
+                    with gr.Column(scale=7):
+                        # Stats dashboard at top
+                        with gr.Row():
+                            with gr.Column(scale=1):
+                                tools_stat = gr.Markdown("📊 **9,909** Tools")
+                            with gr.Column(scale=1):
+                                modules_stat = gr.Markdown("📦 **71** Modules")
+                            with gr.Column(scale=1):
+                                containers_stat = gr.Markdown("🐳 **10** Containers")
+                            with gr.Column(scale=1):
+                                analyses_stat = gr.Markdown("🧬 **15** Analysis Types")
+                        
                         chatbot = gr.Chatbot(
-                            label="BioPipelines AI",
-                            height=450,
+                            label="BioPipelines AI Assistant",
+                            height=500,
+                            show_label=False,
                         )
                         
                         with gr.Row():
                             msg_input = gr.Textbox(
                                 label="Your message",
-                                placeholder="Describe the bioinformatics analysis you want to perform...",
+                                placeholder="Describe your bioinformatics analysis... (e.g., 'RNA-seq differential expression for human samples')",
                                 lines=2,
-                                scale=4,
+                                scale=5,
+                                show_label=False,
                             )
-                            send_btn = gr.Button("Send 🚀", variant="primary", scale=1)
+                            send_btn = gr.Button("Send 🚀", variant="primary", scale=1, size="lg")
                         
                         with gr.Accordion("📝 Example Prompts", open=False):
                             gr.Examples(
@@ -1500,82 +1507,60 @@ def create_interface() -> gr.Blocks:
                                 label="Click an example to use it:",
                             )
                     
-                    with gr.Column(scale=1):
+                    # Sidebar (30%)
+                    with gr.Column(scale=3):
+                        gr.Markdown("### 🤖 LLM Provider")
                         provider_dropdown = gr.Dropdown(
                             choices=get_provider_choices(),
                             value=get_provider_choices()[0] if get_provider_choices() else None,
-                            label="🤖 LLM Provider",
+                            label="Model",
                             interactive=True,
+                            show_label=False,
                         )
                         
-                        gr.Markdown("### Quick Actions")
+                        gr.Markdown("---")
+                        gr.Markdown("### 📋 Recent Workflows")
+                        recent_workflows_display = gr.Markdown(
+                            "\n".join([f"- `{w}`" for w in get_available_workflows()[:5]]) 
+                            if get_available_workflows() else "*No workflows yet*"
+                        )
                         
-                        clear_btn = gr.Button("🗑️ Clear Chat", size="sm")
+                        gr.Markdown("---")
+                        gr.Markdown("### ⚡ Quick Actions")
+                        with gr.Column():
+                            clear_btn = gr.Button("🗑️ Clear Chat", size="sm", variant="secondary")
+                            goto_execute_btn = gr.Button("🚀 Go to Execute", size="sm", variant="primary")
                         
+                        gr.Markdown("---")
                         gr.Markdown("""
-                        ### Tips
-                        - Be specific about organism and genome
-                        - Mention specific tools if preferred
-                        - Include sample type (paired-end, etc.)
-                        - Describe comparison groups
+                        ### 💡 Tips
+                        - Be specific about organism
+                        - Mention sample type
+                        - Include comparison groups
+                        - Specify preferred tools
                         """)
             
-            # ========== Tools Tab ==========
-            with gr.TabItem("🔧 Tool Browser", id="tools"):
-                with gr.Row():
-                    tool_search = gr.Textbox(
-                        label="Search Tools",
-                        placeholder="e.g., alignment, variant, fastq...",
-                        scale=3,
-                    )
-                    container_filter = gr.Dropdown(
-                        choices=["", "base", "rna-seq", "dna-seq", "chip-seq", "atac-seq", 
-                                 "scrna-seq", "metagenomics", "methylation", "long-read"],
-                        label="Filter by Container",
-                        scale=1,
-                    )
-                
-                tool_results = gr.Markdown("Enter a search term to find tools...")
-                
-                tool_search.change(
-                    fn=search_tools,
-                    inputs=[tool_search, container_filter],
-                    outputs=tool_results,
-                )
-                container_filter.change(
-                    fn=search_tools,
-                    inputs=[tool_search, container_filter],
-                    outputs=tool_results,
-                )
-            
-            # ========== Modules Tab ==========
-            with gr.TabItem("📦 Modules", id="modules"):
-                modules_display = gr.Markdown(get_modules_by_category())
-                refresh_modules_btn = gr.Button("🔄 Refresh Modules")
-                refresh_modules_btn.click(
-                    fn=get_modules_by_category,
-                    outputs=modules_display,
-                )
-            
-            # ========== Run Pipeline Tab ==========
-            with gr.TabItem("🚀 Run Pipeline", id="run"):
+            # ========== EXECUTE TAB ==========
+            with gr.TabItem("🚀 Execute", id="execute"):
                 gr.Markdown("""
-                ## Run Generated Workflows
-                
-                Submit your generated workflows to the SLURM cluster for execution.
-                Monitor progress in real-time below.
+                ## Execute & Monitor Workflows
+                Submit generated workflows to SLURM and monitor their progress in real-time.
                 """)
                 
                 with gr.Row():
-                    with gr.Column(scale=2):
-                        gr.Markdown("### Submit Pipeline")
+                    # Left: Submission (40%)
+                    with gr.Column(scale=4):
+                        gr.Markdown("### 📤 Submit Pipeline")
                         
                         workflow_dropdown = gr.Dropdown(
                             choices=get_available_workflows(),
                             label="Select Workflow",
                             interactive=True,
                         )
-                        refresh_workflows_btn = gr.Button("🔄 Refresh", size="sm")
+                        
+                        with gr.Row():
+                            refresh_workflows_btn = gr.Button("🔄 Refresh", size="sm")
+                            download_workflow_btn = gr.Button("📥 Download", size="sm", variant="secondary")
                         
                         profile_dropdown = gr.Dropdown(
                             choices=["slurm", "local", "docker", "singularity"],
@@ -1602,281 +1587,319 @@ def create_interface() -> gr.Blocks:
                                 placeholder="Leave empty for default (workflow_dir/results)",
                             )
                         
-                        submit_btn = gr.Button("🚀 Submit Pipeline", variant="primary", size="lg")
+                        submit_btn = gr.Button("🚀 Submit to SLURM", variant="primary", size="lg")
                         submission_result = gr.Markdown("")
+                        
+                        # Download output (initially hidden)
+                        download_file = gr.File(label="Download Workflow", visible=False)
                     
-                    with gr.Column(scale=3):
-                        gr.Markdown("### Job Details")
+                    # Right: Monitoring (60%)
+                    with gr.Column(scale=6):
+                        gr.Markdown("### 📊 Active Jobs")
                         
                         job_selector = gr.Dropdown(
                             choices=[],
                             label="Select Job for Details",
                             interactive=True,
                         )
-                        job_details_display = gr.Markdown("Select a job to view details.")
                         
                         with gr.Row():
                             refresh_details_btn = gr.Button("🔄 Refresh", size="sm")
                             cancel_btn = gr.Button("🛑 Cancel Job", variant="stop", size="sm")
+                        
+                        job_details_display = gr.Markdown("*No jobs running. Submit a workflow to get started.*")
                 
                 gr.Markdown("---")
                 
-                # Monitoring Section
-                gr.Markdown("### 📊 Pipeline Monitor")
-                
+                # Full-width monitoring section
                 with gr.Row():
-                    with gr.Column():
-                        jobs_display = gr.Markdown("No pipeline jobs yet.")
-                    with gr.Column():
-                        slurm_display = gr.Markdown("SLURM queue loading...")
+                    with gr.Column(scale=1):
+                        gr.Markdown("### 📈 Job Queue")
+                        jobs_display = gr.Markdown("*No pipeline jobs yet.*")
+                    with gr.Column(scale=1):
+                        gr.Markdown("### 🖥️ SLURM Queue")
+                        slurm_display = gr.Markdown("*SLURM queue loading...*")
                 
                 with gr.Row():
                     refresh_monitor_btn = gr.Button("🔄 Refresh All", variant="secondary")
                     auto_refresh = gr.Checkbox(label="Auto-refresh every 10s", value=False)
                 
-                # Logs Section
                 gr.Markdown("---")
-                gr.Markdown("### 📄 Job Logs")
                 
+                # Logs section
+                gr.Markdown("### 📄 Job Logs")
                 with gr.Row():
                     log_job_input = gr.Textbox(
-                        label="Job ID (or partial)",
+                        label="Job ID",
                         placeholder="Enter job ID to view logs",
-                        scale=2,
+                        scale=3,
                     )
                     log_lines_slider = gr.Slider(
                         minimum=20,
                         maximum=200,
                         value=50,
                         step=10,
-                        label="Lines to show",
+                        label="Lines",
                         scale=1,
                     )
                     view_logs_btn = gr.Button("View Logs", scale=1)
                 
-                logs_display = gr.Markdown("Enter a job ID to view logs.")
-                
-                # Event handlers for Run tab
-                refresh_workflows_btn.click(
-                    fn=lambda: gr.update(choices=get_available_workflows()),
-                    outputs=workflow_dropdown,
-                )
-                
-                submit_btn.click(
-                    fn=submit_pipeline,
-                    inputs=[
-                        workflow_dropdown,
-                        profile_dropdown,
-                        resume_checkbox,
-                        reads_input,
-                        genome_input,
-                        outdir_input,
-                    ],
-                    outputs=submission_result,
-                ).then(
-                    fn=lambda: gr.update(choices=[j.job_id for j in pipeline_executor.list_jobs()]),
-                    outputs=job_selector,
-                ).then(
-                    fn=refresh_monitoring,
-                    outputs=[jobs_display, slurm_display],
-                )
-                
-                job_selector.change(
-                    fn=get_progress_details,
-                    inputs=job_selector,
-                    outputs=job_details_display,
-                )
-                
-                refresh_details_btn.click(
-                    fn=get_progress_details,
-                    inputs=job_selector,
-                    outputs=job_details_display,
-                )
-                
-                cancel_btn.click(
-                    fn=cancel_selected_job,
-                    inputs=job_selector,
-                    outputs=submission_result,
-                ).then(
-                    fn=refresh_monitoring,
-                    outputs=[jobs_display, slurm_display],
-                )
-                
-                refresh_monitor_btn.click(
-                    fn=refresh_monitoring,
-                    outputs=[jobs_display, slurm_display],
-                ).then(
-                    fn=lambda: gr.update(choices=[j.job_id for j in pipeline_executor.list_jobs()]),
-                    outputs=job_selector,
-                )
-                
-                view_logs_btn.click(
-                    fn=get_job_logs,
-                    inputs=[log_job_input, log_lines_slider],
-                    outputs=logs_display,
-                )
+                logs_display = gr.Markdown("*Enter a job ID above to view logs.*")
             
-            # ========== Download Tab ==========
-            with gr.TabItem("📥 Download", id="download"):
-                gr.Markdown("""
-                ## Download Generated Workflows
+            # ========== ADVANCED TAB ==========
+            with gr.TabItem("⚙️ Advanced", id="advanced"):
+                gr.Markdown("## Advanced Configuration & Exploration")
                 
-                After generating a workflow in the Chat tab, you can download it here.
-                The download includes:
-                - `main.nf` - Main Nextflow workflow
-                - `nextflow.config` - Configuration file
-                - `modules/` - Required modules
-                - `README.md` - Usage instructions
-                """)
-                
-                download_btn = gr.Button("📥 Download Latest Workflow", variant="primary")
-                download_file = gr.File(label="Download")
-                
-                download_btn.click(
-                    fn=download_latest_workflow,
-                    outputs=download_file,
-                )
-            
-            # ========== Settings Tab ==========
-            with gr.TabItem("⚙️ Settings", id="settings"):
-                gr.Markdown("## LLM Configuration")
-                
-                with gr.Row():
-                    with gr.Column():
-                        gr.Markdown("### OpenAI")
-                        openai_status = gr.Markdown(
-                            "✅ Configured" if os.getenv("OPENAI_API_KEY") else "❌ Not configured"
-                        )
-                        gr.Markdown("Set `OPENAI_API_KEY` environment variable")
+                # LLM Configuration
+                with gr.Accordion("🤖 LLM Configuration", open=True):
+                    gr.Markdown("### Provider Settings")
                     
-                    with gr.Column():
-                        gr.Markdown("### vLLM")
-                        vllm_url = gr.Textbox(
-                            label="vLLM Server URL",
-                            value=os.getenv("VLLM_API_BASE", "http://localhost:8000/v1"),
-                            interactive=True,
+                    with gr.Row():
+                        with gr.Column():
+                            gr.Markdown("#### ⚡ Lightning.ai")
+                            lightning_status = gr.Markdown(
+                                "✅ API Key Loaded (30M FREE tokens/month!)" if os.getenv("LIGHTNING_API_KEY") 
+                                else "❌ Not configured - Visit: https://lightning.ai/models"
+                            )
+                        
+                        with gr.Column():
+                            gr.Markdown("#### 🟢 OpenAI")
+                            openai_status = gr.Markdown(
+                                "✅ API Key Loaded" if os.getenv("OPENAI_API_KEY") 
+                                else "❌ Not configured - Set OPENAI_API_KEY"
+                            )
+                    
+                    with gr.Row():
+                        with gr.Column():
+                            gr.Markdown("#### 🟣 vLLM (Local GPU)")
+                            vllm_url = gr.Textbox(
+                                label="Server URL",
+                                value=os.getenv("VLLM_API_BASE", "http://localhost:8000/v1"),
+                                interactive=True,
+                            )
+                        with gr.Column():
+                            gr.Markdown("#### Model Selection")
+                            vllm_model = gr.Dropdown(
+                                choices=["llama3.1-8b", "mistral-7b", "qwen2.5-7b", "codellama-34b"],
+                                label="vLLM Model",
+                                value="mistral-7b",
+                            )
+                
+                # Ensemble Models
+                with gr.Accordion("🧬 Biomedical Model Ensemble", open=False):
+                    gr.Markdown("""
+                    Multi-model ensemble for accurate biomedical intent parsing:
+                    - **BioMistral-7B** (GPU): Primary intent parsing
+                    - **BiomedBERT** (CPU): Entity extraction
+                    - **SciBERT** (CPU): Scientific term recognition
+                    """)
+                    
+                    with gr.Row():
+                        with gr.Column(scale=2):
+                            ensemble_status_display = gr.Markdown(get_ensemble_status())
+                        
+                        with gr.Column(scale=1):
+                            gr.Markdown("### Controls")
+                            refresh_ensemble_btn = gr.Button("🔄 Refresh Status", size="sm")
+                            
+                            with gr.Row():
+                                start_gpu_btn = gr.Button("▶️ Start GPU", variant="primary", size="sm")
+                                stop_gpu_btn = gr.Button("⏹️ Stop GPU", variant="stop", size="sm")
+                            
+                            preload_cpu_btn = gr.Button("📥 Preload BERT Models", size="sm")
+                            ensemble_action_result = gr.Markdown("")
+                
+                # Tool Browser
+                with gr.Accordion("🔧 Tool Browser (9,909 tools)", open=False):
+                    gr.Markdown("Search and explore available bioinformatics tools")
+                    with gr.Row():
+                        tool_search = gr.Textbox(
+                            label="Search Tools",
+                            placeholder="e.g., alignment, variant, fastq...",
+                            scale=3,
                         )
-                        vllm_model = gr.Dropdown(
-                            choices=["llama3.1-8b", "mistral-7b", "qwen2.5-7b", "codellama-34b"],
-                            label="Model",
-                            value="mistral-7b",
+                        container_filter = gr.Dropdown(
+                            choices=["", "base", "rna-seq", "dna-seq", "chip-seq", "atac-seq", 
+                                     "scrna-seq", "metagenomics", "methylation", "long-read"],
+                            label="Container",
+                            scale=1,
                         )
+                    
+                    tool_results = gr.Markdown("*Enter a search term to find tools...*")
+                
+                # Modules Browser
+                with gr.Accordion("📦 Nextflow Modules (71 modules)", open=False):
+                    gr.Markdown("Browse available Nextflow modules by category")
+                    modules_display = gr.Markdown(get_modules_by_category())
+                    refresh_modules_btn = gr.Button("🔄 Refresh Modules", size="sm")
                 
                 gr.Markdown("---")
-                
-                # Ensemble Model Section
-                gr.Markdown("## 🧬 Biomedical Model Ensemble")
-                gr.Markdown("""
-                The ensemble combines multiple biomedical NLP models for accurate intent parsing:
-                - **BioMistral-7B** (GPU): Primary intent parsing with biomedical knowledge
-                - **BiomedBERT** (CPU): Entity extraction from biomedical text  
-                - **SciBERT** (CPU): Scientific term recognition
-                
-                **Strategy:** BERT models run on CPU (always available). BioMistral uses GPU when available, 
-                falls back to CPU-only ensemble otherwise.
-                """)
-                
-                with gr.Row():
-                    with gr.Column(scale=2):
-                        ensemble_status_display = gr.Markdown(get_ensemble_status())
-                    
-                    with gr.Column(scale=1):
-                        gr.Markdown("### Controls")
-                        
-                        refresh_ensemble_btn = gr.Button("🔄 Refresh Status", size="sm")
-                        
-                        gr.Markdown("#### GPU Service (T4)")
-                        with gr.Row():
-                            start_gpu_btn = gr.Button("▶️ Start", variant="primary", size="sm")
-                            stop_gpu_btn = gr.Button("⏹️ Stop", variant="stop", size="sm")
-                        
-                        gr.Markdown("#### CPU Models")
-                        preload_cpu_btn = gr.Button("📥 Preload BERT Models", size="sm")
-                        
-                        ensemble_action_result = gr.Markdown("")
-                
-                # Ensemble event handlers
-                refresh_ensemble_btn.click(
-                    fn=get_ensemble_status,
-                    outputs=ensemble_status_display,
-                )
-                
-                start_gpu_btn.click(
-                    fn=start_biomistral_service,
-                    outputs=ensemble_action_result,
-                ).then(
-                    fn=get_ensemble_status,
-                    outputs=ensemble_status_display,
-                )
-                
-                stop_gpu_btn.click(
-                    fn=stop_biomistral_service,
-                    outputs=ensemble_action_result,
-                ).then(
-                    fn=get_ensemble_status,
-                    outputs=ensemble_status_display,
-                )
-                
-                preload_cpu_btn.click(
-                    fn=preload_cpu_models,
-                    outputs=ensemble_action_result,
-                )
-                
-                gr.Markdown("---")
-                gr.Markdown("### System Info")
-                
+                gr.Markdown("### 📊 System Information")
                 system_info = gr.Markdown(f"""
                 - **Workflow Composer:** {'✅ Available' if COMPOSER_AVAILABLE else '❌ Not installed'}
                 - **Model Orchestrator:** {'✅ Available' if ORCHESTRATOR_AVAILABLE else '❌ Not installed'}
-                - **Generated Workflows Dir:** `{GENERATED_DIR}`
-                - **Python Path:** `{Path(__file__).parent}`
+                - **Generated Workflows:** `{GENERATED_DIR}`
+                - **Environment:** `~/envs/biopipelines`
+                - **Python:** `{Path(__file__).parent}`
                 """)
         
-        # ========== Event Handlers ==========
+        # ========== EVENT HANDLERS ==========
         
-        # Chat submission - update workflow dropdown after each message
+        # Workspace Tab - Chat handlers
         msg_input.submit(
             fn=chat_with_composer,
             inputs=[msg_input, chatbot, provider_dropdown],
-            outputs=[chatbot, msg_input],
+            outputs=[msg_input, chatbot],
+        ).then(
+            fn=lambda: gr.update(choices=[j.job_id for j in pipeline_executor.list_jobs()]),
+            outputs=job_selector,
         ).then(
             fn=lambda: gr.update(choices=get_available_workflows()),
             outputs=workflow_dropdown,
+        ).then(
+            fn=lambda: "\n".join([f"- `{w}`" for w in get_available_workflows()[:5]]) 
+                if get_available_workflows() else "*No workflows yet*",
+            outputs=recent_workflows_display,
         )
         
         send_btn.click(
             fn=chat_with_composer,
             inputs=[msg_input, chatbot, provider_dropdown],
-            outputs=[chatbot, msg_input],
+            outputs=[msg_input, chatbot],
+        ).then(
+            fn=lambda: gr.update(choices=[j.job_id for j in pipeline_executor.list_jobs()]),
+            outputs=job_selector,
         ).then(
             fn=lambda: gr.update(choices=get_available_workflows()),
             outputs=workflow_dropdown,
+        ).then(
+            fn=lambda: "\n".join([f"- `{w}`" for w in get_available_workflows()[:5]]) 
+                if get_available_workflows() else "*No workflows yet*",
+            outputs=recent_workflows_display,
         )
         
-        # Clear chat
         clear_btn.click(
             fn=lambda: ([], ""),
             outputs=[chatbot, msg_input],
         )
         
-        # Load stats on start
-        demo.load(
-            fn=refresh_stats,
-            outputs=[tools_stat, modules_stat, containers_stat, analyses_stat],
+        # Execute Tab - Submission handlers
+        refresh_workflows_btn.click(
+            fn=lambda: gr.update(choices=get_available_workflows()),
+            outputs=workflow_dropdown,
         )
         
-        # Initialize app state on provider change
-        provider_dropdown.change(
-            fn=lambda p: app_state.initialize(extract_provider_key(p)),
-            inputs=[provider_dropdown],
+        download_workflow_btn.click(
+            fn=download_latest_workflow,
+            outputs=download_file,
+        ).then(
+            fn=lambda: gr.update(visible=True),
+            outputs=download_file,
         )
-    
+        
+        submit_btn.click(
+            fn=submit_pipeline,
+            inputs=[
+                workflow_dropdown,
+                profile_dropdown,
+                resume_checkbox,
+                reads_input,
+                genome_input,
+                outdir_input,
+            ],
+            outputs=submission_result,
+        ).then(
+            fn=lambda: gr.update(choices=[j.job_id for j in pipeline_executor.list_jobs()]),
+            outputs=job_selector,
+        ).then(
+            fn=refresh_monitoring,
+            outputs=[jobs_display, slurm_display],
+        )
+        
+        job_selector.change(
+            fn=get_progress_details,
+            inputs=job_selector,
+            outputs=job_details_display,
+        )
+        
+        refresh_details_btn.click(
+            fn=get_progress_details,
+            inputs=job_selector,
+            outputs=job_details_display,
+        )
+        
+        cancel_btn.click(
+            fn=cancel_selected_job,
+            inputs=job_selector,
+            outputs=submission_result,
+        ).then(
+            fn=refresh_monitoring,
+            outputs=[jobs_display, slurm_display],
+        )
+        
+        refresh_monitor_btn.click(
+            fn=refresh_monitoring,
+            outputs=[jobs_display, slurm_display],
+        ).then(
+            fn=lambda: gr.update(choices=[j.job_id for j in pipeline_executor.list_jobs()]),
+            outputs=job_selector,
+        )
+        
+        view_logs_btn.click(
+            fn=get_job_logs,
+            inputs=[log_job_input, log_lines_slider],
+            outputs=logs_display,
+        )
+        
+        # Advanced Tab - Tool/Module search
+        tool_search.change(
+            fn=search_tools,
+            inputs=[tool_search, container_filter],
+            outputs=tool_results,
+        )
+        container_filter.change(
+            fn=search_tools,
+            inputs=[tool_search, container_filter],
+            outputs=tool_results,
+        )
+        
+        refresh_modules_btn.click(
+            fn=get_modules_by_category,
+            outputs=modules_display,
+        )
+        
+        # Advanced Tab - Ensemble controls
+        refresh_ensemble_btn.click(
+            fn=get_ensemble_status,
+            outputs=ensemble_status_display,
+        )
+        
+        start_gpu_btn.click(
+            fn=start_biomistral_service,
+            outputs=ensemble_action_result,
+        ).then(
+            fn=get_ensemble_status,
+            outputs=ensemble_status_display,
+        )
+        
+        stop_gpu_btn.click(
+            fn=stop_biomistral_service,
+            outputs=ensemble_action_result,
+        ).then(
+            fn=get_ensemble_status,
+            outputs=ensemble_status_display,
+        )
+        
+        preload_cpu_btn.click(
+            fn=preload_cpu_models,
+            outputs=ensemble_action_result,
+        ).then(
+            fn=get_ensemble_status,
+            outputs=ensemble_status_display,
+        )
+        
     return demo
 
-
-# ============================================================================
-# Main Entry Point
-# ============================================================================
 
 def main():
     """Launch the Gradio web interface."""
@@ -1925,3 +1948,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
