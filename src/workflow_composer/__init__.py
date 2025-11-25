@@ -78,6 +78,15 @@ from .viz import (
     WorkflowVisualizer
 )
 
+# Monitoring
+from .monitor import (
+    WorkflowMonitor,
+    WorkflowExecution,
+    ProcessExecution,
+    WorkflowStatus,
+    ProcessStatus
+)
+
 __all__ = [
     # Main
     "Composer",
@@ -109,5 +118,12 @@ __all__ = [
     "Reference",
     
     # Visualization
-    "WorkflowVisualizer"
+    "WorkflowVisualizer",
+    
+    # Monitoring
+    "WorkflowMonitor",
+    "WorkflowExecution",
+    "ProcessExecution",
+    "WorkflowStatus",
+    "ProcessStatus"
 ]

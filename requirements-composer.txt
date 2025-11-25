@@ -30,6 +30,11 @@ anthropic>=0.18.0
 requests>=2.28.0
 httpx>=0.24.0
 
+# Web UI
+# ------
+flask>=3.0.0
+flask-cors>=4.0.0
+
 # Visualization (optional)
 # Uncomment for DAG visualization:
 # graphviz>=0.20

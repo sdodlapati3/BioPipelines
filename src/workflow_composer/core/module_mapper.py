@@ -157,17 +157,23 @@ class ModuleMapper:
     Maps tools to Nextflow modules and handles module discovery/creation.
     """
     
-    def __init__(self, module_dir: str):
+    def __init__(self, module_dir: str, additional_dirs: List[str] = None):
         """
         Initialize module mapper.
         
         Args:
-            module_dir: Path to nextflow-modules directory
+            module_dir: Path to primary nextflow-modules directory
+            additional_dirs: Additional module directories to scan
         """
         self.module_dir = Path(module_dir)
+        self.additional_dirs = [Path(d) for d in (additional_dirs or [])]
         self.modules: Dict[str, Module] = {}
         
         self._scan_modules()
+        
+        # Scan additional directories
+        for extra_dir in self.additional_dirs:
+            self._scan_flat_modules(extra_dir)
     
     def _scan_modules(self) -> None:
         """Scan module directory for existing modules."""
@@ -223,6 +229,40 @@ class ModuleMapper:
                 )
         
         logger.info(f"Found {len(self.modules)} modules in {self.module_dir}")
+    
+    def _scan_flat_modules(self, module_dir: Path) -> None:
+        """Scan a directory with flat .nf module files (category/tool.nf style)."""
+        if not module_dir.exists():
+            logger.warning(f"Additional module directory not found: {module_dir}")
+            return
+        
+        count_before = len(self.modules)
+        
+        for category_dir in module_dir.iterdir():
+            if not category_dir.is_dir():
+                continue
+            
+            for module_file in category_dir.glob("*.nf"):
+                module_name = module_file.stem
+                tool_name = module_name.lower()
+                
+                # Skip if already found (nf-core style takes precedence)
+                if tool_name in self.modules:
+                    continue
+                
+                processes = self._extract_processes(module_file)
+                container = TOOL_CONTAINER_MAP.get(tool_name, "base")
+                
+                self.modules[tool_name] = Module(
+                    name=module_name,
+                    path=module_file,
+                    tool_name=tool_name,
+                    container=container,
+                    processes=processes
+                )
+        
+        count_added = len(self.modules) - count_before
+        logger.info(f"Found {count_added} additional modules in {module_dir}")
     
     def _extract_processes(self, module_path: Path) -> List[str]:
         """Extract process names from a module file."""
