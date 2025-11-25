@@ -1,0 +1,246 @@
+# BioPipelines Workflow Composer Configuration
+# =============================================
+#
+# This file configures the AI Workflow Composer for generating
+# bioinformatics pipelines from natural language descriptions.
+
+# LLM Configuration
+# -----------------
+# Configure which LLM provider to use for AI-powered features
+
+llm:
+  # Default provider: ollama, openai, anthropic, huggingface
+  default_provider: ollama
+  
+  # Provider-specific settings
+  providers:
+    ollama:
+      # Local Ollama server
+      base_url: http://localhost:11434
+      # Recommended models: llama3, mistral, codellama, mixtral
+      model: llama3
+      timeout: 120
+      
+    openai:
+      # API key from environment: OPENAI_API_KEY
+      # Or specify directly (not recommended): api_key: sk-...
+      # Recommended models: gpt-4, gpt-4-turbo, gpt-3.5-turbo
+      model: gpt-4
+      temperature: 0.3
+      max_tokens: 4096
+      
+    anthropic:
+      # API key from environment: ANTHROPIC_API_KEY
+      # Recommended models: claude-3-opus, claude-3-sonnet, claude-3-haiku
+      model: claude-3-sonnet-20240229
+      temperature: 0.3
+      max_tokens: 4096
+      
+    huggingface:
+      # API key from environment: HF_TOKEN
+      # Use API mode for cloud inference
+      use_api: true
+      # Or local mode for running models locally
+      # use_api: false
+      # Recommended models: codellama/CodeLlama-34b-Instruct-hf
+      model: codellama/CodeLlama-34b-Instruct-hf
+      device: auto  # auto, cuda, cpu
+
+# Path Configuration
+# ------------------
+# Paths relative to BioPipelines root directory
+
+paths:
+  # Tool catalog with all available bioinformatics tools
+  tool_catalog: data/tool_catalog/
+  
+  # Nextflow module library
+  module_library: pipelines/modules/
+  
+  # Workflow composition patterns
+  workflow_patterns: docs/COMPOSITION_PATTERNS.md
+  
+  # Container definition files
+  containers: containers/
+  
+  # Reference data cache
+  reference_cache: ~/.biopipelines/references/
+  
+  # Generated workflows output
+  output: data/results/generated_workflows/
+
+# Analysis Types
+# --------------
+# Mapping of analysis types to typical tool categories
+
+analysis_types:
+  rnaseq:
+    description: "RNA sequencing differential expression analysis"
+    categories:
+      - qc
+      - alignment
+      - quantification
+      - differential_expression
+    default_tools:
+      qc: [fastqc, multiqc, trimmomatic]
+      alignment: [star, hisat2]
+      quantification: [salmon, htseq-count, featurecounts]
+      differential_expression: [deseq2, edger]
+      
+  scrna:
+    description: "Single-cell RNA sequencing analysis"
+    categories:
+      - qc
+      - alignment
+      - quantification
+      - clustering
+    default_tools:
+      qc: [fastqc]
+      alignment: [starsolo, cellranger]
+      quantification: [alevin]
+      clustering: [scanpy, seurat]
+      
+  chipseq:
+    description: "ChIP-seq peak calling and analysis"
+    categories:
+      - qc
+      - alignment
+      - peak_calling
+      - annotation
+    default_tools:
+      qc: [fastqc]
+      alignment: [bwa, bowtie2]
+      peak_calling: [macs2, homer]
+      annotation: [homer, chipseeker]
+      
+  atacseq:
+    description: "ATAC-seq chromatin accessibility analysis"
+    categories:
+      - qc
+      - alignment
+      - peak_calling
+      - footprinting
+    default_tools:
+      qc: [fastqc]
+      alignment: [bowtie2]
+      peak_calling: [macs2]
+      footprinting: [tobias]
+      
+  dnaseq:
+    description: "DNA sequencing variant calling"
+    categories:
+      - qc
+      - alignment
+      - variant_calling
+      - annotation
+    default_tools:
+      qc: [fastqc]
+      alignment: [bwa, bwa-mem2]
+      variant_calling: [gatk, deepvariant, freebayes]
+      annotation: [vep, snpeff, annovar]
+      
+  methylation:
+    description: "Bisulfite sequencing methylation analysis"
+    categories:
+      - qc
+      - alignment
+      - methylation_calling
+      - differential_methylation
+    default_tools:
+      qc: [fastqc]
+      alignment: [bismark, bsmap]
+      methylation_calling: [bismark]
+      differential_methylation: [methylkit, dmrseq]
+      
+  metagenomics:
+    description: "Metagenomic community analysis"
+    categories:
+      - qc
+      - host_removal
+      - taxonomy
+      - functional
+    default_tools:
+      qc: [fastqc]
+      host_removal: [bowtie2]
+      taxonomy: [kraken2, metaphlan, centrifuge]
+      functional: [humann, prokka]
+      
+  hic:
+    description: "Hi-C chromosome conformation analysis"
+    categories:
+      - qc
+      - alignment
+      - contact_map
+      - tad_calling
+    default_tools:
+      qc: [fastqc]
+      alignment: [bwa]
+      contact_map: [hicexplorer, juicer]
+      tad_calling: [hicexplorer]
+      
+  longread:
+    description: "Long-read sequencing analysis"
+    categories:
+      - qc
+      - alignment
+      - assembly
+      - structural_variants
+    default_tools:
+      qc: [nanoplot, pycoqc]
+      alignment: [minimap2]
+      assembly: [flye, canu]
+      structural_variants: [sniffles, cutesv]
+
+# Workflow Generation Settings
+# ----------------------------
+
+workflow:
+  # Nextflow DSL version
+  dsl_version: 2
+  
+  # Default profile
+  default_profile: singularity
+  
+  # Include MultiQC summary by default
+  include_multiqc: true
+  
+  # Generate workflow visualization
+  generate_dag: true
+  
+  # Output structure
+  output_structure:
+    - main.nf
+    - nextflow.config
+    - modules/
+    - bin/
+    - conf/
+    - README.md
+
+# Reference Data
+# --------------
+# Configure automatic reference data downloading
+
+references:
+  # Preferred source: ensembl, gencode, ucsc
+  preferred_source: ensembl
+  
+  # Default Ensembl release
+  ensembl_release: 111
+  
+  # Common organism aliases
+  organism_aliases:
+    human: homo_sapiens
+    mouse: mus_musculus
+    rat: rattus_norvegicus
+    zebrafish: danio_rerio
+    fly: drosophila_melanogaster
+    worm: caenorhabditis_elegans
+    yeast: saccharomyces_cerevisiae
+
+# Logging
+# -------
+
+logging:
+  level: INFO  # DEBUG, INFO, WARNING, ERROR
+  format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+  file: null  # Set to path to log to file
