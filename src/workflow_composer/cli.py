@@ -249,6 +249,66 @@ def cmd_providers(args):
             print(f"  {status_str} {name}")
 
 
+def cmd_ui(args):
+    """Launch web UI."""
+    setup_logging(args.verbose)
+    
+    ui_type = args.type or "gradio"
+    
+    print(f"\n🧬 Launching BioPipelines Web UI ({ui_type})...\n")
+    
+    if ui_type == "gradio":
+        try:
+            from workflow_composer.web.gradio_app import main as gradio_main
+            # Override sys.argv for gradio
+            import sys
+            sys.argv = ["gradio_app"]
+            if args.port:
+                sys.argv.extend(["--port", str(args.port)])
+            if args.host:
+                sys.argv.extend(["--host", args.host])
+            if args.share:
+                sys.argv.append("--share")
+            gradio_main()
+        except ImportError as e:
+            print(f"Error: Gradio not installed. Run: pip install gradio")
+            print(f"Details: {e}")
+            sys.exit(1)
+    
+    elif ui_type == "flask":
+        try:
+            from workflow_composer.web.app import main as flask_main
+            import sys
+            sys.argv = ["app"]
+            if args.port:
+                sys.argv.extend(["--port", str(args.port)])
+            if args.host:
+                sys.argv.extend(["--host", args.host])
+            flask_main()
+        except ImportError as e:
+            print(f"Error: Flask not installed. Run: pip install flask")
+            sys.exit(1)
+    
+    elif ui_type == "api":
+        try:
+            from workflow_composer.web.api import main as api_main
+            import sys
+            sys.argv = ["api"]
+            if args.port:
+                sys.argv.extend(["--port", str(args.port)])
+            if args.host:
+                sys.argv.extend(["--host", args.host])
+            api_main()
+        except ImportError as e:
+            print(f"Error: FastAPI not installed. Run: pip install fastapi uvicorn")
+            sys.exit(1)
+    
+    else:
+        print(f"Unknown UI type: {ui_type}")
+        print("Available: gradio, flask, api")
+        sys.exit(1)
+
+
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
@@ -291,6 +351,15 @@ def main():
     prov_parser = subparsers.add_parser("providers", help="List LLM providers")
     prov_parser.add_argument("-c", "--check", action="store_true", help="Check availability")
     prov_parser.set_defaults(func=cmd_providers)
+    
+    # UI command
+    ui_parser = subparsers.add_parser("ui", help="Launch web UI")
+    ui_parser.add_argument("-t", "--type", choices=["gradio", "flask", "api"], 
+                          default="gradio", help="UI type (default: gradio)")
+    ui_parser.add_argument("-p", "--port", type=int, help="Port number")
+    ui_parser.add_argument("--host", default="0.0.0.0", help="Host to bind")
+    ui_parser.add_argument("--share", action="store_true", help="Create public link (Gradio only)")
+    ui_parser.set_defaults(func=cmd_ui)
     
     args = parser.parse_args()
     

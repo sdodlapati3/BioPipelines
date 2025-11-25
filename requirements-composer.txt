@@ -43,6 +43,14 @@ httpx>=0.24.0
 flask>=3.0.0
 flask-cors>=4.0.0
 
+# Gradio - Modern chat-based UI (recommended)
+gradio>=4.0.0
+
+# FastAPI - REST API backend
+fastapi>=0.109.0
+uvicorn>=0.27.0
+pydantic>=2.0.0
+
 # Visualization (optional)
 # Uncomment for DAG visualization:
 # graphviz>=0.20

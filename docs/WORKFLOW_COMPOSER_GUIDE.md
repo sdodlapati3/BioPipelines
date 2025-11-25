@@ -5,9 +5,21 @@
 The AI Workflow Composer is an intelligent system that converts natural language descriptions into production-ready Nextflow bioinformatics pipelines. It leverages:
 
 - **9,909 tools** across 12 Singularity containers
-- **71 Nextflow DSL2 modules** covering all major analysis types
+- **71+ Nextflow DSL2 modules** covering all major analysis types
 - **LLM-powered intent parsing** for natural language understanding
 - **Automatic workflow generation** with proper dependencies
+
+### Supported LLM Providers
+
+| Provider | Models | Use Case |
+|----------|--------|----------|
+| **OpenAI** | gpt-4o, gpt-4-turbo, gpt-3.5-turbo | Best quality, cloud-based |
+| **vLLM** | Llama 3.1, Mistral, Qwen, CodeLlama | Self-hosted GPU inference |
+| **HuggingFace** | Any HF model | API, transformers, or vLLM backend |
+| **Anthropic** | Claude 3.5 Sonnet, Opus | Alternative cloud provider |
+| **Ollama** | llama3, mistral, codellama | Local CPU/GPU inference |
+
+See [LLM Setup Guide](LLM_SETUP.md) for detailed configuration.
 
 ## Quick Start
 
@@ -18,16 +30,23 @@ The AI Workflow Composer is an intelligent system that converts natural language
 pip install -r requirements-composer.txt
 
 # Verify installation
-python -c "from src.workflow_composer import Composer; print('OK')"
+python -c "from workflow_composer import Composer; print('OK')"
 ```
 
 ### Generate Your First Workflow
 
 ```python
-from src.workflow_composer import Composer
+from workflow_composer import Composer
+from workflow_composer.llm import get_llm
+
+# Use OpenAI (requires OPENAI_API_KEY)
+llm = get_llm("openai", model="gpt-4o")
+
+# Or use vLLM with Llama (requires running vLLM server)
+# llm = get_llm("vllm", model="llama3.1-8b")
 
 # Initialize composer
-composer = Composer()
+composer = Composer(llm=llm)
 
 # Generate workflow from natural language
 workflow = composer.generate(
@@ -44,14 +63,21 @@ workflow.save("my_rnaseq_workflow/")
 # Generate a workflow
 biocomposer generate "ChIP-seq peak calling for human H3K4me3"
 
+# Use specific LLM provider
+biocomposer generate "RNA-seq DE" --llm openai --model gpt-4o
+biocomposer generate "RNA-seq DE" --llm vllm --model llama3.1-8b
+
 # Interactive chat mode
-biocomposer chat
+biocomposer chat --llm openai
 
 # List available tools
 biocomposer tools --search "alignment"
 
 # List available modules
-biocomposer modules --category alignment
+biocomposer modules --list
+
+# Check LLM providers
+biocomposer providers --check
 ```
 
 ## Architecture

@@ -4,7 +4,35 @@ A comprehensive, production-ready bioinformatics repository for NGS and genomic 
 
 ## Features
 
-**10 Production-Ready Pipelines** (8 fully validated, 2 core complete):
+### 🤖 AI-Powered Workflow Composer
+
+Generate production-ready Nextflow pipelines from natural language descriptions:
+
+```python
+from workflow_composer import Composer
+from workflow_composer.llm import get_llm
+
+# Use OpenAI GPT-4o or local vLLM with Llama/Mistral
+composer = Composer(llm=get_llm("openai"))  # or "vllm"
+
+workflow = composer.generate(
+    "RNA-seq differential expression for mouse, paired-end, treatment vs control"
+)
+workflow.save("my_rnaseq_workflow/")
+```
+
+**LLM Providers:**
+- ✅ **OpenAI** - GPT-4o, GPT-4-turbo (cloud)
+- ✅ **vLLM** - Llama 3.1, Mistral, Qwen on GPUs (self-hosted)
+- ✅ **HuggingFace** - API, transformers, or vLLM backend
+- ✅ **Anthropic** - Claude 3.5 Sonnet, Opus
+- ✅ **Ollama** - Local models
+
+See [LLM Setup Guide](docs/LLM_SETUP.md) for configuration.
+
+### 🧬 10 Production-Ready Pipelines
+
+(8 fully validated, 2 core complete):
 
 - ✅ **DNA-seq**: Variant calling, structural variant detection (VALIDATED)
 - ✅ **RNA-seq**: Differential expression, isoform analysis (VALIDATED)
@@ -79,35 +107,78 @@ See `scripts/README.md` for detailed usage of unified scripts.
 
 ```
 BioPipelines/
-├── pipelines/          # Analysis pipelines (Snakemake workflows)
-│   ├── dna_seq/       # Variant calling with GATK
-│   ├── rna_seq/       # Differential expression with DESeq2
-│   ├── scrna_seq/     # Single-cell analysis with Scanpy
-│   ├── chip_seq/      # Peak calling with MACS2
-│   ├── atac_seq/      # Accessibility analysis
-│   ├── methylation/   # Bisulfite sequencing
-│   ├── hic/           # 3D genome analysis
-│   ├── long_read/     # Long-read SV detection
-│   ├── metagenomics/  # Taxonomic profiling
-│   └── structural_variants/  # SV calling
-├── src/                # Python package (pip install -e .)
-│   └── biopipelines/  # Reusable modules
-├── scripts/            # Utility scripts (download, submit, build)
-├── data/               # Data directory (gitignored)
-│   ├── raw/           # Input FASTQ files
-│   ├── processed/     # Intermediate files
-│   ├── references/    # Genomes, indexes, annotations
-│   └── results/       # Final outputs
-├── docs/               # Documentation
-│   ├── tutorials/     # Step-by-step guides
-│   ├── pipelines/     # Pipeline documentation
-│   └── status/        # Development status
-├── logs/               # Job logs organized by type
-├── tests/              # Test suite
-└── notebooks/          # Jupyter notebooks for exploration
+├── src/workflow_composer/  # AI Workflow Composer (main package)
+│   ├── llm/               # LLM adapters (OpenAI, vLLM, HuggingFace)
+│   ├── core/              # Intent parsing, tool selection, workflow generation
+│   ├── cli.py             # biocomposer CLI
+│   └── composer.py        # Main Composer class
+├── pipelines/             # Analysis pipelines (Snakemake workflows)
+│   ├── dna_seq/           # Variant calling with GATK
+│   ├── rna_seq/           # Differential expression with DESeq2
+│   ├── scrna_seq/         # Single-cell analysis with Scanpy
+│   ├── chip_seq/          # Peak calling with MACS2
+│   └── ...                # More pipelines
+├── containers/            # Singularity container definitions
+├── config/                # Configuration files
+│   └── composer.yaml      # Workflow Composer config
+├── scripts/               # Utility scripts
+│   └── llm/               # vLLM server scripts
+├── data/                  # Data directory (gitignored)
+├── docs/                  # Documentation
+│   ├── LLM_SETUP.md       # LLM integration guide
+│   ├── TUTORIALS.md       # Workflow Composer tutorials
+│   └── COMPOSITION_PATTERNS.md  # 27 workflow patterns
+├── examples/              # Example workflows
+│   └── generated/         # AI-generated workflow examples
+├── logs/                  # Job logs
+└── tests/                 # Test suite
 ```
 
-## Pipelines
+## AI Workflow Composer
+
+### CLI Usage
+
+```bash
+# Generate workflow from natural language
+biocomposer generate "ChIP-seq peak calling for human H3K4me3" -o chipseq_workflow/
+
+# Interactive chat mode
+biocomposer chat --llm openai
+
+# Search available tools
+biocomposer tools --search "alignment"
+
+# List modules
+biocomposer modules --list
+
+# Check LLM providers
+biocomposer providers --check
+```
+
+### Python API
+
+```python
+from workflow_composer import Composer
+from workflow_composer.llm import get_llm, check_providers
+
+# Check available providers
+print(check_providers())
+# {'openai': True, 'vllm': True, 'ollama': False, ...}
+
+# Create composer with specific LLM
+llm = get_llm("openai", model="gpt-4o")
+composer = Composer(llm=llm)
+
+# Generate and save workflow
+workflow = composer.generate(
+    "WGS germline variant calling for human samples"
+)
+workflow.save("variants_workflow/")
+```
+
+See [Workflow Composer Guide](docs/WORKFLOW_COMPOSER_GUIDE.md) for detailed documentation.
+
+## Pipelines (Snakemake)
 
 ### DNA-seq Variant Calling
 - Quality control (FastQC, MultiQC)
@@ -125,16 +196,15 @@ BioPipelines/
 
 ## Documentation
 
-- **[Architecture Review](ARCHITECTURE_REVIEW.md)** - Codebase organization and structure
-- **[Tutorials](docs/tutorials/)** - Step-by-step pipeline guides
-- **[Pipeline Status](docs/status/)** - Development and validation status
-- **[Infrastructure](docs/infrastructure/)** - HPC and cloud setup guides
-- **[API Reference](docs/api/)** - Python module documentation
+- **[LLM Setup Guide](docs/LLM_SETUP.md)** - Configure OpenAI/vLLM
+- **[Workflow Composer Guide](docs/WORKFLOW_COMPOSER_GUIDE.md)** - Full API reference
+- **[Tutorials](docs/TUTORIALS.md)** - Step-by-step guides
+- **[Composition Patterns](docs/COMPOSITION_PATTERNS.md)** - 27 workflow examples
+- **[Architecture Review](ARCHITECTURE_REVIEW.md)** - Codebase organization
 
 ### Quick Links
-- [DNA-seq Tutorial](docs/tutorials/dna_seq_tutorial.md)
-- [RNA-seq Tutorial](docs/tutorials/rna_seq_tutorial.md)
-- [scRNA-seq Tutorial](docs/tutorials/scrna_seq_tutorial.md)
+- [LLM Setup](docs/LLM_SETUP.md)
+- [Workflow Tutorials](docs/TUTORIALS.md)
 - [Troubleshooting Guide](docs/status/CLEANUP_COMPLETED.md)
 
 ## Requirements

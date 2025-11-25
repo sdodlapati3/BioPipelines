@@ -1,11 +1,12 @@
 #!/bin/bash
 #SBATCH --job-name=vllm-server
+#SBATCH --partition=a100flex
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
 #SBATCH --mem=64G
-#SBATCH --time=24:00:00
+#SBATCH --time=4:00:00
 #SBATCH --output=logs/slurm/vllm_server_%j.log
 #SBATCH --error=logs/slurm/vllm_server_%j.err
 # ============================================================================

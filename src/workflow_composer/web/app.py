@@ -25,8 +25,15 @@ from flask_cors import CORS
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from src.workflow_composer import Composer
-from src.workflow_composer.core import ToolSelector, ModuleMapper
+try:
+    from workflow_composer import Composer
+    from workflow_composer.core import ToolSelector, ModuleMapper
+    COMPOSER_AVAILABLE = True
+except ImportError:
+    COMPOSER_AVAILABLE = False
+    Composer = None
+    ToolSelector = None
+    ModuleMapper = None
 
 app = Flask(__name__)
 CORS(app)
@@ -225,8 +232,9 @@ INDEX_HTML = """
                             <div class="col-md-6">
                                 <label class="form-label">LLM Provider:</label>
                                 <select id="provider-select" class="form-select">
+                                    <option value="openai">OpenAI (GPT-4o)</option>
+                                    <option value="vllm">vLLM (Local GPU)</option>
                                     <option value="ollama">Ollama (Local)</option>
-                                    <option value="openai">OpenAI</option>
                                     <option value="anthropic">Anthropic</option>
                                 </select>
                             </div>
