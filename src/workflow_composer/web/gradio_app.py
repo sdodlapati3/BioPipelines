@@ -13,6 +13,8 @@ Features:
 - Multiple LLM provider support (OpenAI, vLLM, Ollama)
 - File upload for sample sheets
 - Download generated workflows
+- Pipeline execution with SLURM integration
+- Real-time progress monitoring
 
 Usage:
     python -m workflow_composer.web.gradio_app
@@ -24,9 +26,15 @@ import os
 import json
 import tempfile
 import shutil
+import subprocess
+import threading
+import time
+import re
 from pathlib import Path
 from datetime import datetime
 from typing import Generator, Optional, List, Dict, Any, Tuple
+from dataclasses import dataclass, field
+from enum import Enum
 
 import gradio as gr
 
@@ -42,6 +50,324 @@ except ImportError:
 
 
 # ============================================================================
+# Pipeline Execution Classes
+# ============================================================================
+
+class JobStatus(Enum):
+    """Pipeline job status."""
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+@dataclass
+class PipelineJob:
+    """Represents a running or completed pipeline job."""
+    job_id: str
+    workflow_dir: str
+    workflow_name: str
+    slurm_job_id: Optional[str] = None
+    status: JobStatus = JobStatus.PENDING
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+    progress: float = 0.0
+    current_process: str = ""
+    completed_processes: List[str] = field(default_factory=list)
+    total_processes: int = 0
+    log_file: Optional[str] = None
+    error_message: Optional[str] = None
+    nextflow_run_name: Optional[str] = None
+
+
+class PipelineExecutor:
+    """Manages pipeline execution and monitoring."""
+    
+    def __init__(self):
+        self.jobs: Dict[str, PipelineJob] = {}
+        self.monitoring_threads: Dict[str, threading.Thread] = {}
+        
+    def submit_job(
+        self,
+        workflow_dir: str,
+        profile: str = "slurm",
+        resume: bool = False,
+        params: Dict[str, str] = None,
+    ) -> PipelineJob:
+        """Submit a pipeline job to SLURM."""
+        workflow_path = Path(workflow_dir)
+        
+        if not workflow_path.exists():
+            raise ValueError(f"Workflow directory not found: {workflow_dir}")
+        
+        main_nf = workflow_path / "main.nf"
+        if not main_nf.exists():
+            raise ValueError(f"main.nf not found in {workflow_dir}")
+        
+        # Generate job ID
+        job_id = f"job_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        workflow_name = workflow_path.name
+        
+        # Create log directory
+        log_dir = workflow_path / "logs"
+        log_dir.mkdir(exist_ok=True)
+        log_file = log_dir / f"nextflow_{job_id}.log"
+        
+        # Build Nextflow command
+        cmd = [
+            "nextflow", "run", str(main_nf),
+            "-profile", profile,
+            "-with-report", str(log_dir / "report.html"),
+            "-with-timeline", str(log_dir / "timeline.html"),
+            "-with-dag", str(log_dir / "dag.png"),
+        ]
+        
+        if resume:
+            cmd.append("-resume")
+        
+        if params:
+            for key, value in params.items():
+                cmd.extend(["--" + key, str(value)])
+        
+        # Create SLURM batch script
+        sbatch_script = workflow_path / f"run_{job_id}.sbatch"
+        sbatch_content = f"""#!/bin/bash
+#SBATCH --job-name=nf_{workflow_name}
+#SBATCH --output={log_dir}/slurm_%j.out
+#SBATCH --error={log_dir}/slurm_%j.err
+#SBATCH --time=48:00:00
+#SBATCH --mem=8G
+#SBATCH --cpus-per-task=2
+#SBATCH --partition=cpuspot
+
+# Load required modules
+module load nextflow 2>/dev/null || true
+module load singularity 2>/dev/null || true
+
+# Activate conda if available
+source ~/miniconda3/etc/profile.d/conda.sh 2>/dev/null || true
+conda activate biopipelines 2>/dev/null || true
+
+# Change to workflow directory
+cd {workflow_path}
+
+# Run Nextflow
+{' '.join(cmd)} 2>&1 | tee {log_file}
+
+echo "Pipeline finished at $(date)"
+"""
+        
+        sbatch_script.write_text(sbatch_content)
+        sbatch_script.chmod(0o755)
+        
+        # Submit to SLURM
+        try:
+            result = subprocess.run(
+                ["sbatch", str(sbatch_script)],
+                capture_output=True,
+                text=True,
+                cwd=workflow_path,
+            )
+            
+            if result.returncode != 0:
+                raise RuntimeError(f"SLURM submission failed: {result.stderr}")
+            
+            # Extract SLURM job ID
+            # Output like: "Submitted batch job 12345"
+            match = re.search(r"Submitted batch job (\d+)", result.stdout)
+            slurm_job_id = match.group(1) if match else None
+            
+        except FileNotFoundError:
+            # SLURM not available, run directly
+            slurm_job_id = None
+            # Start in background
+            subprocess.Popen(
+                cmd,
+                cwd=workflow_path,
+                stdout=open(log_file, 'w'),
+                stderr=subprocess.STDOUT,
+            )
+        
+        # Create job record
+        job = PipelineJob(
+            job_id=job_id,
+            workflow_dir=str(workflow_path),
+            workflow_name=workflow_name,
+            slurm_job_id=slurm_job_id,
+            status=JobStatus.PENDING,
+            started_at=datetime.now(),
+            log_file=str(log_file),
+        )
+        
+        self.jobs[job_id] = job
+        
+        # Start monitoring thread
+        monitor_thread = threading.Thread(
+            target=self._monitor_job,
+            args=(job_id,),
+            daemon=True,
+        )
+        monitor_thread.start()
+        self.monitoring_threads[job_id] = monitor_thread
+        
+        return job
+    
+    def _monitor_job(self, job_id: str):
+        """Monitor a running job and update its status."""
+        job = self.jobs.get(job_id)
+        if not job:
+            return
+        
+        while job.status in (JobStatus.PENDING, JobStatus.RUNNING):
+            time.sleep(5)  # Check every 5 seconds
+            
+            # Check SLURM status if we have a SLURM job ID
+            if job.slurm_job_id:
+                try:
+                    result = subprocess.run(
+                        ["squeue", "-j", job.slurm_job_id, "-h", "-o", "%T"],
+                        capture_output=True,
+                        text=True,
+                    )
+                    status_str = result.stdout.strip()
+                    
+                    if not status_str:
+                        # Job not in queue - check if completed or failed
+                        sacct_result = subprocess.run(
+                            ["sacct", "-j", job.slurm_job_id, "-n", "-o", "State", "-P"],
+                            capture_output=True,
+                            text=True,
+                        )
+                        final_status = sacct_result.stdout.strip().split('\n')[0]
+                        
+                        if "COMPLETED" in final_status:
+                            job.status = JobStatus.COMPLETED
+                            job.progress = 100.0
+                        elif "FAILED" in final_status or "CANCELLED" in final_status:
+                            job.status = JobStatus.FAILED if "FAILED" in final_status else JobStatus.CANCELLED
+                        job.finished_at = datetime.now()
+                        break
+                    elif status_str == "RUNNING":
+                        job.status = JobStatus.RUNNING
+                    elif status_str == "PENDING":
+                        job.status = JobStatus.PENDING
+                        
+                except Exception:
+                    pass
+            
+            # Parse log file for progress
+            if job.log_file and Path(job.log_file).exists():
+                self._parse_nextflow_log(job)
+        
+    def _parse_nextflow_log(self, job: PipelineJob):
+        """Parse Nextflow log file to extract progress."""
+        try:
+            log_path = Path(job.log_file)
+            if not log_path.exists():
+                return
+            
+            content = log_path.read_text()
+            
+            # Look for process execution lines
+            # Format: [hash] process > PROCESS_NAME (sample) [100%] 1 of 1
+            process_pattern = r'\[[\w/]+\]\s+process\s+>\s+(\w+).*\[(\d+)%\]\s+(\d+)\s+of\s+(\d+)'
+            matches = re.findall(process_pattern, content)
+            
+            if matches:
+                # Get latest progress
+                completed = set()
+                current = ""
+                total_done = 0
+                total_all = 0
+                
+                for process_name, pct, done, total in matches:
+                    current = process_name
+                    if int(pct) == 100:
+                        completed.add(process_name)
+                    total_done = max(total_done, int(done))
+                    total_all = max(total_all, int(total))
+                
+                job.current_process = current
+                job.completed_processes = list(completed)
+                
+                if total_all > 0:
+                    job.progress = (total_done / total_all) * 100
+            
+            # Check for completion
+            if "Pipeline completed" in content or "Workflow completed" in content:
+                job.status = JobStatus.COMPLETED
+                job.progress = 100.0
+                job.finished_at = datetime.now()
+            elif "Error executing process" in content or "Pipeline failed" in content:
+                job.status = JobStatus.FAILED
+                job.finished_at = datetime.now()
+                # Extract error
+                error_match = re.search(r'Error executing process.*?(?=\n\n|\Z)', content, re.DOTALL)
+                if error_match:
+                    job.error_message = error_match.group()[:500]
+                    
+        except Exception as e:
+            print(f"Error parsing log: {e}")
+    
+    def get_job_status(self, job_id: str) -> Optional[PipelineJob]:
+        """Get status of a specific job."""
+        return self.jobs.get(job_id)
+    
+    def list_jobs(self) -> List[PipelineJob]:
+        """List all jobs."""
+        return list(self.jobs.values())
+    
+    def cancel_job(self, job_id: str) -> bool:
+        """Cancel a running job."""
+        job = self.jobs.get(job_id)
+        if not job:
+            return False
+        
+        if job.slurm_job_id:
+            try:
+                subprocess.run(["scancel", job.slurm_job_id], check=True)
+                job.status = JobStatus.CANCELLED
+                job.finished_at = datetime.now()
+                return True
+            except Exception:
+                return False
+        
+        return False
+    
+    def get_slurm_jobs(self) -> List[Dict[str, str]]:
+        """Get all SLURM jobs for current user."""
+        try:
+            result = subprocess.run(
+                ["squeue", "-u", os.environ.get("USER", ""), "-h", 
+                 "-o", "%i|%j|%T|%M|%P|%R"],
+                capture_output=True,
+                text=True,
+            )
+            
+            jobs = []
+            for line in result.stdout.strip().split('\n'):
+                if line:
+                    parts = line.split('|')
+                    if len(parts) >= 6:
+                        jobs.append({
+                            "job_id": parts[0],
+                            "name": parts[1],
+                            "status": parts[2],
+                            "time": parts[3],
+                            "partition": parts[4],
+                            "node": parts[5],
+                        })
+            return jobs
+        except Exception:
+            return []
+
+
+# Global executor instance
+pipeline_executor = PipelineExecutor()
+
+
+# ============================================================================
 # Configuration
 # ============================================================================
 
@@ -49,18 +375,35 @@ BASE_DIR = Path(__file__).parent.parent.parent.parent
 GENERATED_DIR = BASE_DIR / "generated_workflows"
 GENERATED_DIR.mkdir(exist_ok=True)
 
-# Theme colors
-THEME = gr.themes.Soft(
-    primary_hue="emerald",
-    secondary_hue="blue",
-    neutral_hue="slate",
-    font=gr.themes.GoogleFont("Inter"),
-).set(
-    button_primary_background_fill="linear-gradient(135deg, #059669, #10b981)",
-    button_primary_background_fill_hover="linear-gradient(135deg, #047857, #059669)",
-    block_title_text_color="#1e293b",
-    block_label_text_color="#475569",
-)
+# Custom CSS for styling (Gradio 6.x compatible)
+CUSTOM_CSS = """
+.main-header {
+    text-align: center;
+    padding: 20px;
+    background: linear-gradient(135deg, #059669 0%, #3b82f6 100%);
+    border-radius: 12px;
+    margin-bottom: 20px;
+}
+.main-header h1 {
+    color: white !important;
+    margin: 0;
+    font-size: 2.2em;
+}
+.main-header p {
+    color: rgba(255,255,255,0.9) !important;
+    margin: 5px 0 0 0;
+}
+.stat-box {
+    text-align: center;
+    padding: 15px;
+    background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+}
+footer {
+    display: none !important;
+}
+"""
 
 # Analysis type descriptions for better UX
 ANALYSIS_EXAMPLES = {
@@ -88,6 +431,7 @@ class AppState:
         self.module_mapper: Optional[ModuleMapper] = None
         self.current_provider = "openai"
         self.chat_history: List[Tuple[str, str]] = []
+        self.last_generated_workflow: Optional[str] = None  # Track last workflow for quick run
         
     def initialize(self, provider: str = "openai", model: str = None):
         """Initialize or reinitialize with a specific provider."""
@@ -191,12 +535,13 @@ def extract_provider_key(choice: str) -> str:
 
 def chat_with_composer(
     message: str,
-    history: List[Tuple[str, str]],
+    history: List[Dict[str, str]],
     provider: str,
-) -> Generator[Tuple[List[Tuple[str, str]], str], None, None]:
+) -> Generator[Tuple[List[Dict[str, str]], str], None, None]:
     """
     Chat with the AI workflow composer.
     Streams responses for better UX.
+    Uses Gradio 6.0 message format: [{"role": "user/assistant", "content": "..."}]
     """
     if not message.strip():
         yield history, ""
@@ -209,12 +554,13 @@ def chat_with_composer(
     if app_state.composer is None or app_state.current_provider != provider_key:
         success, msg = app_state.initialize(provider_key)
         if not success:
-            history.append((message, f"❌ Error: {msg}"))
+            history.append({"role": "user", "content": message})
+            history.append({"role": "assistant", "content": f"❌ Error: {msg}"})
             yield history, ""
             return
     
     # Add user message to history
-    history.append((message, ""))
+    history.append({"role": "user", "content": message})
     yield history, ""
     
     # Check if this is a workflow generation request
@@ -229,7 +575,8 @@ def chat_with_composer(
             response_parts = []
             
             # First, parse the intent
-            yield history[:-1] + [(message, "🔍 Parsing your request...")], ""
+            history.append({"role": "assistant", "content": "🔍 Parsing your request..."})
+            yield history, ""
             
             intent = app_state.composer.parse_intent(message)
             intent_info = f"""
@@ -241,7 +588,7 @@ def chat_with_composer(
 
 """
             response_parts.append(intent_info)
-            history[-1] = (message, "".join(response_parts) + "🔧 Checking tool availability...")
+            history[-1] = {"role": "assistant", "content": "".join(response_parts) + "🔧 Checking tool availability..."}
             yield history, ""
             
             # Check readiness
@@ -257,7 +604,7 @@ def chat_with_composer(
 
 """
                 response_parts.append(readiness_info)
-                history[-1] = (message, "".join(response_parts) + "⚙️ Generating workflow...")
+                history[-1] = {"role": "assistant", "content": "".join(response_parts) + "⚙️ Generating workflow..."}
                 yield history, ""
                 
                 # Generate the workflow
@@ -265,6 +612,9 @@ def chat_with_composer(
                 output_dir = GENERATED_DIR / workflow_id
                 
                 workflow = app_state.composer.generate(message, output_dir=str(output_dir))
+                
+                # Track last generated workflow for quick run
+                app_state.last_generated_workflow = str(output_dir)
                 
                 # Format response
                 workflow_info = f"""🎉 **Workflow Generated!**
@@ -290,7 +640,7 @@ def chat_with_composer(
 Please provide more details or check tool availability.
 """)
             
-            history[-1] = (message, "".join(response_parts))
+            history[-1] = {"role": "assistant", "content": "".join(response_parts)}
             yield history, ""
             
         else:
@@ -308,25 +658,26 @@ Be concise but helpful. Use markdown formatting."""
                 
                 messages = [Message.system(system_msg)]
                 
-                # Add chat history
-                for user_msg, assistant_msg in history[:-1]:
-                    messages.append(Message.user(user_msg))
-                    if assistant_msg:
-                        messages.append(Message.assistant(assistant_msg))
+                # Add chat history (convert from new format)
+                for msg in history[:-1]:  # Exclude last user message we just added
+                    if msg["role"] == "user":
+                        messages.append(Message.user(msg["content"]))
+                    elif msg["role"] == "assistant":
+                        messages.append(Message.assistant(msg["content"]))
                 
                 messages.append(Message.user(message))
                 
                 # Get response (streaming if supported)
                 response = app_state.composer.llm.chat(messages)
-                history[-1] = (message, response.content)
+                history.append({"role": "assistant", "content": response.content})
                 yield history, ""
             else:
-                history[-1] = (message, "I'm not fully initialized. Please select an LLM provider.")
+                history.append({"role": "assistant", "content": "I'm not fully initialized. Please select an LLM provider."})
                 yield history, ""
                 
     except Exception as e:
         error_msg = f"❌ Error: {str(e)}"
-        history[-1] = (message, error_msg)
+        history.append({"role": "assistant", "content": error_msg})
         yield history, ""
 
 
@@ -447,6 +798,250 @@ def refresh_stats() -> Tuple[str, str, str, str]:
 
 
 # ============================================================================
+# Pipeline Execution Functions
+# ============================================================================
+
+def get_available_workflows() -> List[str]:
+    """Get list of available workflows to run."""
+    try:
+        workflows = []
+        for d in sorted(GENERATED_DIR.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
+            if d.is_dir() and (d / "main.nf").exists():
+                workflows.append(d.name)
+        return workflows[:20]  # Limit to 20 most recent
+    except Exception:
+        return []
+
+
+def submit_pipeline(
+    workflow_name: str,
+    profile: str,
+    resume: bool,
+    reads_path: str,
+    genome_path: str,
+    outdir: str,
+) -> str:
+    """Submit a pipeline to SLURM."""
+    if not workflow_name:
+        return "❌ Please select a workflow to run"
+    
+    workflow_dir = GENERATED_DIR / workflow_name
+    if not workflow_dir.exists():
+        return f"❌ Workflow not found: {workflow_name}"
+    
+    # Build parameters
+    params = {}
+    if reads_path.strip():
+        params["reads"] = reads_path.strip()
+    if genome_path.strip():
+        params["genome"] = genome_path.strip()
+    if outdir.strip():
+        params["outdir"] = outdir.strip()
+    else:
+        params["outdir"] = str(workflow_dir / "results")
+    
+    try:
+        job = pipeline_executor.submit_job(
+            workflow_dir=str(workflow_dir),
+            profile=profile,
+            resume=resume,
+            params=params,
+        )
+        
+        if job.slurm_job_id:
+            return f"""✅ **Pipeline Submitted!**
+
+| Field | Value |
+|-------|-------|
+| **Job ID** | `{job.job_id}` |
+| **SLURM Job** | `{job.slurm_job_id}` |
+| **Workflow** | `{job.workflow_name}` |
+| **Status** | 🟡 {job.status.value} |
+| **Log File** | `{job.log_file}` |
+
+Use the **Monitor** section below to track progress.
+"""
+        else:
+            return f"""✅ **Pipeline Started (Local)**
+
+| Field | Value |
+|-------|-------|
+| **Job ID** | `{job.job_id}` |
+| **Workflow** | `{job.workflow_name}` |
+| **Status** | 🟡 {job.status.value} |
+| **Log File** | `{job.log_file}` |
+
+Note: SLURM not available, running locally.
+"""
+    except Exception as e:
+        return f"❌ **Submission Failed**\n\nError: {str(e)}"
+
+
+def get_job_status_display() -> str:
+    """Get formatted display of all job statuses."""
+    jobs = pipeline_executor.list_jobs()
+    
+    if not jobs:
+        return "No pipeline jobs submitted yet. Submit a pipeline above to get started."
+    
+    output = "## 📊 Pipeline Jobs\n\n"
+    
+    # Status icons
+    status_icons = {
+        JobStatus.PENDING: "🟡",
+        JobStatus.RUNNING: "🔵",
+        JobStatus.COMPLETED: "✅",
+        JobStatus.FAILED: "❌",
+        JobStatus.CANCELLED: "⚪",
+    }
+    
+    output += "| Status | Job ID | Workflow | Progress | Current Process | Time |\n"
+    output += "|--------|--------|----------|----------|-----------------|------|\n"
+    
+    for job in sorted(jobs, key=lambda j: j.started_at or datetime.min, reverse=True):
+        icon = status_icons.get(job.status, "⚪")
+        
+        # Calculate runtime
+        if job.started_at:
+            end_time = job.finished_at or datetime.now()
+            duration = end_time - job.started_at
+            time_str = str(duration).split('.')[0]  # Remove microseconds
+        else:
+            time_str = "-"
+        
+        progress_bar = f"{job.progress:.0f}%"
+        current = job.current_process[:20] if job.current_process else "-"
+        
+        output += f"| {icon} {job.status.value} | `{job.job_id[-15:]}` | {job.workflow_name[:15]} | {progress_bar} | {current} | {time_str} |\n"
+    
+    return output
+
+
+def get_slurm_queue_display() -> str:
+    """Get display of SLURM queue for current user."""
+    jobs = pipeline_executor.get_slurm_jobs()
+    
+    if not jobs:
+        return "No SLURM jobs in queue."
+    
+    output = "## 🖥️ SLURM Queue\n\n"
+    output += "| Job ID | Name | Status | Time | Partition | Node |\n"
+    output += "|--------|------|--------|------|-----------|------|\n"
+    
+    for job in jobs:
+        status_icon = "🔵" if job["status"] == "RUNNING" else "🟡"
+        output += f"| {job['job_id']} | {job['name'][:15]} | {status_icon} {job['status']} | {job['time']} | {job['partition']} | {job['node']} |\n"
+    
+    return output
+
+
+def get_job_logs(job_id: str, tail_lines: int = 50) -> str:
+    """Get recent log output for a job."""
+    job = pipeline_executor.get_job_status(job_id)
+    
+    if not job:
+        return f"Job not found: {job_id}"
+    
+    if not job.log_file or not Path(job.log_file).exists():
+        return "Log file not available yet. The job may still be starting."
+    
+    try:
+        # Read last N lines
+        with open(job.log_file, 'r') as f:
+            lines = f.readlines()
+            recent = lines[-tail_lines:] if len(lines) > tail_lines else lines
+        
+        output = f"## 📄 Logs for `{job.job_id}`\n\n"
+        output += f"*Showing last {len(recent)} lines from `{job.log_file}`*\n\n"
+        output += "```\n"
+        output += "".join(recent)
+        output += "\n```"
+        
+        return output
+    except Exception as e:
+        return f"Error reading log: {e}"
+
+
+def cancel_selected_job(job_id: str) -> str:
+    """Cancel a selected job."""
+    if not job_id:
+        return "Please enter a job ID to cancel."
+    
+    # Find full job ID if partial
+    matching_jobs = [j for j in pipeline_executor.list_jobs() if job_id in j.job_id]
+    
+    if not matching_jobs:
+        return f"No job found matching: {job_id}"
+    
+    job = matching_jobs[0]
+    
+    if job.status not in (JobStatus.PENDING, JobStatus.RUNNING):
+        return f"Job `{job.job_id}` is already {job.status.value}."
+    
+    if pipeline_executor.cancel_job(job.job_id):
+        return f"✅ Job `{job.job_id}` has been cancelled."
+    else:
+        return f"❌ Failed to cancel job `{job.job_id}`."
+
+
+def get_progress_details(job_id: str) -> str:
+    """Get detailed progress for a specific job."""
+    job = pipeline_executor.get_job_status(job_id)
+    
+    if not job:
+        return "Select a job to view progress details."
+    
+    status_icons = {
+        JobStatus.PENDING: "🟡",
+        JobStatus.RUNNING: "🔵",
+        JobStatus.COMPLETED: "✅",
+        JobStatus.FAILED: "❌",
+        JobStatus.CANCELLED: "⚪",
+    }
+    
+    icon = status_icons.get(job.status, "⚪")
+    
+    output = f"""## {icon} Job Details: `{job.job_id}`
+
+| Field | Value |
+|-------|-------|
+| **Workflow** | `{job.workflow_name}` |
+| **Status** | {job.status.value} |
+| **SLURM Job** | `{job.slurm_job_id or 'N/A'}` |
+| **Progress** | {job.progress:.1f}% |
+| **Started** | {job.started_at.strftime('%Y-%m-%d %H:%M:%S') if job.started_at else 'N/A'} |
+| **Finished** | {job.finished_at.strftime('%Y-%m-%d %H:%M:%S') if job.finished_at else 'Running...'} |
+
+### Current Process
+`{job.current_process or 'N/A'}`
+
+### Completed Processes
+"""
+    
+    if job.completed_processes:
+        for proc in job.completed_processes:
+            output += f"- ✅ `{proc}`\n"
+    else:
+        output += "*No processes completed yet*\n"
+    
+    if job.error_message:
+        output += f"\n### ❌ Error\n```\n{job.error_message}\n```"
+    
+    # Progress bar visualization
+    filled = int(job.progress / 5)
+    empty = 20 - filled
+    progress_bar = "█" * filled + "░" * empty
+    output += f"\n### Progress Bar\n`[{progress_bar}]` {job.progress:.0f}%"
+    
+    return output
+
+
+def refresh_monitoring() -> Tuple[str, str]:
+    """Refresh all monitoring displays."""
+    return get_job_status_display(), get_slurm_queue_display()
+
+
+# ============================================================================
 # Gradio Interface
 # ============================================================================
 
@@ -455,59 +1050,22 @@ def create_interface() -> gr.Blocks:
     
     with gr.Blocks(
         title="BioPipelines - AI Workflow Composer",
-        theme=THEME,
-        css="""
-        .main-header {
-            text-align: center;
-            padding: 20px;
-            background: linear-gradient(135deg, #059669 0%, #3b82f6 100%);
-            border-radius: 12px;
-            margin-bottom: 20px;
-        }
-        .main-header h1 {
-            color: white !important;
-            margin: 0;
-            font-size: 2.2em;
-        }
-        .main-header p {
-            color: rgba(255,255,255,0.9) !important;
-            margin: 5px 0 0 0;
-        }
-        .stat-box {
-            text-align: center;
-            padding: 15px;
-            background: linear-gradient(135deg, #f8fafc, #f1f5f9);
-            border-radius: 10px;
-            border: 1px solid #e2e8f0;
-        }
-        .stat-box .stat-number {
-            font-size: 1.8em;
-            font-weight: bold;
-            color: #059669;
-        }
-        .example-btn {
-            font-size: 0.9em !important;
-        }
-        footer {
-            display: none !important;
-        }
-        """
     ) as demo:
         
         # Header
         gr.HTML("""
-        <div class="main-header">
-            <h1>🧬 BioPipelines</h1>
-            <p>AI-Powered Bioinformatics Workflow Composer</p>
+        <div style="text-align: center; padding: 20px; background: linear-gradient(135deg, #059669 0%, #3b82f6 100%); border-radius: 12px; margin-bottom: 20px;">
+            <h1 style="color: white; margin: 0; font-size: 2.2em;">🧬 BioPipelines</h1>
+            <p style="color: rgba(255,255,255,0.9); margin: 5px 0 0 0;">AI-Powered Bioinformatics Workflow Composer</p>
         </div>
         """)
         
         # Stats Row
         with gr.Row():
-            tools_stat = gr.Markdown("🔧 Loading...", elem_classes=["stat-box"])
-            modules_stat = gr.Markdown("📦 Loading...", elem_classes=["stat-box"])
-            containers_stat = gr.Markdown("🐳 12", elem_classes=["stat-box"])
-            analyses_stat = gr.Markdown("🧬 38", elem_classes=["stat-box"])
+            tools_stat = gr.Markdown("🔧 Loading...")
+            modules_stat = gr.Markdown("📦 Loading...")
+            containers_stat = gr.Markdown("🐳 12")
+            analyses_stat = gr.Markdown("🧬 38")
         
         # Main Tabs
         with gr.Tabs():
@@ -519,8 +1077,6 @@ def create_interface() -> gr.Blocks:
                         chatbot = gr.Chatbot(
                             label="BioPipelines AI",
                             height=450,
-                            show_copy_button=True,
-                            avatar_images=(None, "https://raw.githubusercontent.com/gradio-app/gradio/main/gradio/icons/logo.png"),
                         )
                         
                         with gr.Row():
@@ -594,6 +1150,165 @@ def create_interface() -> gr.Blocks:
                 refresh_modules_btn.click(
                     fn=get_modules_by_category,
                     outputs=modules_display,
+                )
+            
+            # ========== Run Pipeline Tab ==========
+            with gr.TabItem("🚀 Run Pipeline", id="run"):
+                gr.Markdown("""
+                ## Run Generated Workflows
+                
+                Submit your generated workflows to the SLURM cluster for execution.
+                Monitor progress in real-time below.
+                """)
+                
+                with gr.Row():
+                    with gr.Column(scale=2):
+                        gr.Markdown("### Submit Pipeline")
+                        
+                        workflow_dropdown = gr.Dropdown(
+                            choices=get_available_workflows(),
+                            label="Select Workflow",
+                            interactive=True,
+                        )
+                        refresh_workflows_btn = gr.Button("🔄 Refresh", size="sm")
+                        
+                        profile_dropdown = gr.Dropdown(
+                            choices=["slurm", "local", "docker", "singularity"],
+                            value="slurm",
+                            label="Execution Profile",
+                        )
+                        
+                        resume_checkbox = gr.Checkbox(
+                            label="Resume from previous run",
+                            value=False,
+                        )
+                        
+                        with gr.Accordion("📁 Input Parameters (Optional)", open=False):
+                            reads_input = gr.Textbox(
+                                label="Reads Path",
+                                placeholder="/path/to/reads/*.fastq.gz",
+                            )
+                            genome_input = gr.Textbox(
+                                label="Genome/Reference Path",
+                                placeholder="/path/to/genome.fa",
+                            )
+                            outdir_input = gr.Textbox(
+                                label="Output Directory",
+                                placeholder="Leave empty for default (workflow_dir/results)",
+                            )
+                        
+                        submit_btn = gr.Button("🚀 Submit Pipeline", variant="primary", size="lg")
+                        submission_result = gr.Markdown("")
+                    
+                    with gr.Column(scale=3):
+                        gr.Markdown("### Job Details")
+                        
+                        job_selector = gr.Dropdown(
+                            choices=[],
+                            label="Select Job for Details",
+                            interactive=True,
+                        )
+                        job_details_display = gr.Markdown("Select a job to view details.")
+                        
+                        with gr.Row():
+                            refresh_details_btn = gr.Button("🔄 Refresh", size="sm")
+                            cancel_btn = gr.Button("🛑 Cancel Job", variant="stop", size="sm")
+                
+                gr.Markdown("---")
+                
+                # Monitoring Section
+                gr.Markdown("### 📊 Pipeline Monitor")
+                
+                with gr.Row():
+                    with gr.Column():
+                        jobs_display = gr.Markdown("No pipeline jobs yet.")
+                    with gr.Column():
+                        slurm_display = gr.Markdown("SLURM queue loading...")
+                
+                with gr.Row():
+                    refresh_monitor_btn = gr.Button("🔄 Refresh All", variant="secondary")
+                    auto_refresh = gr.Checkbox(label="Auto-refresh every 10s", value=False)
+                
+                # Logs Section
+                gr.Markdown("---")
+                gr.Markdown("### 📄 Job Logs")
+                
+                with gr.Row():
+                    log_job_input = gr.Textbox(
+                        label="Job ID (or partial)",
+                        placeholder="Enter job ID to view logs",
+                        scale=2,
+                    )
+                    log_lines_slider = gr.Slider(
+                        minimum=20,
+                        maximum=200,
+                        value=50,
+                        step=10,
+                        label="Lines to show",
+                        scale=1,
+                    )
+                    view_logs_btn = gr.Button("View Logs", scale=1)
+                
+                logs_display = gr.Markdown("Enter a job ID to view logs.")
+                
+                # Event handlers for Run tab
+                refresh_workflows_btn.click(
+                    fn=lambda: gr.update(choices=get_available_workflows()),
+                    outputs=workflow_dropdown,
+                )
+                
+                submit_btn.click(
+                    fn=submit_pipeline,
+                    inputs=[
+                        workflow_dropdown,
+                        profile_dropdown,
+                        resume_checkbox,
+                        reads_input,
+                        genome_input,
+                        outdir_input,
+                    ],
+                    outputs=submission_result,
+                ).then(
+                    fn=lambda: gr.update(choices=[j.job_id for j in pipeline_executor.list_jobs()]),
+                    outputs=job_selector,
+                ).then(
+                    fn=refresh_monitoring,
+                    outputs=[jobs_display, slurm_display],
+                )
+                
+                job_selector.change(
+                    fn=get_progress_details,
+                    inputs=job_selector,
+                    outputs=job_details_display,
+                )
+                
+                refresh_details_btn.click(
+                    fn=get_progress_details,
+                    inputs=job_selector,
+                    outputs=job_details_display,
+                )
+                
+                cancel_btn.click(
+                    fn=cancel_selected_job,
+                    inputs=job_selector,
+                    outputs=submission_result,
+                ).then(
+                    fn=refresh_monitoring,
+                    outputs=[jobs_display, slurm_display],
+                )
+                
+                refresh_monitor_btn.click(
+                    fn=refresh_monitoring,
+                    outputs=[jobs_display, slurm_display],
+                ).then(
+                    fn=lambda: gr.update(choices=[j.job_id for j in pipeline_executor.list_jobs()]),
+                    outputs=job_selector,
+                )
+                
+                view_logs_btn.click(
+                    fn=get_job_logs,
+                    inputs=[log_job_input, log_lines_slider],
+                    outputs=logs_display,
                 )
             
             # ========== Download Tab ==========
