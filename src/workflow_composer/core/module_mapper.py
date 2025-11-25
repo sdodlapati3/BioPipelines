@@ -239,6 +239,20 @@ class ModuleMapper:
         
         return processes
     
+    # Tool name aliases - map common tool names to actual module names
+    TOOL_ALIASES = {
+        "bwa": "bwamem",
+        "bwa-mem": "bwamem",
+        "bwa_mem": "bwamem",
+        "gatk": "gatk_haplotypecaller",
+        "haplotypecaller": "gatk_haplotypecaller",
+        "trimgalore": "trim_galore",
+        "trim-galore": "trim_galore",
+        "mark_duplicates": "markduplicates",
+        "picard": "markduplicates",
+        "cellranger": "starsolo",  # fallback to starsolo for scRNA
+    }
+    
     def find_module(self, tool_name: str) -> Optional[Module]:
         """
         Find a module for a given tool.
@@ -250,6 +264,12 @@ class ModuleMapper:
             Module if found, None otherwise
         """
         tool_lower = tool_name.lower()
+        
+        # Check aliases first
+        if tool_lower in self.TOOL_ALIASES:
+            alias = self.TOOL_ALIASES[tool_lower]
+            if alias in self.modules:
+                return self.modules[alias]
         
         # Direct match
         if tool_lower in self.modules:
