@@ -64,6 +64,21 @@ except ImportError:
     AdaptiveQueryParser = None
     print("Note: Model orchestrator not available - using standard parsing.")
 
+# Import error diagnosis agent
+try:
+    from workflow_composer.diagnosis import (
+        ErrorDiagnosisAgent,
+        AutoFixEngine,
+        FixRiskLevel,
+    )
+    DIAGNOSIS_AVAILABLE = True
+except ImportError:
+    DIAGNOSIS_AVAILABLE = False
+    ErrorDiagnosisAgent = None
+    AutoFixEngine = None
+    FixRiskLevel = None
+    print("Note: Error diagnosis agent not available.")
+
 
 # ============================================================================
 # Pipeline Execution Classes
@@ -1452,6 +1467,129 @@ def cancel_selected_job(job_id: str) -> str:
         return f"❌ Failed to cancel job `{job.job_id}`."
 
 
+def diagnose_job_failure(job_id: str) -> str:
+    """
+    Diagnose a failed job using the AI-powered error diagnosis agent.
+    
+    Args:
+        job_id: Job ID to diagnose (or empty for latest failed job)
+        
+    Returns:
+        Formatted diagnosis report
+    """
+    if not DIAGNOSIS_AVAILABLE:
+        return """## ⚠️ Diagnosis Unavailable
+
+The error diagnosis agent is not installed. Install it with:
+
+```bash
+pip install -e ".[diagnosis]"
+```
+
+Or check the `src/workflow_composer/diagnosis/` package.
+"""
+    
+    # Find the job
+    if not job_id or not job_id.strip():
+        # Find the latest failed job
+        jobs = pipeline_executor.list_jobs()
+        failed_jobs = [j for j in jobs if j.status == JobStatus.FAILED]
+        
+        if not failed_jobs:
+            return "*No failed jobs to diagnose. All jobs are running or completed successfully.*"
+        
+        # Most recent failed job
+        job = max(failed_jobs, key=lambda j: j.finished_at or j.started_at or datetime.min)
+    else:
+        job = pipeline_executor.get_job_status(job_id.strip())
+    
+    if not job:
+        return f"*Job not found: `{job_id}`*"
+    
+    if job.status not in (JobStatus.FAILED, JobStatus.CANCELLED):
+        return f"""## ℹ️ Job Not Failed
+
+Job `{job.job_id}` has status **{job.status.value}**.
+
+Diagnosis is only available for failed jobs. If the job is still running, 
+wait for it to complete or check the logs directly.
+"""
+    
+    # Run diagnosis
+    try:
+        agent = ErrorDiagnosisAgent()
+        diagnosis = agent.diagnose_sync(job)
+        
+        # Format result
+        risk_icons = {
+            "safe": "🟢",
+            "low": "🟡", 
+            "medium": "🟠",
+            "high": "🔴",
+        }
+        
+        # Build fixes list
+        fixes_md = ""
+        auto_fix_available = False
+        for i, fix in enumerate(diagnosis.suggested_fixes, 1):
+            risk_key = fix.risk_level.value if hasattr(fix.risk_level, 'value') else str(fix.risk_level).lower()
+            icon = risk_icons.get(risk_key, "⚪")
+            auto_tag = " `[AUTO]`" if fix.auto_executable else ""
+            fixes_md += f"{i}. {icon}{auto_tag} **{fix.description}**\n"
+            if fix.command:
+                fixes_md += f"   ```bash\n   {fix.command}\n   ```\n"
+            if fix.auto_executable and risk_key == "safe":
+                auto_fix_available = True
+        
+        confidence_bar = "█" * int(diagnosis.confidence * 10) + "░" * (10 - int(diagnosis.confidence * 10))
+        
+        output = f"""## 🔍 Error Diagnosis: `{job.job_id}`
+
+### 📊 Classification
+| Field | Value |
+|-------|-------|
+| **Error Type** | `{diagnosis.category.value}` |
+| **Confidence** | [{confidence_bar}] {diagnosis.confidence:.0%} |
+| **Failed Process** | `{diagnosis.failed_process or 'Unknown'}` |
+| **Provider** | `{diagnosis.llm_provider_used or 'Pattern Matching'}` |
+
+### 🎯 Root Cause
+{diagnosis.root_cause}
+
+### 💬 Explanation (for non-experts)
+{diagnosis.user_explanation}
+
+### 🛠️ Suggested Fixes
+{fixes_md}
+
+### 📄 Relevant Log Excerpt
+```
+{diagnosis.log_excerpt[:500] if diagnosis.log_excerpt else 'No log excerpt available'}
+```
+"""
+        
+        if auto_fix_available:
+            output += """
+### ✨ Auto-Fix Available
+Safe fixes marked with `[AUTO]` can be applied automatically.
+*Coming soon: Click "Apply Safe Fixes" to run them automatically.*
+"""
+        
+        return output
+        
+    except Exception as e:
+        return f"""## ❌ Diagnosis Failed
+
+An error occurred during diagnosis:
+
+```
+{str(e)}
+```
+
+Try viewing the logs directly for more information.
+"""
+
+
 def get_progress_details(job_id: str) -> str:
     """Get detailed progress for a specific job."""
     job = pipeline_executor.get_job_status(job_id)
@@ -1681,6 +1819,15 @@ def create_interface() -> gr.Blocks:
                             
                             logs_display = gr.Markdown("*Click 'View' to see job logs*")
                         
+                        # AI Diagnosis section (for failed jobs)
+                        with gr.Accordion("🔍 AI Diagnosis", open=False):
+                            gr.Markdown("*Analyze failed jobs with AI-powered error diagnosis*")
+                            with gr.Row():
+                                diagnose_btn = gr.Button("🔍 Diagnose", variant="secondary", size="sm", scale=1)
+                                apply_fixes_btn = gr.Button("✨ Apply Safe Fixes", size="sm", scale=1)
+                            
+                            diagnosis_display = gr.Markdown("*Click 'Diagnose' to analyze a failed job*")
+                        
                         # Hidden components for compatibility
                         job_details_display = gr.Markdown(visible=False, value="")
                         slurm_display = gr.Markdown(visible=False, value="")
@@ -1903,6 +2050,19 @@ def create_interface() -> gr.Blocks:
             fn=lambda lines: get_job_logs("", lines),  # Auto-get latest job
             inputs=[log_lines_slider],
             outputs=logs_display,
+        )
+        
+        # Diagnose button - AI error analysis
+        diagnose_btn.click(
+            fn=lambda job_id: diagnose_job_failure(job_id),
+            inputs=[job_selector],
+            outputs=diagnosis_display,
+        )
+        
+        # Apply safe fixes (placeholder - shows info for now)
+        apply_fixes_btn.click(
+            fn=lambda: "⚠️ **Coming Soon**\n\nAuto-fix functionality will be available in the next release. For now, please apply the suggested fixes manually.",
+            outputs=diagnosis_display,
         )
         
         # Auto-refresh timer for job status
