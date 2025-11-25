@@ -1260,3 +1260,551 @@ process {
 5. **Scale to production** with executor configuration
 
 For questions or contributions, see the main BioPipelines documentation.
+
+---
+
+# New Analysis Types (Extended Patterns)
+
+The following patterns cover emerging analysis types: spatial transcriptomics, long-read RNA-seq, and multi-omics integration.
+
+---
+
+## 21. Spatial Transcriptomics (10x Visium)
+
+**Goal:** Analyze spatially-resolved gene expression from tissue sections
+
+**Workflow:** Space Ranger → Scanpy/Squidpy → Spatial clustering → Cell type deconvolution
+
+### Complete Pipeline
+
+```nextflow
+#!/usr/bin/env nextflow
+nextflow.enable.dsl = 2
+
+// Import modules
+include { SPACERANGER_COUNT } from './modules/spatial/spaceranger.nf'
+include { SCANPY_SPATIAL } from './modules/scrna/scanpy.nf'
+include { SQUIDPY_SPATIAL_ANALYSIS } from './modules/spatial/squidpy.nf'
+
+// Parameters
+params.fastq_dir = "data/visium/fastqs"
+params.image = "data/visium/tissue_image.tif"
+params.slide = "V19T26-123"
+params.area = "A1"
+params.transcriptome = "data/references/refdata-gex-GRCh38"
+params.outdir = "results/spatial"
+
+workflow {
+    // Sample channels
+    samples_ch = Channel.of(
+        tuple("tissue_section1", file("${params.fastq_dir}/section1"))
+    )
+    
+    image = file(params.image)
+    transcriptome = file(params.transcriptome)
+    
+    // Space Ranger quantification
+    SPACERANGER_COUNT(
+        samples_ch,
+        transcriptome,
+        image,
+        params.slide,
+        params.area
+    )
+    
+    // Spatial analysis with Scanpy
+    SCANPY_SPATIAL(
+        SPACERANGER_COUNT.out.filtered_matrix,
+        SPACERANGER_COUNT.out.spatial_folder,
+        200,   // min_genes
+        5,     // max_mito_percent
+        2000   // n_top_genes
+    )
+    
+    // Spatial statistics with Squidpy
+    SQUIDPY_SPATIAL_ANALYSIS(
+        SCANPY_SPATIAL.out.adata,
+        'leiden',       // cluster_key
+        100,            // n_neighbors_spatial
+        ['Moran_I', 'co_occurrence', 'neighborhood_enrichment']
+    )
+}
+```
+
+### Key Features
+- **Tissue Imaging:** Integrates H&E images with gene expression
+- **Spatial QC:** Filters spots by gene count and mitochondrial content
+- **Spatial Statistics:** Moran's I, co-occurrence analysis
+- **Visualization:** Interactive spatial plots
+
+### Expected Outputs
+- `results/spatial/spaceranger/` - Quantification matrices and spatial coordinates
+- `results/spatial/scanpy/spatial_clusters.h5ad` - Clustered AnnData object
+- `results/spatial/squidpy/spatial_stats.csv` - Spatial statistics
+- `results/spatial/figures/` - Spatial visualizations
+
+---
+
+## 22. Slide-seq Analysis
+
+**Goal:** Analyze near-cellular resolution spatial transcriptomics
+
+**Workflow:** STAR alignment → Bead deconvolution → Spatial clustering
+
+```nextflow
+#!/usr/bin/env nextflow
+nextflow.enable.dsl = 2
+
+include { FASTQC } from './modules/qc/fastqc.nf'
+include { STAR_INDEX; STAR_ALIGN } from './modules/alignment/star.nf'
+include { PUCK_CALLER } from './modules/spatial/slideseq.nf'
+include { SCANPY_SPATIAL_SLIDESEQ } from './modules/scrna/scanpy.nf'
+
+params.reads = "data/slideseq/*_R{1,2}.fastq.gz"
+params.puck_coords = "data/slideseq/puck_coordinates.csv"
+params.genome = "data/references/genome.fa"
+params.gtf = "data/references/genes.gtf"
+params.outdir = "results/slideseq"
+
+workflow {
+    reads_ch = Channel.fromFilePairs(params.reads)
+    genome = file(params.genome)
+    gtf = file(params.gtf)
+    puck_coords = file(params.puck_coords)
+    
+    // QC
+    FASTQC(reads_ch)
+    
+    // Build index and align
+    STAR_INDEX(genome, gtf)
+    STAR_ALIGN(reads_ch, STAR_INDEX.out.index, gtf)
+    
+    // Assign reads to beads
+    PUCK_CALLER(
+        STAR_ALIGN.out.bam,
+        puck_coords,
+        10  // bead_diameter_um
+    )
+    
+    // Spatial analysis
+    SCANPY_SPATIAL_SLIDESEQ(
+        PUCK_CALLER.out.count_matrix,
+        puck_coords,
+        50,   // min_genes
+        1.0   // resolution
+    )
+}
+```
+
+---
+
+## 23. Long-read RNA-seq (Nanopore Direct RNA)
+
+**Goal:** Analyze full-length transcripts with RNA modifications
+
+**Workflow:** minimap2 → Transcript assembly → Isoform quantification → m6A detection
+
+### Complete Pipeline
+
+```nextflow
+#!/usr/bin/env nextflow
+nextflow.enable.dsl = 2
+
+include { NANOPLOT } from './modules/qc/nanoplot.nf'
+include { MINIMAP2_INDEX; MINIMAP2_ALIGN } from './modules/alignment/minimap2.nf'
+include { SAMTOOLS_SORT; SAMTOOLS_INDEX } from './modules/utilities/samtools.nf'
+include { STRINGTIE_LONG } from './modules/assembly/stringtie.nf'
+include { FLAIR_CORRECT; FLAIR_COLLAPSE; FLAIR_QUANTIFY } from './modules/long_read/flair.nf'
+include { M6ANET_INFERENCE } from './modules/modification/m6anet.nf'
+
+params.reads = "data/drna/*.fastq.gz"
+params.genome = "data/references/genome.fa"
+params.gtf = "data/references/genes.gtf"
+params.outdir = "results/long_read_rna"
+
+workflow {
+    reads_ch = Channel.fromPath(params.reads)
+        .map { file -> tuple(file.simpleName, file) }
+    
+    genome = file(params.genome)
+    gtf = file(params.gtf)
+    
+    // QC with NanoPlot
+    NANOPLOT(reads_ch)
+    
+    // Align with minimap2 (splice-aware mode)
+    MINIMAP2_INDEX(genome)
+    MINIMAP2_ALIGN(
+        reads_ch,
+        MINIMAP2_INDEX.out.index,
+        'splice',  // preset for RNA-seq
+        gtf
+    )
+    
+    // Sort and index BAM
+    SAMTOOLS_SORT(MINIMAP2_ALIGN.out.bam)
+    SAMTOOLS_INDEX(SAMTOOLS_SORT.out.bam)
+    
+    bam_bai = SAMTOOLS_SORT.out.bam.join(SAMTOOLS_INDEX.out.bai)
+    
+    // Transcript assembly with StringTie
+    STRINGTIE_LONG(bam_bai, gtf)
+    
+    // FLAIR for isoform analysis
+    FLAIR_CORRECT(
+        reads_ch,
+        MINIMAP2_ALIGN.out.bam,
+        genome,
+        gtf
+    )
+    
+    FLAIR_COLLAPSE(
+        FLAIR_CORRECT.out.corrected,
+        genome,
+        gtf
+    )
+    
+    FLAIR_QUANTIFY(
+        FLAIR_COLLAPSE.out.isoforms,
+        reads_ch.map { it[1] }.collect()
+    )
+    
+    // RNA modification detection (m6A)
+    M6ANET_INFERENCE(
+        SAMTOOLS_SORT.out.bam,
+        genome,
+        reads_ch.map { it[1] }  // raw signal data
+    )
+}
+```
+
+### Key Features
+- **Full-length Transcripts:** No PCR amplification artifacts
+- **Isoform Discovery:** FLAIR identifies novel isoforms
+- **RNA Modifications:** Direct detection of m6A and other modifications
+- **No Fragmentation:** Better quantification of long transcripts
+
+### Expected Outputs
+- `results/long_read_rna/nanoplot/` - Read quality statistics
+- `results/long_read_rna/flair/isoforms.gtf` - Novel isoform annotations
+- `results/long_read_rna/flair/counts.tsv` - Isoform-level quantification
+- `results/long_read_rna/m6anet/m6a_sites.csv` - Predicted modification sites
+
+---
+
+## 24. PacBio Iso-Seq Analysis
+
+**Goal:** Full-length isoform sequencing with high accuracy
+
+**Workflow:** ccs → lima → isoseq3 → minimap2 → SQANTI3
+
+```nextflow
+#!/usr/bin/env nextflow
+nextflow.enable.dsl = 2
+
+include { CCS } from './modules/long_read/pacbio.nf'
+include { LIMA_DEMUX } from './modules/long_read/lima.nf'
+include { ISOSEQ3_REFINE; ISOSEQ3_CLUSTER } from './modules/long_read/isoseq.nf'
+include { MINIMAP2_ALIGN } from './modules/alignment/minimap2.nf'
+include { SQANTI3_QC } from './modules/long_read/sqanti.nf'
+
+params.subreads = "data/isoseq/*.subreads.bam"
+params.primers = "data/isoseq/primers.fasta"
+params.genome = "data/references/genome.fa"
+params.gtf = "data/references/genes.gtf"
+params.outdir = "results/isoseq"
+
+workflow {
+    subreads_ch = Channel.fromPath(params.subreads)
+        .map { file -> tuple(file.simpleName, file) }
+    
+    primers = file(params.primers)
+    genome = file(params.genome)
+    gtf = file(params.gtf)
+    
+    // Generate CCS reads (HiFi)
+    CCS(subreads_ch, 3)  // min_passes = 3
+    
+    // Demultiplex
+    LIMA_DEMUX(CCS.out.ccs_bam, primers)
+    
+    // Refine (remove polyA, concatemers)
+    ISOSEQ3_REFINE(LIMA_DEMUX.out.demuxed, primers)
+    
+    // Cluster to get isoforms
+    ISOSEQ3_CLUSTER(ISOSEQ3_REFINE.out.flnc)
+    
+    // Align to genome
+    MINIMAP2_ALIGN(
+        ISOSEQ3_CLUSTER.out.polished,
+        genome,
+        'splice:hq',  // high-quality splice mode
+        gtf
+    )
+    
+    // Quality control with SQANTI3
+    SQANTI3_QC(
+        ISOSEQ3_CLUSTER.out.polished_fasta,
+        gtf,
+        genome,
+        'IsoSeq'
+    )
+}
+```
+
+---
+
+## 25. Multi-omics Integration (RNA-seq + ATAC-seq)
+
+**Goal:** Integrate transcriptomic and chromatin accessibility data
+
+**Workflow:** Parallel RNA/ATAC processing → Joint analysis → Regulatory network inference
+
+### Complete Pipeline
+
+```nextflow
+#!/usr/bin/env nextflow
+nextflow.enable.dsl = 2
+
+// RNA-seq modules
+include { STAR_ALIGN } from './modules/alignment/star.nf'
+include { FEATURECOUNTS } from './modules/quantification/featurecounts.nf'
+
+// ATAC-seq modules
+include { BOWTIE2_ALIGN } from './modules/alignment/bowtie2.nf'
+include { MACS2_CALLPEAK } from './modules/peaks/macs2.nf'
+
+// Integration modules
+include { DESEQ2_DIFFERENTIAL } from './modules/analysis/deseq2.nf'
+include { CHROMVAR_MOTIF_ACTIVITY } from './modules/epigenomics/chromvar.nf'
+include { MOFA_INTEGRATE } from './modules/integration/mofa.nf'
+
+params.rna_reads = "data/multiomics/rna/*_R{1,2}.fastq.gz"
+params.atac_reads = "data/multiomics/atac/*_R{1,2}.fastq.gz"
+params.genome = "data/references/genome.fa"
+params.gtf = "data/references/genes.gtf"
+params.outdir = "results/multiomics"
+
+workflow {
+    rna_reads = Channel.fromFilePairs(params.rna_reads)
+    atac_reads = Channel.fromFilePairs(params.atac_reads)
+    genome = file(params.genome)
+    gtf = file(params.gtf)
+    
+    // ========== RNA-seq Branch ==========
+    // Align RNA-seq
+    star_index = file("data/references/star_index")
+    STAR_ALIGN(rna_reads, star_index, gtf)
+    
+    // Quantify
+    FEATURECOUNTS(STAR_ALIGN.out.bam, gtf, 'gene_id', true)
+    
+    // Differential expression
+    count_matrix = FEATURECOUNTS.out.counts.collect()
+    samplesheet = file("data/multiomics/samplesheet.csv")
+    
+    DESEQ2_DIFFERENTIAL(count_matrix, samplesheet, 'condition', 'control', 'treatment')
+    
+    // ========== ATAC-seq Branch ==========
+    // Align ATAC-seq
+    bowtie_index = file("data/references/bowtie2_index")
+    BOWTIE2_ALIGN(atac_reads, bowtie_index)
+    
+    // Call peaks
+    MACS2_CALLPEAK(BOWTIE2_ALIGN.out.bam, Channel.empty(), 'narrow', 'hs')
+    
+    // Motif activity
+    CHROMVAR_MOTIF_ACTIVITY(
+        BOWTIE2_ALIGN.out.bam.collect(),
+        MACS2_CALLPEAK.out.peaks.collect(),
+        'JASPAR2020'
+    )
+    
+    // ========== Integration ==========
+    // Prepare data matrices
+    rna_matrix = FEATURECOUNTS.out.counts
+    atac_matrix = CHROMVAR_MOTIF_ACTIVITY.out.deviation_scores
+    
+    // Multi-omics factor analysis
+    MOFA_INTEGRATE(
+        rna_matrix,
+        atac_matrix,
+        samplesheet,
+        15  // num_factors
+    )
+}
+```
+
+### Key Features
+- **Parallel Processing:** RNA and ATAC processed independently
+- **Peak-Gene Linking:** Associates accessible regions with nearby genes
+- **Latent Factor Discovery:** MOFA finds shared biological signals
+- **Regulatory Inference:** Links TF motifs to gene expression changes
+
+### Expected Outputs
+- `results/multiomics/rna/deseq2/` - Differential expression results
+- `results/multiomics/atac/peaks/` - Called peaks
+- `results/multiomics/chromvar/` - Motif activity scores
+- `results/multiomics/mofa/factors.h5` - Integrated latent factors
+
+---
+
+## 26. Single-cell Multiome (CITE-seq)
+
+**Goal:** Analyze joint RNA and surface protein expression in single cells
+
+**Workflow:** Cell Ranger → CITE-seq-Count → Seurat/totalVI
+
+```nextflow
+#!/usr/bin/env nextflow
+nextflow.enable.dsl = 2
+
+include { CELLRANGER_MULTI } from './modules/scrna/cellranger.nf'
+include { CITE_SEQ_COUNT } from './modules/scrna/citeseq.nf'
+include { SEURAT_MULTIMODAL } from './modules/scrna/seurat.nf'
+include { TOTALVI_INTEGRATE } from './modules/scrna/scvi.nf'
+
+params.fastq_dir = "data/citeseq/fastqs"
+params.feature_ref = "data/citeseq/feature_reference.csv"
+params.transcriptome = "data/references/refdata-gex-GRCh38"
+params.outdir = "results/citeseq"
+
+workflow {
+    sample = "sample1"
+    fastq_dir = file(params.fastq_dir)
+    feature_ref = file(params.feature_ref)
+    transcriptome = file(params.transcriptome)
+    
+    // Cell Ranger multi for RNA + antibody
+    CELLRANGER_MULTI(
+        sample,
+        fastq_dir,
+        transcriptome,
+        feature_ref,
+        'Antibody Capture'
+    )
+    
+    // Alternative: CITE-seq-Count for antibody tags
+    CITE_SEQ_COUNT(
+        file("${params.fastq_dir}/*_R2.fastq.gz"),
+        feature_ref,
+        CELLRANGER_MULTI.out.barcodes
+    )
+    
+    // Seurat multimodal analysis
+    SEURAT_MULTIMODAL(
+        CELLRANGER_MULTI.out.rna_matrix,
+        CELLRANGER_MULTI.out.adt_matrix,
+        200,    // min_genes
+        0.5,    // resolution
+        'WNN'   // weighted nearest neighbor
+    )
+    
+    // totalVI for joint embedding
+    TOTALVI_INTEGRATE(
+        CELLRANGER_MULTI.out.rna_matrix,
+        CELLRANGER_MULTI.out.adt_matrix,
+        20,     // n_latent
+        400     // n_epochs
+    )
+}
+```
+
+---
+
+## 27. 10x Multiome (RNA + ATAC)
+
+**Goal:** Analyze gene expression and chromatin accessibility from the same cells
+
+**Workflow:** Cell Ranger ARC → Signac → Joint clustering
+
+```nextflow
+#!/usr/bin/env nextflow
+nextflow.enable.dsl = 2
+
+include { CELLRANGER_ARC_COUNT } from './modules/scrna/cellranger_arc.nf'
+include { SIGNAC_CREATE; SIGNAC_LSI; SIGNAC_PEAKS } from './modules/scrna/signac.nf'
+include { SEURAT_WNN } from './modules/scrna/seurat.nf'
+include { CICERO_COACCESS } from './modules/scrna/cicero.nf'
+
+params.fastq_dir = "data/multiome/fastqs"
+params.reference = "data/references/refdata-cellranger-arc-GRCh38"
+params.outdir = "results/multiome"
+
+workflow {
+    sample = "sample1"
+    fastq_dir = file(params.fastq_dir)
+    reference = file(params.reference)
+    
+    // Cell Ranger ARC
+    CELLRANGER_ARC_COUNT(
+        sample,
+        fastq_dir,
+        reference
+    )
+    
+    // Create Signac object for ATAC
+    SIGNAC_CREATE(
+        CELLRANGER_ARC_COUNT.out.atac_fragments,
+        CELLRANGER_ARC_COUNT.out.peaks,
+        CELLRANGER_ARC_COUNT.out.rna_matrix
+    )
+    
+    // LSI dimension reduction for ATAC
+    SIGNAC_LSI(
+        SIGNAC_CREATE.out.signac_obj,
+        50  // n_components
+    )
+    
+    // Weighted nearest neighbor clustering
+    SEURAT_WNN(
+        CELLRANGER_ARC_COUNT.out.rna_matrix,
+        SIGNAC_LSI.out.lsi_embeddings,
+        0.5  // resolution
+    )
+    
+    // Co-accessibility with Cicero
+    CICERO_COACCESS(
+        SIGNAC_CREATE.out.signac_obj,
+        SEURAT_WNN.out.clusters,
+        file(params.genome_annotation)
+    )
+}
+```
+
+---
+
+## Extended Summary Table
+
+| Workflow | Key Modules | Primary Analysis | Typical Runtime |
+|----------|-------------|------------------|-----------------|
+| **Spatial (Visium)** | Space Ranger, Scanpy, Squidpy | Spatial clustering, statistics | 2-4 hours |
+| **Slide-seq** | STAR, Scanpy | Near-cellular spatial | 3-5 hours |
+| **Long-read RNA (Nanopore)** | minimap2, FLAIR, m6Anet | Isoforms, modifications | 4-8 hours |
+| **Iso-Seq** | isoseq3, SQANTI3 | Full-length transcripts | 6-12 hours |
+| **Multi-omics (RNA+ATAC)** | STAR, Bowtie2, MOFA | Integrated factors | 4-8 hours |
+| **CITE-seq** | Cell Ranger, Seurat | RNA + protein | 3-6 hours |
+| **10x Multiome** | Cell Ranger ARC, Signac | RNA + ATAC same cell | 4-8 hours |
+
+---
+
+## Analysis Type Quick Reference
+
+### Spatial Transcriptomics Keywords
+- "visium", "spatial", "tissue section", "spot deconvolution", "squidpy"
+- "slide-seq", "puck", "bead array", "near-cellular"
+- "xenium", "in situ", "subcellular"
+
+### Long-read RNA-seq Keywords
+- "nanopore rna", "direct rna", "drna", "isoseq", "full-length"
+- "isoform quantification", "novel isoform", "alternative splicing"
+- "m6a", "rna modification", "epitranscriptome"
+
+### Multi-omics Keywords
+- "integration", "multi-omics", "multimodal", "joint embedding"
+- "cite-seq", "totalvi", "multiome", "wnn"
+- "rna-atac", "chromatin-expression", "regulatory network"
+
+---
+
+For questions or contributions, see the main BioPipelines documentation.

@@ -126,6 +126,63 @@ ANALYSIS_TOOL_MAP = {
         "annotators": ["prokka", "augustus"],
         "recommended": ["blast"],
     },
+    # Spatial transcriptomics
+    "spatial_transcriptomics": {
+        "required": ["spaceranger"],
+        "analysis": ["scanpy", "squidpy", "giotto"],
+        "visualization": ["deeptools"],
+    },
+    "spatial_visium": {
+        "required": ["spaceranger"],
+        "analysis": ["scanpy", "squidpy"],
+        "recommended": ["seurat"],
+    },
+    "spatial_slide_seq": {
+        "required": ["fastqc"],
+        "alignment": ["star", "bowtie2"],
+        "analysis": ["scanpy", "squidpy"],
+    },
+    "spatial_xenium": {
+        "required": ["xeniumranger"],
+        "analysis": ["scanpy", "squidpy"],
+    },
+    # Long-read RNA-seq
+    "long_read_rna_seq": {
+        "required": ["minimap2", "samtools"],
+        "analysis": ["flair", "stringtie", "isoquant"],
+        "qc": ["nanoplot", "rseqc"],
+    },
+    "long_read_isoseq": {
+        "required": ["isoseq3", "minimap2", "samtools"],
+        "analysis": ["pigeon", "sqanti3", "tama"],
+        "clustering": ["isoclust"],
+    },
+    "long_read_direct_rna": {
+        "required": ["minimap2", "samtools", "nanopolish"],
+        "modification": ["tombo", "eligos", "m6anet"],
+        "qc": ["nanoplot"],
+    },
+    # Multi-omics integration
+    "multi_omics_integration": {
+        "required": [],
+        "integration": ["mofa", "mixomics", "diablo"],
+        "visualization": ["deeptools"],
+    },
+    "rna_atac_integration": {
+        "required": ["cellranger-arc"],
+        "analysis": ["seurat", "scanpy", "signac"],
+        "recommended": ["chromvar", "cicero"],
+    },
+    "proteogenomics": {
+        "required": ["star", "samtools"],
+        "ms_tools": ["maxquant", "msgf", "percolator"],
+        "integration": ["proteogenomics_tools"],
+    },
+    "multi_modal_scrna": {
+        "required": ["cellranger"],
+        "analysis": ["seurat", "scanpy", "totalvi"],
+        "cite_seq": ["cite_seq_count", "dsb"],
+    },
 }
 
 

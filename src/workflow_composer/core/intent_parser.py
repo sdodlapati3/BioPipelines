@@ -58,6 +58,12 @@ class AnalysisType(Enum):
     SCRNA_SEQ = "single_cell_rna_seq"
     SCRNA_SEQ_INTEGRATION = "scrna_seq_integration"
     
+    # Spatial transcriptomics
+    SPATIAL_TRANSCRIPTOMICS = "spatial_transcriptomics"
+    SPATIAL_VISIUM = "spatial_visium"
+    SPATIAL_SLIDE_SEQ = "spatial_slide_seq"
+    SPATIAL_XENIUM = "spatial_xenium"
+    
     # Metagenomics
     METAGENOMICS_PROFILING = "metagenomics_profiling"
     METAGENOMICS_ASSEMBLY = "metagenomics_assembly"
@@ -70,6 +76,15 @@ class AnalysisType(Enum):
     # Long-read
     LONG_READ_ASSEMBLY = "long_read_assembly"
     LONG_READ_VARIANT = "long_read_variant_calling"
+    LONG_READ_RNA_SEQ = "long_read_rna_seq"
+    LONG_READ_ISOSEQ = "long_read_isoseq"
+    LONG_READ_DIRECT_RNA = "long_read_direct_rna"
+    
+    # Multi-omics integration
+    MULTI_OMICS = "multi_omics_integration"
+    RNA_ATAC_INTEGRATION = "rna_atac_integration"
+    PROTEOGENOMICS = "proteogenomics"
+    MULTI_MODAL_SCRNA = "multi_modal_scrna"
     
     # Other
     CUSTOM = "custom"
@@ -194,7 +209,53 @@ ANALYSIS_KEYWORDS = {
     AnalysisType.GENOME_ANNOTATION: [
         "annotation", "prokka", "augustus", "gene prediction",
         "annotate genome"
-    ]
+    ],
+    # Spatial transcriptomics
+    AnalysisType.SPATIAL_TRANSCRIPTOMICS: [
+        "spatial", "spatial transcriptomics", "spatial gene expression",
+        "tissue section", "spot", "spatial clustering"
+    ],
+    AnalysisType.SPATIAL_VISIUM: [
+        "visium", "10x visium", "visium hd", "space ranger",
+        "spaceranger", "visium spatial"
+    ],
+    AnalysisType.SPATIAL_SLIDE_SEQ: [
+        "slide-seq", "slideseq", "slide seq", "puck",
+        "bead array"
+    ],
+    AnalysisType.SPATIAL_XENIUM: [
+        "xenium", "in situ", "xenium ranger", "10x xenium"
+    ],
+    # Long-read RNA-seq
+    AnalysisType.LONG_READ_RNA_SEQ: [
+        "long read rna", "full length transcript", "isoform",
+        "nanopore rna", "direct rna", "isoseq", "iso-seq"
+    ],
+    AnalysisType.LONG_READ_ISOSEQ: [
+        "isoseq", "iso-seq", "pacbio rna", "isoform sequencing",
+        "fl transcript", "full-length cdna"
+    ],
+    AnalysisType.LONG_READ_DIRECT_RNA: [
+        "direct rna", "drna", "nanopore rna", "native rna",
+        "rna modification", "m6a"
+    ],
+    # Multi-omics integration
+    AnalysisType.MULTI_OMICS: [
+        "multi-omics", "multiomics", "integration", "combine",
+        "integrated analysis", "multi-modal"
+    ],
+    AnalysisType.RNA_ATAC_INTEGRATION: [
+        "rna atac", "atac rna", "joint embedding",
+        "rna-seq atac-seq", "gene regulatory", "multiome"
+    ],
+    AnalysisType.PROTEOGENOMICS: [
+        "proteogenomics", "protein genomics", "mass spec rna",
+        "peptide variant", "neoantigen"
+    ],
+    AnalysisType.MULTI_MODAL_SCRNA: [
+        "cite-seq", "citeseq", "multiome", "10x multiome",
+        "scrna atacseq", "single cell multiome", "asap-seq"
+    ],
 }
 
 # Organism mapping
@@ -250,9 +311,9 @@ Respond ONLY with a valid JSON object. No explanations."""
 
 Respond with a JSON object containing:
 {{
-    "analysis_type": "string - one of: rna_seq_basic, rna_seq_differential_expression, rna_seq_de_novo_assembly, chip_seq_peak_calling, atac_seq, wgs_variant_calling, somatic_variant_calling, structural_variant_detection, single_cell_rna_seq, metagenomics_profiling, metagenomics_assembly, bisulfite_seq_methylation, hic_chromatin_interaction, long_read_assembly, genome_annotation, custom",
+    "analysis_type": "string - one of: rna_seq_basic, rna_seq_differential_expression, rna_seq_de_novo_assembly, rna_seq_alternative_splicing, small_rna_seq, chip_seq_peak_calling, atac_seq, wgs_variant_calling, wes_variant_calling, somatic_variant_calling, structural_variant_detection, single_cell_rna_seq, scrna_seq_integration, spatial_transcriptomics, spatial_visium, spatial_slide_seq, spatial_xenium, metagenomics_profiling, metagenomics_assembly, amplicon_16s, bisulfite_seq_methylation, medip_seq, hic_chromatin_interaction, long_read_assembly, long_read_variant_calling, long_read_rna_seq, long_read_isoseq, long_read_direct_rna, genome_assembly, genome_annotation, multi_omics_integration, rna_atac_integration, proteogenomics, multi_modal_scrna, custom",
     "confidence": "float 0-1 indicating confidence",
-    "data_type": "string - fastq, bam, vcf, etc.",
+    "data_type": "string - fastq, bam, vcf, h5ad, etc.",
     "paired_end": "boolean",
     "stranded": "boolean",
     "organism": "string - species name",
