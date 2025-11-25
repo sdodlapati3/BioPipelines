@@ -207,7 +207,7 @@ class TestOpenAIAdapter:
     def test_init_default(self):
         adapter = OpenAIAdapter()
         assert adapter.provider_name == "openai"
-        assert adapter.model == "gpt-4-turbo-preview"
+        assert adapter.model == "gpt-4o"
         assert adapter.temperature == 0.1
     
     def test_init_custom(self):
@@ -336,7 +336,9 @@ class TestHuggingFaceAdapter:
     
     def test_deprecated_use_api(self):
         # Test backward compatibility
-        with pytest.warns(None):  # May or may not warn
+        import warnings
+        with warnings.catch_warnings(record=True):
+            warnings.simplefilter("always")
             adapter = HuggingFaceAdapter(use_api=True)
             assert adapter.backend == "api"
     
