@@ -391,7 +391,25 @@ BASE_DIR = Path(__file__).parent.parent.parent.parent
 GENERATED_DIR = BASE_DIR / "generated_workflows"
 GENERATED_DIR.mkdir(exist_ok=True)
 
-# Custom CSS for styling (Gradio 6.x compatible)
+# Consolidated status icons (used across all display functions)
+STATUS_ICONS = {
+    JobStatus.PENDING: "🟡",
+    JobStatus.RUNNING: "🔵",
+    JobStatus.COMPLETED: "✅",
+    JobStatus.FAILED: "❌",
+    JobStatus.CANCELLED: "⚪",
+    "pending": "🟡",
+    "running": "🔵",
+    "completed": "✅",
+    "failed": "❌",
+    "cancelled": "⚪",
+    "ready": "✅",
+    "starting": "🟡",
+    "unavailable": "⚫",
+    "error": "❌",
+}
+
+# Minimal CSS for styling
 CUSTOM_CSS = """
 .main-header {
     text-align: center;
@@ -400,25 +418,9 @@ CUSTOM_CSS = """
     border-radius: 12px;
     margin-bottom: 20px;
 }
-.main-header h1 {
-    color: white !important;
-    margin: 0;
-    font-size: 2.2em;
-}
-.main-header p {
-    color: rgba(255,255,255,0.9) !important;
-    margin: 5px 0 0 0;
-}
-.stat-box {
-    text-align: center;
-    padding: 15px;
-    background: linear-gradient(135deg, #f8fafc, #f1f5f9);
-    border-radius: 10px;
-    border: 1px solid #e2e8f0;
-}
-footer {
-    display: none !important;
-}
+.main-header h1 { color: white !important; margin: 0; font-size: 2.2em; }
+.main-header p { color: rgba(255,255,255,0.9) !important; margin: 5px 0 0 0; }
+footer { display: none !important; }
 """
 
 # Analysis type descriptions for better UX
@@ -699,24 +701,48 @@ def chat_with_composer(
                 # Track last generated workflow for quick run
                 app_state.last_generated_workflow = str(output_dir)
                 
-                # Format response
-                workflow_info = f"""🎉 **Workflow Generated!**
+                # Format response - extract clean data from workflow
+                tools_list = []
+                if hasattr(workflow, 'tools_used') and workflow.tools_used:
+                    for t in workflow.tools_used:
+                        if hasattr(t, 'name'):
+                            tools_list.append(t.name)
+                        elif isinstance(t, str):
+                            tools_list.append(t)
+                        else:
+                            tools_list.append(str(t))
+                
+                modules_list = []
+                if hasattr(workflow, 'modules_used') and workflow.modules_used:
+                    for m in workflow.modules_used:
+                        if hasattr(m, 'name'):
+                            modules_list.append(m.name)
+                        elif isinstance(m, str):
+                            modules_list.append(m)
+                        else:
+                            modules_list.append(str(m))
+                
+                tools_str = ', '.join(f'`{t}`' for t in tools_list) if tools_list else '_Auto-selected based on analysis type_'
+                modules_str = ', '.join(f'`{m}`' for m in modules_list) if modules_list else '_Mapped from tools_'
+                
+                workflow_info = f"""🎉 **Workflow Generated Successfully!**
 
-**Name:** `{workflow.name if hasattr(workflow, 'name') else workflow_id}`
-**Output:** `{output_dir}`
+| Property | Value |
+|----------|-------|
+| **Name** | `{workflow.name if hasattr(workflow, 'name') else workflow_id}` |
+| **Location** | `{output_dir}` |
 
-**Tools used:**
-{', '.join(f'`{t}`' for t in (workflow.tools_used if hasattr(workflow, 'tools_used') else []))}
+**🔧 Tools:** {tools_str}
 
-**Modules:**
-{', '.join(f'`{m}`' for m in (workflow.modules_used if hasattr(workflow, 'modules_used') else []))}
+**📦 Modules:** {modules_str}
+
+---
 
 📥 **Next Steps:**
-1. Go to the **🚀 Run Pipeline** tab
-2. Your workflow is now available in the dropdown
+1. Go to the **🚀 Execute** tab
+2. Select your workflow from the dropdown
 3. Configure parameters and submit to SLURM
-
-Or download workflow files from the **Download** tab.
+4. Use the **📥 Download** button to get workflow files
 """
                 response_parts.append(workflow_info)
                 
@@ -772,10 +798,14 @@ Attempting auto-fix...
                             
                             workflow_info = f"""🎉 **Workflow Generated!**
 
-**Name:** `{workflow.name if hasattr(workflow, 'name') else workflow_id}`
-**Output:** `{output_dir}`
+| Property | Value |
+|----------|-------|
+| **Name** | `{workflow.name if hasattr(workflow, 'name') else workflow_id}` |
+| **Location** | `{output_dir}` |
 
-📥 Use the **Download** tab to get your workflow files.
+📥 **Next Steps:**
+1. Go to the **🚀 Execute** tab to run your workflow
+2. Use the **📥 Download** button to get workflow files
 """
                             response_parts.append(workflow_info)
                         else:
@@ -921,153 +951,50 @@ def get_modules_by_category() -> str:
 
 def get_example_prompts() -> List[List[str]]:
     """Get example prompts for the UI."""
-    return [
-        [example] for example in ANALYSIS_EXAMPLES.values()
-    ]
+    return [[example] for example in ANALYSIS_EXAMPLES.values()]
+
+
+# Mapping dictionaries for workflow naming (moved outside function for reuse)
+_TYPE_MAP = {
+    'rna_seq': 'rnaseq', 'chip_seq': 'chipseq', 'atac_seq': 'atacseq',
+    'dna_seq': 'dnaseq', 'variant_calling': 'variants', 'single_cell_rna': 'scrna',
+    'metagenomics': 'metagen', 'methylation': 'methylation', 'bisulfite_seq': 'bisulfite',
+    'bisulfite_seq_methylation': 'methylation', 'long_read': 'longread',
+}
+_ORG_MAP = {
+    'homo sapiens': 'human', 'human': 'human', 'mus musculus': 'mouse', 'mouse': 'mouse',
+    'drosophila': 'fly', 'zebrafish': 'zebrafish', 'yeast': 'yeast', 'rat': 'rat',
+}
+_TOOL_KEYWORDS = [
+    'star', 'hisat2', 'salmon', 'kallisto', 'bowtie2', 'bwa', 'minimap2',
+    'deseq2', 'macs2', 'gatk', 'bismark', 'seurat', 'scanpy', 'kraken',
+]
 
 
 def generate_workflow_name(intent, message: str) -> str:
-    """
-    Generate a descriptive workflow name based on the analysis intent.
-    
-    Examples:
-    - rnaseq_mouse_star_deseq2
-    - chipseq_human_h3k27ac_macs2
-    - atacseq_human_bowtie2
-    - methylation_bismark_human
-    - scrna_10x_seurat
-    """
+    """Generate a descriptive workflow name based on the analysis intent."""
     parts = []
     
-    # 1. Analysis type (shortened)
-    analysis_type = intent.analysis_type.value if hasattr(intent, 'analysis_type') else 'workflow'
-    type_map = {
-        'rna_seq': 'rnaseq',
-        'rna_seq_basic': 'rnaseq',
-        'rna_seq_de': 'rnaseq_de',
-        'chip_seq': 'chipseq',
-        'atac_seq': 'atacseq',
-        'dna_seq': 'dnaseq',
-        'variant_calling': 'variants',
-        'wgs': 'wgs',
-        'wes': 'wes',
-        'single_cell_rna': 'scrna',
-        'scrna_10x': 'scrna_10x',
-        'scrna_smartseq': 'scrna_ss2',
-        'metagenomics': 'metagen',
-        'methylation': 'methylation',
-        'bisulfite_seq': 'bisulfite',
-        'bisulfite_seq_methylation': 'methylation',
-        'long_read': 'longread',
-        'nanopore': 'nanopore',
-        'pacbio': 'pacbio',
-        'hic': 'hic',
-        'cut_and_run': 'cutrun',
-        'ribo_seq': 'riboseq',
-    }
-    parts.append(type_map.get(analysis_type, analysis_type.replace('_', '')))
+    # 1. Analysis type
+    analysis_type = getattr(intent, 'analysis_type', None)
+    if analysis_type:
+        at = analysis_type.value if hasattr(analysis_type, 'value') else str(analysis_type)
+        parts.append(_TYPE_MAP.get(at, at.replace('_', '')))
     
-    # 2. Organism (if specified)
-    organism = intent.organism if hasattr(intent, 'organism') and intent.organism else None
+    # 2. Organism
+    organism = getattr(intent, 'organism', None)
     if organism:
-        org_map = {
-            'homo sapiens': 'human',
-            'human': 'human',
-            'mus musculus': 'mouse',
-            'mouse': 'mouse',
-            'drosophila melanogaster': 'fly',
-            'drosophila': 'fly',
-            'danio rerio': 'zebrafish',
-            'zebrafish': 'zebrafish',
-            'arabidopsis thaliana': 'arabidopsis',
-            'arabidopsis': 'arabidopsis',
-            'saccharomyces cerevisiae': 'yeast',
-            'yeast': 'yeast',
-            'caenorhabditis elegans': 'worm',
-            'c. elegans': 'worm',
-            'rattus norvegicus': 'rat',
-            'rat': 'rat',
-        }
-        org_lower = organism.lower()
-        parts.append(org_map.get(org_lower, org_lower.split()[0][:8]))
+        parts.append(_ORG_MAP.get(organism.lower(), organism.split()[0][:8]))
     
-    # 3. Key tools mentioned in message (extract 1-2 main tools)
-    message_lower = message.lower()
-    tool_keywords = {
-        'star': 'star',
-        'hisat2': 'hisat2',
-        'salmon': 'salmon',
-        'kallisto': 'kallisto',
-        'bowtie2': 'bowtie2',
-        'bwa': 'bwa',
-        'minimap2': 'minimap2',
-        'deseq2': 'deseq2',
-        'edger': 'edger',
-        'macs2': 'macs2',
-        'macs3': 'macs3',
-        'gatk': 'gatk',
-        'deepvariant': 'deepvariant',
-        'bcftools': 'bcftools',
-        'bismark': 'bismark',
-        'starsolo': 'starsolo',
-        'cellranger': 'cellranger',
-        'seurat': 'seurat',
-        'scanpy': 'scanpy',
-        'kraken': 'kraken',
-        'metaphlan': 'metaphlan',
-    }
+    # 3. Key tools from message
+    msg_lower = message.lower()
+    found_tools = [t for t in _TOOL_KEYWORDS if t in msg_lower][:2]
+    parts.extend(found_tools)
     
-    found_tools = []
-    for keyword, tool_name in tool_keywords.items():
-        if keyword in message_lower and tool_name not in found_tools:
-            found_tools.append(tool_name)
-            if len(found_tools) >= 2:
-                break
-    
-    if found_tools:
-        parts.extend(found_tools[:2])
-    
-    # 4. Special markers from message
-    special_markers = {
-        'h3k27ac': 'h3k27ac',
-        'h3k4me3': 'h3k4me3',
-        'h3k27me3': 'h3k27me3',
-        'h3k9me3': 'h3k9me3',
-        'ctcf': 'ctcf',
-        'paired-end': 'pe',
-        'paired end': 'pe',
-        'single-end': 'se',
-        'single end': 'se',
-        '10x': '10x',
-        '10x genomics': '10x',
-        'smart-seq': 'smartseq',
-        'differential expression': 'de',
-        'peak calling': 'peaks',
-    }
-    
-    for marker, short in special_markers.items():
-        if marker in message_lower and short not in parts:
-            parts.append(short)
-            break  # Only add one special marker
-    
-    # Clean up and join
-    # Remove duplicates while preserving order
-    seen = set()
-    unique_parts = []
-    for p in parts:
-        if p not in seen:
-            seen.add(p)
-            unique_parts.append(p)
-    
-    # Create final name (limit to 4 parts for readability)
-    workflow_name = '_'.join(unique_parts[:4])
-    
-    # Sanitize: only alphanumeric and underscores
-    workflow_name = re.sub(r'[^a-zA-Z0-9_]', '', workflow_name)
-    
-    # Ensure it's not empty
-    if not workflow_name:
-        workflow_name = 'workflow'
+    # Clean up and return
+    unique_parts = list(dict.fromkeys(parts))[:4]  # Remove dupes, limit to 4
+    workflow_name = '_'.join(unique_parts) if unique_parts else 'workflow'
+    return re.sub(r'[^a-zA-Z0-9_]', '', workflow_name)
     
     return workflow_name
 
@@ -1128,15 +1055,8 @@ pip install transformers torch
 |-------|--------|---------|
 """
     
-    status_icons = {
-        'ready': '✅',
-        'starting': '🟡',
-        'unavailable': '⚫',
-        'error': '❌'
-    }
-    
     for model_name, model_info in status.get('models', {}).items():
-        icon = status_icons.get(model_info['status'], '❓')
+        icon = STATUS_ICONS.get(model_info['status'], '❓')
         details = []
         
         if model_info.get('endpoint'):
@@ -1290,21 +1210,11 @@ def get_job_status_display() -> str:
         return "No pipeline jobs submitted yet. Submit a pipeline above to get started."
     
     output = "## 📊 Pipeline Jobs\n\n"
-    
-    # Status icons
-    status_icons = {
-        JobStatus.PENDING: "🟡",
-        JobStatus.RUNNING: "🔵",
-        JobStatus.COMPLETED: "✅",
-        JobStatus.FAILED: "❌",
-        JobStatus.CANCELLED: "⚪",
-    }
-    
     output += "| Status | Job ID | Workflow | Progress | Current Process | Time |\n"
     output += "|--------|--------|----------|----------|-----------------|------|\n"
     
     for job in sorted(jobs, key=lambda j: j.started_at or datetime.min, reverse=True):
-        icon = status_icons.get(job.status, "⚪")
+        icon = STATUS_ICONS.get(job.status, "⚪")
         
         # Calculate runtime
         if job.started_at:
@@ -1396,15 +1306,7 @@ def get_progress_details(job_id: str) -> str:
     if not job:
         return "Select a job to view progress details."
     
-    status_icons = {
-        JobStatus.PENDING: "🟡",
-        JobStatus.RUNNING: "🔵",
-        JobStatus.COMPLETED: "✅",
-        JobStatus.FAILED: "❌",
-        JobStatus.CANCELLED: "⚪",
-    }
-    
-    icon = status_icons.get(job.status, "⚪")
+    icon = STATUS_ICONS.get(job.status, "⚪")
     
     output = f"""## {icon} Job Details: `{job.job_id}`
 
@@ -1488,6 +1390,7 @@ def create_interface() -> gr.Blocks:
                             label="BioPipelines AI Assistant",
                             height=500,
                             show_label=False,
+                            type="messages",  # Use new message format for proper rendering
                         )
                         
                         with gr.Row():
