@@ -1,0 +1,15 @@
+# BioPipelines Conda Environment
+name: biopipelines
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python>=3.9
+  - numpy
+  - pandas
+  - scipy
+  - bioconductor-deseq2  # Added by auto-fix
+  - snakemake
+  - nextflow
