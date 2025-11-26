@@ -1,0 +1,270 @@
+tools:
+  # Alignment
+  star:
+    category: alignment
+    module: star.nf
+    processes: [STAR_INDEX, STAR_ALIGN]
+    container: rnaseq
+  bwa:
+    category: alignment
+    module: bwa.nf
+    processes: [BWA_INDEX, BWA_MEM]
+    container: dnaseq
+  bowtie2:
+    category: alignment
+    module: bowtie2.nf
+    processes: [BOWTIE2_BUILD, BOWTIE2_ALIGN]
+    container: chipseq
+  hisat2:
+    category: alignment
+    module: hisat2.nf
+    processes: [HISAT2_BUILD, HISAT2_ALIGN]
+    container: rnaseq
+  minimap2:
+    category: alignment
+    module: minimap2.nf
+    processes: [MINIMAP2_INDEX, MINIMAP2_ALIGN]
+    container: longread
+
+  # Quantification
+  featurecounts:
+    category: quantification
+    module: featurecounts.nf
+    processes: [FEATURECOUNTS]
+    container: rnaseq
+  salmon:
+    category: quantification
+    module: salmon.nf
+    processes: [SALMON_INDEX, SALMON_QUANT]
+    container: rnaseq
+  htseq:
+    category: quantification
+    module: htseq.nf
+    processes: [HTSEQ_COUNT]
+    container: rnaseq
+  kallisto:
+    category: quantification
+    module: kallisto.nf
+    processes: [KALLISTO_INDEX, KALLISTO_QUANT]
+    container: rnaseq
+  rsem:
+    category: quantification
+    module: rsem.nf
+    processes: [RSEM_PREPARE_REFERENCE, RSEM_CALCULATE_EXPRESSION]
+    container: rnaseq
+
+  # QC
+  fastqc:
+    category: qc
+    module: fastqc.nf
+    processes: [FASTQC]
+    container: base
+  multiqc:
+    category: qc
+    module: multiqc.nf
+    processes: [MULTIQC]
+    container: base
+  qualimap:
+    category: qc
+    module: qualimap.nf
+    processes: [QUALIMAP_BAMQC]
+    container: base
+
+  # Trimming
+  trimmomatic:
+    category: trimming
+    module: trimmomatic.nf
+    processes: [TRIMMOMATIC_PE, TRIMMOMATIC_SE]
+    container: base
+  cutadapt:
+    category: trimming
+    module: cutadapt.nf
+    processes: [CUTADAPT_PE, CUTADAPT_SE]
+    container: base
+  fastp:
+    category: trimming
+    module: fastp.nf
+    processes: [FASTP_PE, FASTP_SE]
+    container: base
+  trim_galore:
+    category: trimming
+    module: trimgalore.nf
+    processes: [TRIMGALORE_PE, TRIMGALORE_SE]
+    container: base
+
+  # Peak calling
+  macs2:
+    category: peaks
+    module: macs2.nf
+    processes: [MACS2_CALLPEAK]
+    container: chipseq
+  homer:
+    category: peaks
+    module: homer.nf
+    processes: [HOMER_FINDPEAKS, HOMER_ANNOTATEPEAKS]
+    container: chipseq
+
+  # Variant calling
+  gatk:
+    category: variant_calling
+    module: gatk.nf
+    processes: [GATK_MARKDUPLICATES, GATK_BASERECALIBRATOR, GATK_HAPLOTYPECALLER]
+    container: dnaseq
+  freebayes:
+    category: variant_calling
+    module: freebayes.nf
+    processes: [FREEBAYES]
+    container: dnaseq
+  bcftools:
+    category: variant_calling
+    module: bcftools.nf
+    processes: [BCFTOOLS_CALL, BCFTOOLS_FILTER]
+    container: dnaseq
+  varscan:
+    category: variant_calling
+    module: varscan.nf
+    processes: [VARSCAN_GERMLINE, VARSCAN_SOMATIC]
+    container: dnaseq
+
+  # Structural variants
+  manta:
+    category: structural_variants
+    module: manta.nf
+    processes: [MANTA_GERMLINE, MANTA_SOMATIC]
+    container: structuralvariants
+  delly:
+    category: structural_variants
+    module: delly.nf
+    processes: [DELLY_CALL]
+    container: structuralvariants
+
+  # Utilities
+  samtools:
+    category: utilities
+    module: samtools.nf
+    processes: [SAMTOOLS_SORT, SAMTOOLS_INDEX, SAMTOOLS_FLAGSTAT]
+    container: dnaseq
+  bedtools:
+    category: utilities
+    module: bedtools.nf
+    processes: [BEDTOOLS_INTERSECT, BEDTOOLS_MERGE]
+    container: base
+  picard:
+    category: utilities
+    module: picard.nf
+    processes: [PICARD_MARKDUPLICATES, PICARD_COLLECTMETRICS]
+    container: dnaseq
+
+  # Analysis
+  deseq2:
+    category: analysis
+    module: deseq2.nf
+    processes: [DESEQ2_DIFFERENTIAL]
+    container: rnaseq
+  edger:
+    category: analysis
+    module: edger.nf
+    processes: [EDGER_DIFFERENTIAL]
+    container: rnaseq
+
+  # Assembly
+  trinity:
+    category: assembly
+    module: trinity.nf
+    processes: [TRINITY_DENOVO]
+    container: assembly
+  spades:
+    category: assembly
+    module: spades.nf
+    processes: [SPADES_ASSEMBLE]
+    container: assembly
+  megahit:
+    category: metagenomics
+    module: megahit.nf
+    processes: [MEGAHIT_ASSEMBLE]
+    container: metagenomics
+  flye:
+    category: assembly
+    module: flye.nf
+    processes: [FLYE_ASSEMBLE]
+    container: longread
+  canu:
+    category: assembly
+    module: canu.nf
+    processes: [CANU_ASSEMBLE]
+    container: longread
+
+  # Annotation
+  prokka:
+    category: annotation
+    module: prokka.nf
+    processes: [PROKKA_ANNOTATE]
+    container: metagenomics
+
+  # Methylation
+  bismark:
+    category: methylation
+    module: bismark.nf
+    processes: [BISMARK_GENOME_PREPARATION, BISMARK_ALIGN, BISMARK_METHYLATION_EXTRACTOR]
+    container: methylation
+
+  # Metagenomics
+  kraken2:
+    category: metagenomics
+    module: kraken2.nf
+    processes: [KRAKEN2_CLASSIFY]
+    container: metagenomics
+  metaphlan:
+    category: metagenomics
+    module: metaphlan.nf
+    processes: [METAPHLAN_PROFILE]
+    container: metagenomics
+
+  # Hi-C
+  juicer:
+    category: hic
+    module: juicer.nf
+    processes: [JUICER_TOOLS_HIC]
+    container: hic
+  hicpro:
+    category: hic
+    module: hicpro.nf
+    processes: [HICPRO_PROCESS]
+    container: hic
+
+  # scRNA-seq
+  seurat:
+    category: scrna
+    module: seurat.nf
+    processes: [SEURAT_QC_NORMALIZE, SEURAT_CLUSTER]
+    container: scrnaseq
+  scanpy:
+    category: scrna
+    module: scanpy.nf
+    processes: [SCANPY_ANALYSIS]
+    container: scrnaseq
+  cellranger:
+    category: scrna
+    module: cellranger.nf
+    processes: [CELLRANGER_COUNT]
+    container: scrnaseq
+
+  # Visualization
+  deeptools:
+    category: visualization
+    module: deeptools.nf
+    processes: [DEEPTOOLS_BAMCOVERAGE, DEEPTOOLS_PLOTHEATMAP]
+    container: chipseq
+
+  # Polishing
+  racon:
+    category: polishing
+    module: racon.nf
+    processes: [RACON_POLISH]
+    container: longread
+
+  # Additional container mappings for tools without explicit modules yet
+  stringtie:
+    container: rnaseq
+  medaka:
+    container: longread

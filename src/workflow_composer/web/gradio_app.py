@@ -570,8 +570,8 @@ class AppState:
         return stats
 
 
-# Global app state
-app_state = AppState()
+# Global app state removed - using gr.State instead
+# app_state = AppState()
 
 
 # ============================================================================
@@ -649,6 +649,7 @@ def chat_with_composer(
     message: str,
     history: List[Dict[str, str]],
     provider: str,
+    app_state: AppState,
 ) -> Generator[Tuple[List[Dict[str, str]], str], None, None]:
     """
     Chat with the AI workflow composer.
@@ -941,7 +942,7 @@ Be concise but helpful. Use markdown formatting."""
         yield history, ""
 
 
-def search_tools(query: str, container_filter: str = "") -> str:
+def search_tools(query: str, container_filter: str, app_state: AppState) -> str:
     """Search for bioinformatics tools."""
     if not query or len(query) < 2:
         return "Enter at least 2 characters to search..."
@@ -979,7 +980,7 @@ def search_tools(query: str, container_filter: str = "") -> str:
         return f"Search error: {e}"
 
 
-def get_modules_by_category() -> str:
+def get_modules_by_category(app_state: AppState) -> str:
     """Get all modules organized by category."""
     if not app_state.module_mapper:
         # Return demo data
@@ -1089,7 +1090,7 @@ def download_latest_workflow() -> Optional[str]:
     return None
 
 
-def get_workflow_preview():
+def get_workflow_preview(app_state: AppState):
     """Get preview of the last generated workflow.
     
     Returns:
@@ -1164,7 +1165,7 @@ def get_workflow_preview():
         )
 
 
-def refresh_stats() -> Tuple[str, str, str, str]:
+def refresh_stats(app_state: AppState) -> Tuple[str, str, str, str]:
     """Refresh and return statistics."""
     stats = app_state.get_stats()
     return (
@@ -2185,6 +2186,8 @@ def create_interface() -> gr.Blocks:
     with gr.Blocks(
         title="BioPipelines - AI Workflow Composer",
     ) as demo:
+        # Initialize session state
+        app_state = gr.State(AppState)
         
         # Header
         gr.HTML("""
@@ -2518,7 +2521,7 @@ def create_interface() -> gr.Blocks:
                         )
                         container_filter = gr.Dropdown(
                             choices=["", "base", "rna-seq", "dna-seq", "chip-seq", "atac-seq", 
-                                     "scrna-seq", "metagenomics", "methylation", "long-read"],
+                                     "scrna-seq", "metagenomics", "methylation", "long_read"],
                             label="Container",
                             scale=1,
                         )
@@ -2528,7 +2531,7 @@ def create_interface() -> gr.Blocks:
                 # Modules Browser
                 with gr.Accordion("📦 Nextflow Modules (71 modules)", open=False):
                     gr.Markdown("Browse available Nextflow modules by category")
-                    modules_display = gr.Markdown(get_modules_by_category())
+                    modules_display = gr.Markdown(get_modules_by_category(AppState()))
                     refresh_modules_btn = gr.Button("🔄 Refresh Modules", size="sm")
                 
                 gr.Markdown("---")
@@ -2567,7 +2570,7 @@ def create_interface() -> gr.Blocks:
         # Workspace Tab - Chat handlers
         msg_input.submit(
             fn=chat_with_composer,
-            inputs=[msg_input, chatbot, provider_dropdown],
+            inputs=[msg_input, chatbot, provider_dropdown, app_state],
             outputs=[msg_input, chatbot],
         ).then(
             fn=lambda: gr.update(choices=[j.job_id for j in pipeline_executor.list_jobs()]),
@@ -2583,7 +2586,7 @@ def create_interface() -> gr.Blocks:
         
         send_btn.click(
             fn=chat_with_composer,
-            inputs=[msg_input, chatbot, provider_dropdown],
+            inputs=[msg_input, chatbot, provider_dropdown, app_state],
             outputs=[chatbot, msg_input],
         ).then(
             fn=lambda: gr.update(choices=[j.job_id for j in pipeline_executor.list_jobs()]),
@@ -2611,6 +2614,7 @@ def create_interface() -> gr.Blocks:
         # View workflow button - shows preview accordion
         view_workflow_btn.click(
             fn=get_workflow_preview,
+            inputs=[app_state],
             outputs=[workflow_preview_accordion, workflow_preview_content, workflow_preview_code],
         )
         
@@ -2807,17 +2811,18 @@ def create_interface() -> gr.Blocks:
         # Advanced Tab - Tool/Module search
         tool_search.change(
             fn=search_tools,
-            inputs=[tool_search, container_filter],
+            inputs=[tool_search, container_filter, app_state],
             outputs=tool_results,
         )
         container_filter.change(
             fn=search_tools,
-            inputs=[tool_search, container_filter],
+            inputs=[tool_search, container_filter, app_state],
             outputs=tool_results,
         )
         
         refresh_modules_btn.click(
             fn=get_modules_by_category,
+            inputs=[app_state],
             outputs=modules_display,
         )
         
@@ -2882,8 +2887,8 @@ def main():
     available = check_available_providers()
     if any(available.values()):
         provider = next(k for k, v in available.items() if v)
-        app_state.initialize(provider)
-        print(f"  ✅ Initialized with {provider} provider")
+        # app_state.initialize(provider) # Removed global state init
+        print(f"  ✅ Default provider: {provider}")
     else:
         print("  ⚠️  No LLM providers available - running in demo mode")
     

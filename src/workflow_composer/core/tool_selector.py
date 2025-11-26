@@ -55,135 +55,26 @@ class ToolMatch:
 
 
 # Mapping from analysis types to required tools
-ANALYSIS_TOOL_MAP = {
-    "rna_seq_basic": {
-        "required": ["fastqc", "star", "samtools"],
-        "recommended": ["multiqc", "picard"],
-        "quantification": ["featurecounts", "salmon", "htseq"],
-    },
-    "rna_seq_differential_expression": {
-        "required": ["fastqc", "star", "featurecounts"],
-        "recommended": ["multiqc", "samtools"],
-        "analysis": ["deseq2", "edger"],
-    },
-    "rna_seq_de_novo_assembly": {
-        "required": ["fastqc", "trinity"],
-        "recommended": ["multiqc", "rsem", "blast"],
-    },
-    "chip_seq_peak_calling": {
-        "required": ["fastqc", "bwa", "samtools", "macs2"],
-        "recommended": ["multiqc", "picard", "deeptools"],
-        "analysis": ["homer"],
-    },
-    "atac_seq": {
-        "required": ["fastqc", "bowtie2", "samtools", "macs2"],
-        "recommended": ["multiqc", "picard", "deeptools"],
-    },
-    "wgs_variant_calling": {
-        "required": ["fastqc", "bwa", "samtools", "gatk"],
-        "recommended": ["multiqc", "picard", "bcftools"],
-        "alternative_callers": ["freebayes", "deepvariant"],
-    },
-    "somatic_variant_calling": {
-        "required": ["bwa", "samtools", "gatk"],
-        "recommended": ["picard", "bcftools"],
-        "callers": ["mutect2", "varscan", "strelka2", "manta"],
-    },
-    "structural_variant_detection": {
-        "required": ["bwa", "samtools"],
-        "callers": ["manta", "delly", "lumpy"],
-    },
-    "single_cell_rna_seq": {
-        "required": ["cellranger"],
-        "analysis": ["seurat", "scanpy"],
-        "recommended": ["velocyto"],
-    },
-    "metagenomics_profiling": {
-        "required": ["fastqc"],
-        "profilers": ["kraken2", "metaphlan", "bracken"],
-        "recommended": ["multiqc"],
-    },
-    "metagenomics_assembly": {
-        "required": ["fastqc"],
-        "assemblers": ["megahit", "metaspades"],
-        "annotation": ["prokka"],
-    },
-    "bisulfite_seq_methylation": {
-        "required": ["fastqc", "bismark"],
-        "recommended": ["multiqc", "trim_galore"],
-    },
-    "hic_chromatin_interaction": {
-        "required": ["bwa"],
-        "processors": ["hicpro", "juicer"],
-    },
-    "long_read_assembly": {
-        "required": ["nanoplot"],
-        "assemblers": ["flye", "canu"],
-        "polishing": ["racon", "medaka"],
-    },
-    "genome_annotation": {
-        "required": [],
-        "annotators": ["prokka", "augustus"],
-        "recommended": ["blast"],
-    },
-    # Spatial transcriptomics
-    "spatial_transcriptomics": {
-        "required": ["spaceranger"],
-        "analysis": ["scanpy", "squidpy", "giotto"],
-        "visualization": ["deeptools"],
-    },
-    "spatial_visium": {
-        "required": ["spaceranger"],
-        "analysis": ["scanpy", "squidpy"],
-        "recommended": ["seurat"],
-    },
-    "spatial_slide_seq": {
-        "required": ["fastqc"],
-        "alignment": ["star", "bowtie2"],
-        "analysis": ["scanpy", "squidpy"],
-    },
-    "spatial_xenium": {
-        "required": ["xeniumranger"],
-        "analysis": ["scanpy", "squidpy"],
-    },
-    # Long-read RNA-seq
-    "long_read_rna_seq": {
-        "required": ["minimap2", "samtools"],
-        "analysis": ["flair", "stringtie", "isoquant"],
-        "qc": ["nanoplot", "rseqc"],
-    },
-    "long_read_isoseq": {
-        "required": ["isoseq3", "minimap2", "samtools"],
-        "analysis": ["pigeon", "sqanti3", "tama"],
-        "clustering": ["isoclust"],
-    },
-    "long_read_direct_rna": {
-        "required": ["minimap2", "samtools", "nanopolish"],
-        "modification": ["tombo", "eligos", "m6anet"],
-        "qc": ["nanoplot"],
-    },
-    # Multi-omics integration
-    "multi_omics_integration": {
-        "required": [],
-        "integration": ["mofa", "mixomics", "diablo"],
-        "visualization": ["deeptools"],
-    },
-    "rna_atac_integration": {
-        "required": ["cellranger-arc"],
-        "analysis": ["seurat", "scanpy", "signac"],
-        "recommended": ["chromvar", "cicero"],
-    },
-    "proteogenomics": {
-        "required": ["star", "samtools"],
-        "ms_tools": ["maxquant", "msgf", "percolator"],
-        "integration": ["proteogenomics_tools"],
-    },
-    "multi_modal_scrna": {
-        "required": ["cellranger"],
-        "analysis": ["seurat", "scanpy", "totalvi"],
-        "cite_seq": ["cite_seq_count", "dsb"],
-    },
-}
+
+def load_analysis_tool_map(config_path: Optional[Path] = None) -> Dict[str, Any]:
+    """Load analysis tool map from YAML config."""
+    if not config_path:
+        # Default location relative to this file
+        base_dir = Path(__file__).parent.parent.parent.parent
+        config_path = base_dir / "config" / "analysis_definitions.yaml"
+    
+    if not config_path.exists():
+        logger.warning(f"Analysis definitions not found at {config_path}")
+        return {}
+        
+    try:
+        import yaml
+        with open(config_path) as f:
+            return yaml.safe_load(f)
+    except Exception as e:
+        logger.error(f"Failed to load analysis definitions: {e}")
+        return {}
+
 
 
 class ToolSelector:
@@ -201,6 +92,9 @@ class ToolSelector:
         self.catalog_path = Path(catalog_path)
         self.tools: Dict[str, Tool] = {}
         self.container_tools: Dict[str, Set[str]] = {}
+        
+        # Load analysis definitions
+        self.analysis_tool_map = load_analysis_tool_map()
         
         self._load_catalog()
     
@@ -333,7 +227,7 @@ class ToolSelector:
         """
         result = {}
         
-        tool_spec = ANALYSIS_TOOL_MAP.get(analysis_type, {})
+        tool_spec = self.analysis_tool_map.get(analysis_type, {})
         
         for category, tool_names in tool_spec.items():
             found_tools = []

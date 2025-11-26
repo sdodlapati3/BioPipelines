@@ -49,107 +49,26 @@ class Module:
 
 
 # Mapping from tool names to module info
-TOOL_MODULE_MAP = {
-    # Alignment
-    "star": {"category": "alignment", "module": "star.nf", "processes": ["STAR_INDEX", "STAR_ALIGN"]},
-    "bwa": {"category": "alignment", "module": "bwa.nf", "processes": ["BWA_INDEX", "BWA_MEM"]},
-    "bowtie2": {"category": "alignment", "module": "bowtie2.nf", "processes": ["BOWTIE2_BUILD", "BOWTIE2_ALIGN"]},
-    "hisat2": {"category": "alignment", "module": "hisat2.nf", "processes": ["HISAT2_BUILD", "HISAT2_ALIGN"]},
-    "minimap2": {"category": "alignment", "module": "minimap2.nf", "processes": ["MINIMAP2_INDEX", "MINIMAP2_ALIGN"]},
-    
-    # Quantification
-    "featurecounts": {"category": "quantification", "module": "featurecounts.nf", "processes": ["FEATURECOUNTS"]},
-    "salmon": {"category": "quantification", "module": "salmon.nf", "processes": ["SALMON_INDEX", "SALMON_QUANT"]},
-    "htseq": {"category": "quantification", "module": "htseq.nf", "processes": ["HTSEQ_COUNT"]},
-    "kallisto": {"category": "quantification", "module": "kallisto.nf", "processes": ["KALLISTO_INDEX", "KALLISTO_QUANT"]},
-    "rsem": {"category": "quantification", "module": "rsem.nf", "processes": ["RSEM_PREPARE_REFERENCE", "RSEM_CALCULATE_EXPRESSION"]},
-    
-    # QC
-    "fastqc": {"category": "qc", "module": "fastqc.nf", "processes": ["FASTQC"]},
-    "multiqc": {"category": "qc", "module": "multiqc.nf", "processes": ["MULTIQC"]},
-    "qualimap": {"category": "qc", "module": "qualimap.nf", "processes": ["QUALIMAP_BAMQC"]},
-    
-    # Trimming
-    "trimmomatic": {"category": "trimming", "module": "trimmomatic.nf", "processes": ["TRIMMOMATIC_PE", "TRIMMOMATIC_SE"]},
-    "cutadapt": {"category": "trimming", "module": "cutadapt.nf", "processes": ["CUTADAPT_PE", "CUTADAPT_SE"]},
-    "fastp": {"category": "trimming", "module": "fastp.nf", "processes": ["FASTP_PE", "FASTP_SE"]},
-    "trim_galore": {"category": "trimming", "module": "trimgalore.nf", "processes": ["TRIMGALORE_PE", "TRIMGALORE_SE"]},
-    
-    # Peak calling
-    "macs2": {"category": "peaks", "module": "macs2.nf", "processes": ["MACS2_CALLPEAK"]},
-    "homer": {"category": "peaks", "module": "homer.nf", "processes": ["HOMER_FINDPEAKS", "HOMER_ANNOTATEPEAKS"]},
-    
-    # Variant calling
-    "gatk": {"category": "variant_calling", "module": "gatk.nf", "processes": ["GATK_MARKDUPLICATES", "GATK_BASERECALIBRATOR", "GATK_HAPLOTYPECALLER"]},
-    "freebayes": {"category": "variant_calling", "module": "freebayes.nf", "processes": ["FREEBAYES"]},
-    "bcftools": {"category": "variant_calling", "module": "bcftools.nf", "processes": ["BCFTOOLS_CALL", "BCFTOOLS_FILTER"]},
-    "varscan": {"category": "variant_calling", "module": "varscan.nf", "processes": ["VARSCAN_GERMLINE", "VARSCAN_SOMATIC"]},
-    
-    # Structural variants
-    "manta": {"category": "structural_variants", "module": "manta.nf", "processes": ["MANTA_GERMLINE", "MANTA_SOMATIC"]},
-    "delly": {"category": "structural_variants", "module": "delly.nf", "processes": ["DELLY_CALL"]},
-    
-    # Utilities
-    "samtools": {"category": "utilities", "module": "samtools.nf", "processes": ["SAMTOOLS_SORT", "SAMTOOLS_INDEX", "SAMTOOLS_FLAGSTAT"]},
-    "bedtools": {"category": "utilities", "module": "bedtools.nf", "processes": ["BEDTOOLS_INTERSECT", "BEDTOOLS_MERGE"]},
-    "picard": {"category": "utilities", "module": "picard.nf", "processes": ["PICARD_MARKDUPLICATES", "PICARD_COLLECTMETRICS"]},
-    
-    # Analysis
-    "deseq2": {"category": "analysis", "module": "deseq2.nf", "processes": ["DESEQ2_DIFFERENTIAL"]},
-    "edger": {"category": "analysis", "module": "edger.nf", "processes": ["EDGER_DIFFERENTIAL"]},
-    
-    # Assembly
-    "trinity": {"category": "assembly", "module": "trinity.nf", "processes": ["TRINITY_DENOVO"]},
-    "spades": {"category": "assembly", "module": "spades.nf", "processes": ["SPADES_ASSEMBLE"]},
-    "megahit": {"category": "metagenomics", "module": "megahit.nf", "processes": ["MEGAHIT_ASSEMBLE"]},
-    "flye": {"category": "assembly", "module": "flye.nf", "processes": ["FLYE_ASSEMBLE"]},
-    "canu": {"category": "assembly", "module": "canu.nf", "processes": ["CANU_ASSEMBLE"]},
-    
-    # Annotation
-    "prokka": {"category": "annotation", "module": "prokka.nf", "processes": ["PROKKA_ANNOTATE"]},
-    
-    # Methylation
-    "bismark": {"category": "methylation", "module": "bismark.nf", "processes": ["BISMARK_GENOME_PREPARATION", "BISMARK_ALIGN", "BISMARK_METHYLATION_EXTRACTOR"]},
-    
-    # Metagenomics
-    "kraken2": {"category": "metagenomics", "module": "kraken2.nf", "processes": ["KRAKEN2_CLASSIFY"]},
-    "metaphlan": {"category": "metagenomics", "module": "metaphlan.nf", "processes": ["METAPHLAN_PROFILE"]},
-    
-    # Hi-C
-    "juicer": {"category": "hic", "module": "juicer.nf", "processes": ["JUICER_TOOLS_HIC"]},
-    "hicpro": {"category": "hic", "module": "hicpro.nf", "processes": ["HICPRO_PROCESS"]},
-    
-    # scRNA-seq
-    "seurat": {"category": "scrna", "module": "seurat.nf", "processes": ["SEURAT_QC_NORMALIZE", "SEURAT_CLUSTER"]},
-    "scanpy": {"category": "scrna", "module": "scanpy.nf", "processes": ["SCANPY_ANALYSIS"]},
-    "cellranger": {"category": "scrna", "module": "cellranger.nf", "processes": ["CELLRANGER_COUNT"]},
-    
-    # Visualization
-    "deeptools": {"category": "visualization", "module": "deeptools.nf", "processes": ["DEEPTOOLS_BAMCOVERAGE", "DEEPTOOLS_PLOTHEATMAP"]},
-    
-    # Polishing
-    "racon": {"category": "polishing", "module": "racon.nf", "processes": ["RACON_POLISH"]},
-}
 
-# Container mapping for tools
-TOOL_CONTAINER_MAP = {
-    "star": "rnaseq", "hisat2": "rnaseq", "salmon": "rnaseq",
-    "featurecounts": "rnaseq", "deseq2": "rnaseq", "edger": "rnaseq",
-    "stringtie": "rnaseq", "kallisto": "rnaseq", "rsem": "rnaseq",
-    "bwa": "dnaseq", "gatk": "dnaseq", "freebayes": "dnaseq",
-    "bcftools": "dnaseq", "samtools": "dnaseq", "picard": "dnaseq",
-    "bowtie2": "chipseq", "macs2": "chipseq", "homer": "chipseq",
-    "deeptools": "chipseq",
-    "seurat": "scrnaseq", "scanpy": "scrnaseq", "cellranger": "scrnaseq",
-    "kraken2": "metagenomics", "metaphlan": "metagenomics", "megahit": "metagenomics",
-    "prokka": "metagenomics",
-    "bismark": "methylation",
-    "minimap2": "longread", "flye": "longread", "canu": "longread",
-    "racon": "longread", "medaka": "longread",
-    "hicpro": "hic", "juicer": "hic",
-    "manta": "structuralvariants", "delly": "structuralvariants",
-    "fastqc": "base", "multiqc": "base", "bedtools": "base",
-}
+def load_tool_mappings(config_path: Optional[Path] = None) -> Dict[str, Any]:
+    """Load tool mappings from YAML config."""
+    if not config_path:
+        # Default location relative to this file
+        base_dir = Path(__file__).parent.parent.parent.parent
+        config_path = base_dir / "config" / "tool_mappings.yaml"
+    
+    if not config_path.exists():
+        logger.warning(f"Tool mappings not found at {config_path}")
+        return {}
+        
+    try:
+        import yaml
+        with open(config_path) as f:
+            return yaml.safe_load(f)
+    except Exception as e:
+        logger.error(f"Failed to load tool mappings: {e}")
+        return {}
+
 
 
 class ModuleMapper:
@@ -168,6 +87,22 @@ class ModuleMapper:
         self.module_dir = Path(module_dir)
         self.additional_dirs = [Path(d) for d in (additional_dirs or [])]
         self.modules: Dict[str, Module] = {}
+        
+        # Load tool mappings
+        mappings = load_tool_mappings()
+        self.tool_module_map = mappings.get("tools", {})
+        
+        # Create container map from tools
+        self.tool_container_map = {}
+        for tool, info in self.tool_module_map.items():
+            if "container" in info:
+                self.tool_container_map[tool] = info["container"]
+        
+        # Add explicit container mappings if any (from the yaml structure I created, it's all under tools now, but I added some extras at the end)
+        # Actually my yaml structure put everything under 'tools', but I also added some standalone container mappings at the end of the yaml file
+        # Let's check the yaml content again.
+        # Ah, I put 'stringtie' and 'medaka' at the end under 'tools' but without 'module' info.
+        # So iterating over self.tool_module_map covers everything.
         
         self._scan_modules()
         
@@ -198,7 +133,7 @@ class ModuleMapper:
                         processes = self._extract_processes(main_nf)
                         tool_name = module_name.lower()
                         
-                        container = TOOL_CONTAINER_MAP.get(tool_name, "base")
+                        container = self.tool_container_map.get(tool_name, "base")
                         
                         self.modules[tool_name] = Module(
                             name=module_name,
@@ -218,7 +153,7 @@ class ModuleMapper:
                     continue
                 
                 # Get container from mapping
-                container = TOOL_CONTAINER_MAP.get(tool_name, "base")
+                container = self.tool_container_map.get(tool_name, "base")
                 
                 self.modules[tool_name] = Module(
                     name=module_name,
@@ -251,7 +186,7 @@ class ModuleMapper:
                     continue
                 
                 processes = self._extract_processes(module_file)
-                container = TOOL_CONTAINER_MAP.get(tool_name, "base")
+                container = self.tool_container_map.get(tool_name, "base")
                 
                 self.modules[tool_name] = Module(
                     name=module_name,
@@ -356,18 +291,20 @@ class ModuleMapper:
             if var in self.modules:
                 return self.modules[var]
         
-        # Check TOOL_MODULE_MAP for known mappings
-        if tool_lower in TOOL_MODULE_MAP:
-            info = TOOL_MODULE_MAP[tool_lower]
-            expected_path = self.module_dir / info["category"] / info["module"]
-            if expected_path.exists():
-                return Module(
-                    name=info["module"].replace(".nf", ""),
-                    path=expected_path,
-                    tool_name=tool_lower,
-                    container=TOOL_CONTAINER_MAP.get(tool_lower, "base"),
-                    processes=info["processes"]
-                )
+        # Check tool_module_map for known mappings
+        if tool_lower in self.tool_module_map:
+            info = self.tool_module_map[tool_lower]
+            # Only if it has module info (some entries might just be container mappings)
+            if "module" in info and "category" in info:
+                expected_path = self.module_dir / info["category"] / info["module"]
+                if expected_path.exists():
+                    return Module(
+                        name=info["module"].replace(".nf", ""),
+                        path=expected_path,
+                        tool_name=tool_lower,
+                        container=self.tool_container_map.get(tool_lower, "base"),
+                        processes=info.get("processes", [])
+                    )
         
         return None
     
@@ -482,8 +419,10 @@ Generate ONLY the Nextflow code, no explanations."""
         """Guess appropriate category for a tool."""
         tool_lower = tool_name.lower()
         
-        if tool_lower in TOOL_MODULE_MAP:
-            return TOOL_MODULE_MAP[tool_lower]["category"]
+        if tool_lower in self.tool_module_map:
+            info = self.tool_module_map[tool_lower]
+            if "category" in info:
+                return info["category"]
         
         # Heuristic based on name
         if any(kw in tool_lower for kw in ["align", "map", "bwa", "star", "bowtie"]):

@@ -1,0 +1,269 @@
+rna_seq_basic:
+  required:
+    - fastqc
+    - star
+    - samtools
+  recommended:
+    - multiqc
+    - picard
+  quantification:
+    - featurecounts
+    - salmon
+    - htseq
+
+rna_seq_differential_expression:
+  required:
+    - fastqc
+    - star
+    - featurecounts
+  recommended:
+    - multiqc
+    - samtools
+  analysis:
+    - deseq2
+    - edger
+
+rna_seq_de_novo_assembly:
+  required:
+    - fastqc
+    - trinity
+  recommended:
+    - multiqc
+    - rsem
+    - blast
+
+chip_seq_peak_calling:
+  required:
+    - fastqc
+    - bwa
+    - samtools
+    - macs2
+  recommended:
+    - multiqc
+    - picard
+    - deeptools
+  analysis:
+    - homer
+
+atac_seq:
+  required:
+    - fastqc
+    - bowtie2
+    - samtools
+    - macs2
+  recommended:
+    - multiqc
+    - picard
+    - deeptools
+
+wgs_variant_calling:
+  required:
+    - fastqc
+    - bwa
+    - samtools
+    - gatk
+  recommended:
+    - multiqc
+    - picard
+    - bcftools
+  alternative_callers:
+    - freebayes
+    - deepvariant
+
+somatic_variant_calling:
+  required:
+    - bwa
+    - samtools
+    - gatk
+  recommended:
+    - picard
+    - bcftools
+  callers:
+    - mutect2
+    - varscan
+    - strelka2
+    - manta
+
+structural_variant_detection:
+  required:
+    - bwa
+    - samtools
+  callers:
+    - manta
+    - delly
+    - lumpy
+
+single_cell_rna_seq:
+  required:
+    - cellranger
+  analysis:
+    - seurat
+    - scanpy
+  recommended:
+    - velocyto
+
+metagenomics_profiling:
+  required:
+    - fastqc
+  profilers:
+    - kraken2
+    - metaphlan
+    - bracken
+  recommended:
+    - multiqc
+
+metagenomics_assembly:
+  required:
+    - fastqc
+  assemblers:
+    - megahit
+    - metaspades
+  annotation:
+    - prokka
+
+bisulfite_seq_methylation:
+  required:
+    - fastqc
+    - bismark
+  recommended:
+    - multiqc
+    - trim_galore
+
+hic_chromatin_interaction:
+  required:
+    - bwa
+  processors:
+    - hicpro
+    - juicer
+
+long_read_assembly:
+  required:
+    - nanoplot
+  assemblers:
+    - flye
+    - canu
+  polishing:
+    - racon
+    - medaka
+
+genome_annotation:
+  required: []
+  annotators:
+    - prokka
+    - augustus
+  recommended:
+    - blast
+
+spatial_transcriptomics:
+  required:
+    - spaceranger
+  analysis:
+    - scanpy
+    - squidpy
+    - giotto
+  visualization:
+    - deeptools
+
+spatial_visium:
+  required:
+    - spaceranger
+  analysis:
+    - scanpy
+    - squidpy
+  recommended:
+    - seurat
+
+spatial_slide_seq:
+  required:
+    - fastqc
+  alignment:
+    - star
+    - bowtie2
+  analysis:
+    - scanpy
+    - squidpy
+
+spatial_xenium:
+  required:
+    - xeniumranger
+  analysis:
+    - scanpy
+    - squidpy
+
+long_read_rna_seq:
+  required:
+    - minimap2
+    - samtools
+  analysis:
+    - flair
+    - stringtie
+    - isoquant
+  qc:
+    - nanoplot
+    - rseqc
+
+long_read_isoseq:
+  required:
+    - isoseq3
+    - minimap2
+    - samtools
+  analysis:
+    - pigeon
+    - sqanti3
+    - tama
+  clustering:
+    - isoclust
+
+long_read_direct_rna:
+  required:
+    - minimap2
+    - samtools
+    - nanopolish
+  modification:
+    - tombo
+    - eligos
+    - m6anet
+  qc:
+    - nanoplot
+
+multi_omics_integration:
+  required: []
+  integration:
+    - mofa
+    - mixomics
+    - diablo
+  visualization:
+    - deeptools
+
+rna_atac_integration:
+  required:
+    - cellranger-arc
+  analysis:
+    - seurat
+    - scanpy
+    - signac
+  recommended:
+    - chromvar
+    - cicero
+
+proteogenomics:
+  required:
+    - star
+    - samtools
+  ms_tools:
+    - maxquant
+    - msgf
+    - percolator
+  integration:
+    - proteogenomics_tools
+
+multi_modal_scrna:
+  required:
+    - cellranger
+  analysis:
+    - seurat
+    - scanpy
+    - totalvi
+  cite_seq:
+    - cite_seq_count
+    - dsb
