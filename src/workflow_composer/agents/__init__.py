@@ -13,6 +13,8 @@ Available components:
 - AgentOrchestrator: Coordinates multiple agents for complex tasks
 - AgentMemory: Vector-based RAG memory for learning from interactions
 - ReactAgent: Multi-step ReAct reasoning agent
+- AutonomousAgent: Full autonomous agent with execution capabilities
+- Executor Layer: Safe file/command execution with audit trail
 """
 
 from .tools import AgentTools, ToolResult, ToolName, process_tool_request
@@ -76,6 +78,32 @@ from .multi_model import (
     QUAD_H100_CONFIG,
     DUAL_H100_CONFIG,
     SINGLE_T4_CONFIG,
+)
+# Executor Layer (Phase 1 - Safe Execution Foundation)
+from .executor import (
+    CommandSandbox,
+    FileOperations,
+    ProcessManager,
+    AuditLogger,
+    PermissionManager,
+    AutonomyLevel,
+)
+# Autonomous System (Phase 3 - Full Autonomy)
+from .autonomous import (
+    AutonomousAgent,
+    create_agent,
+    Task,
+    TaskStatus,
+    Action,
+    ActionType,
+    JobMonitor as AutonomousJobMonitor,
+    JobEvent,
+    JobState,
+    HealthChecker,
+    HealthStatus,
+    RecoveryManager,
+    RecoveryResult,
+    RecoveryLoop,
 )
 
 __all__ = [
@@ -147,4 +175,26 @@ __all__ = [
     "QUAD_H100_CONFIG",
     "DUAL_H100_CONFIG",
     "SINGLE_T4_CONFIG",
+    # Executor Layer (Phase 1)
+    "CommandSandbox",
+    "FileOperations",
+    "ProcessManager",
+    "AuditLogger",
+    "PermissionManager",
+    "AutonomyLevel",
+    # Autonomous System (Phase 3)
+    "AutonomousAgent",
+    "create_agent",
+    "Task",
+    "TaskStatus",
+    "Action",
+    "ActionType",
+    "AutonomousJobMonitor",
+    "JobEvent",
+    "JobState",
+    "HealthChecker",
+    "HealthStatus",
+    "RecoveryManager",
+    "RecoveryResult",
+    "RecoveryLoop",
 ]

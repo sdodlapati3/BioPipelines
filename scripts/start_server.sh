@@ -116,9 +116,19 @@ cd ${PROJECT_DIR}
 [ -f ".secrets/hf_token" ] && export HF_TOKEN=\$(cat .secrets/hf_token)
 [ -f ".secrets/hf_token" ] && export HUGGING_FACE_HUB_TOKEN=\$(cat .secrets/hf_token)
 
-# Start vLLM
+# Optimize MoE performance for H100 (use Cutlass instead of DeepGEMM for MoE layers)
+export VLLM_MOE_USE_DEEP_GEMM=0
+
+# Start vLLM with model-specific parameters
 echo "Starting vLLM..."
-python -m vllm.entrypoints.openai.api_server --model "${MODEL}" --host 0.0.0.0 --port ${VLLM_PORT} --tensor-parallel-size ${NUM_GPUS} --gpu-memory-utilization 0.90 --max-model-len 32768 --trust-remote-code 2>&1 &
+VLLM_CMD="python -m vllm.entrypoints.openai.api_server --model ${MODEL} --host 0.0.0.0 --port ${VLLM_PORT} --tensor-parallel-size ${NUM_GPUS} --gpu-memory-utilization 0.90 --max-model-len 32768 --trust-remote-code"
+
+# Add MiniMax-M2 specific parameters
+if [[ "${MODEL}" == *"MiniMax"* ]]; then
+    VLLM_CMD="\${VLLM_CMD} --tool-call-parser minimax_m2 --reasoning-parser minimax_m2_append_think --enable-auto-tool-choice"
+fi
+
+eval \${VLLM_CMD} 2>&1 &
 VLLM_PID=\$!
 
 # Wait for vLLM
