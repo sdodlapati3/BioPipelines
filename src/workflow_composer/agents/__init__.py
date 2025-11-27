@@ -105,6 +105,27 @@ from .autonomous import (
     RecoveryResult,
     RecoveryLoop,
 )
+# Enhanced Tools (Phase 2 - Tool Layer)
+from .enhanced_tools import (
+    EnhancedTool,
+    EnhancedToolResult,
+    EnhancedToolRegistry,
+    ToolStatus,
+    get_tool_registry,
+    execute_tool,
+    execute_tool_sync,
+    with_retry,
+    # Individual tools
+    SLURMSubmitTool,
+    SLURMStatusTool,
+    SLURMCancelTool,
+    SLURMLogsTool,
+    VLLMQueryTool,
+    VLLMHealthTool,
+    FileReadTool,
+    FileWriteTool,
+    SystemHealthTool,
+)
 
 __all__ = [
     # Tools
@@ -197,4 +218,22 @@ __all__ = [
     "RecoveryManager",
     "RecoveryResult",
     "RecoveryLoop",
+    # Enhanced Tools (Phase 2)
+    "EnhancedTool",
+    "EnhancedToolResult",
+    "EnhancedToolRegistry",
+    "ToolStatus",
+    "get_tool_registry",
+    "execute_tool",
+    "execute_tool_sync",
+    "with_retry",
+    "SLURMSubmitTool",
+    "SLURMStatusTool",
+    "SLURMCancelTool",
+    "SLURMLogsTool",
+    "VLLMQueryTool",
+    "VLLMHealthTool",
+    "FileReadTool",
+    "FileWriteTool",
+    "SystemHealthTool",
 ]
