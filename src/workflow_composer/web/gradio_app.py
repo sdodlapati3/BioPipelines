@@ -803,10 +803,10 @@ def chat_with_composer(
                 ctx_dict = None
                 if ctx:
                     ctx_dict = {
-                        "data_loaded": ctx.data_path is not None,
-                        "sample_count": len(ctx.samples) if ctx.samples else 0,
-                        "data_path": ctx.data_path,
-                        "last_workflow": ctx.generated_workflow,
+                        "data_loaded": ctx.last_scan_path is not None,
+                        "sample_count": len(ctx.last_scan_samples) if ctx.last_scan_samples else 0,
+                        "data_path": ctx.last_scan_path,
+                        "last_workflow": ctx.last_workflow_name,
                     }
                 
                 result = bridge.process_message_sync(message, ctx_dict)
@@ -1238,10 +1238,10 @@ def enhanced_chat_with_composer(
     context = {}
     if ctx:
         context = {
-            "data_loaded": ctx.data_path is not None,
-            "sample_count": len(ctx.samples) if ctx.samples else 0,
-            "data_path": ctx.data_path,
-            "last_workflow": ctx.generated_workflow,
+            "data_loaded": ctx.last_scan_path is not None,
+            "sample_count": len(ctx.last_scan_samples) if ctx.last_scan_samples else 0,
+            "data_path": ctx.last_scan_path,
+            "last_workflow": ctx.last_workflow_name,
         }
     
     # Stream response from enhanced handler

@@ -228,15 +228,27 @@ async def check_health_async() -> str:
 def check_health_sync() -> str:
     """Check system health synchronously."""
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # Create a new loop in a thread
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(asyncio.run, check_health_async())
-                return future.result(timeout=15)
-        else:
-            return loop.run_until_complete(check_health_async())
+        # Try to get existing event loop
+        try:
+            loop = asyncio.get_running_loop()
+            # If we're in an async context, we can't run sync
+            # Return a pending message - the async version will update it
+            return f"<div style='color:#666'><em>Checking health...</em></div>"
+        except RuntimeError:
+            # No running loop - we can create one
+            pass
+        
+        # Create new event loop for this thread
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                return loop.run_until_complete(check_health_async())
+            finally:
+                loop.close()
+        except Exception as e:
+            logger.warning(f"Health check loop error: {e}")
+            return f"<div style='color:#666'><em>Health check pending...</em></div>"
     except Exception as e:
         logger.warning(f"Health check error: {e}")
         return f"<div style='color:#666'><em>Health check pending...</em></div>"

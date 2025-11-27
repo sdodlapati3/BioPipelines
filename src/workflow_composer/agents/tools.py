@@ -27,6 +27,8 @@ logger = logging.getLogger(__name__)
 class ToolName(Enum):
     """Available agent tools."""
     SCAN_DATA = "scan_data"
+    CLEANUP_DATA = "cleanup_data"
+    CONFIRM_CLEANUP = "confirm_cleanup"
     SEARCH_DATABASES = "search_databases"
     CHECK_REFERENCES = "check_references"
     SUBMIT_JOB = "submit_job"
@@ -37,6 +39,7 @@ class ToolName(Enum):
     LIST_WORKFLOWS = "list_workflows"
     DOWNLOAD_RESULTS = "download_results"
     COMPARE_SAMPLES = "compare_samples"
+    RUN_COMMAND = "run_command"
     SHOW_HELP = "show_help"
 
 
@@ -68,6 +71,42 @@ TOOL_PATTERNS = [
     # Pattern 4: "what data is available in /path" - handle "is available" as two words
     (r"(?:what|which)\s+(?:data|files?|samples?|datasets?)\s+(?:are|is\s+available|is|do i have|exist|available)\s+(?:in|at)\s+['\"]?([\/~][^\s'\"\?]+)['\"]?",
      ToolName.SCAN_DATA),
+    # Pattern 5: "scan local folders" without path - use default
+    (r"(?:can you\s+)?(?:scan|find|look for|check|discover|list|show)\s+(?:me\s+)?(?:my\s+)?(?:the\s+)?(?:local\s+)?(?:data|files?|samples?|folders?|directories?|datasets?)",
+     ToolName.SCAN_DATA),
+    # Pattern 6: "what data is available" without path
+    (r"(?:what|which)\s+(?:data|files?|samples?|datasets?)\s+(?:are|is|do i have)\s*(?:available|there)?",
+     ToolName.SCAN_DATA),
+    # Pattern 7: "show me my datasets/data"
+    (r"show\s+(?:me\s+)?(?:my\s+)?(?:what\s+)?(?:data|datasets?|samples?|files?)",
+     ToolName.SCAN_DATA),
+    # Pattern 8: "what data files do I have" / "check what data I have"
+    (r"(?:can you\s+)?(?:check|see|view|tell me)\s+(?:what\s+)?(?:data|files?|samples?|datasets?)\s+(?:files?\s+)?(?:i have|do i have|are available|exist)",
+     ToolName.SCAN_DATA),
+    # Pattern 9: "what do I have in my data folder"
+    (r"what\s+(?:do i have|is)\s+(?:in\s+)?(?:my\s+)?(?:local\s+)?(?:data|gcp)?\s*(?:folder|directory)?",
+     ToolName.SCAN_DATA),
+    
+    # Confirmation patterns for cleanup (and other destructive actions)
+    # NOTE: These MUST come BEFORE cleanup patterns since they're more specific
+    (r"^(?:yes|yep|yeah|y)\s*[,.]?\s*(?:delete|remove|confirm|do it|go ahead|proceed)",
+     ToolName.CONFIRM_CLEANUP),
+    (r"confirm\s+(?:cleanup|deletion|removal)",
+     ToolName.CONFIRM_CLEANUP),
+    (r"(?:yes|ok|okay|sure|please)\s*[,.]?\s*(?:delete|remove)\s+(?:them|these|those|the files?)",
+     ToolName.CONFIRM_CLEANUP),
+    (r"^(?:delete|remove)\s+(?:them|these|those|the files?)$",
+     ToolName.CONFIRM_CLEANUP),
+    (r"^proceed(?:\s+with\s+(?:cleanup|deletion))?$",
+     ToolName.CONFIRM_CLEANUP),
+    
+    # Data cleanup patterns
+    (r"(?:can you\s+)?(?:clean\s*up|remove|delete)\s+(?:the\s+)?(?:corrupted|invalid|bad|broken)\s+(?:data|files?)",
+     ToolName.CLEANUP_DATA),
+    (r"(?:clean\s*up|fix)\s+(?:the\s+)?(?:data\s+)?(?:folder|directory)",
+     ToolName.CLEANUP_DATA),
+    (r"(?:remove|delete)\s+(?:the\s+)?(?:html|corrupted|invalid)\s+(?:fastq|files?)",
+     ToolName.CLEANUP_DATA),
     
     # Database search - FIXED patterns to catch "search for X"
     (r"(?:search|query)\s+(?:for\s+)?(.+?)\s+(?:data|datasets?|samples?)\s+(?:in|on|from)\s+(?:encode|geo|sra|databases?)",
@@ -295,9 +334,23 @@ class AgentTools:
                 message="❌ Data scanner is not available. Please check installation."
             )
         
-        # Default to current directory or common data locations
+        # Smart default paths - check common data locations
+        # Development defaults for sdodl001's environment
         if not path:
-            path = "."
+            default_paths = [
+                Path("/scratch/sdodl001/BioPipelines"),  # Primary data location
+                Path("/scratch/sdodl001/BioPipelines/data"),
+                Path.home() / "BioPipelines" / "data",
+                Path.home() / "data",
+                Path.cwd() / "data",
+                Path.cwd(),
+            ]
+            for p in default_paths:
+                if p.exists() and p.is_dir():
+                    path = str(p)
+                    break
+            else:
+                path = str(Path.cwd())
         
         # Clean up path
         path = path.strip().strip("'\"")
@@ -367,6 +420,191 @@ Added to data manifest. Ready for workflow generation!"""
                 error=str(e),
                 message=f"❌ Failed to scan directory: {e}"
             )
+    
+    def cleanup_data(self, path: str = None, confirm: bool = False) -> ToolResult:
+        """
+        Clean up corrupted data files (HTML error pages masquerading as FASTQ, etc).
+        
+        Two-phase operation:
+        1. First call (confirm=False): Scan and show what would be deleted
+        2. Second call (confirm=True): Actually delete the files
+        
+        Args:
+            path: Directory path to clean. Defaults to data directory.
+            confirm: If True, actually delete files. If False, just show preview.
+            
+        Returns:
+            ToolResult with cleanup summary or preview
+        """
+        import gzip
+        
+        # Use default data path if not specified
+        if not path:
+            default_paths = [
+                Path("/scratch/sdodl001/BioPipelines/data"),
+                Path("/scratch/sdodl001/BioPipelines"),
+                Path.home() / "BioPipelines" / "data",
+            ]
+            for p in default_paths:
+                if p.exists():
+                    path = str(p)
+                    break
+            else:
+                return ToolResult(
+                    success=False,
+                    tool_name="cleanup_data",
+                    error="No data directory found",
+                    message="❌ Could not find data directory to clean"
+                )
+        
+        scan_path = Path(path).expanduser().resolve()
+        
+        if not scan_path.exists():
+            return ToolResult(
+                success=False,
+                tool_name="cleanup_data",
+                error=f"Path not found: {scan_path}",
+                message=f"❌ Directory not found: `{scan_path}`"
+            )
+        
+        # Find corrupted files
+        corrupted_files = []
+        checked_files = 0
+        
+        for ext in ['*.fastq.gz', '*.fq.gz', '*.fastq', '*.fq']:
+            for f in scan_path.rglob(ext):
+                if not f.is_file() or f.is_symlink():
+                    continue
+                checked_files += 1
+                try:
+                    # Check if it's a valid gzip or starts with HTML
+                    with open(f, 'rb') as fp:
+                        header = fp.read(10)
+                        # HTML files start with <!DOCTYPE or <html
+                        if header.startswith(b'<!') or header.startswith(b'<html'):
+                            corrupted_files.append(f)
+                        # Valid gzip starts with magic bytes 1f 8b
+                        elif f.suffix == '.gz' and not header.startswith(b'\x1f\x8b'):
+                            corrupted_files.append(f)
+                except Exception as e:
+                    logger.warning(f"Error checking {f}: {e}")
+        
+        # Find broken symlinks
+        broken_symlinks = []
+        for ext in ['*.fastq.gz', '*.fq.gz']:
+            for f in scan_path.rglob(ext):
+                if f.is_symlink() and not f.resolve().exists():
+                    broken_symlinks.append(f)
+        
+        if not corrupted_files and not broken_symlinks:
+            return ToolResult(
+                success=True,
+                tool_name="cleanup_data",
+                data={"checked": checked_files, "removed": 0},
+                message=f"✅ Checked {checked_files} files - no corrupted files found!"
+            )
+        
+        # Build file list for display
+        file_list = "\n".join([f"  - `{f.name}` ({f.stat().st_size / 1024:.1f} KB)" for f in corrupted_files[:10]])
+        if len(corrupted_files) > 10:
+            file_list += f"\n  - ... and {len(corrupted_files) - 10} more"
+        
+        # If not confirmed, just show preview
+        if not confirm:
+            message = f"""⚠️ **Found {len(corrupted_files)} corrupted files** in `{scan_path}`:
+
+{file_list}
+"""
+            if broken_symlinks:
+                message += f"\nAlso found **{len(broken_symlinks)} broken symlinks**."
+            message += """
+These files appear to be HTML error pages or invalid gzip files, not actual sequencing data.
+
+**To delete these files, say:** "yes, delete them" or "confirm cleanup"
+"""
+            # Store pending cleanup for confirmation
+            self._pending_cleanup = {
+                "path": scan_path,
+                "corrupted_files": corrupted_files,
+                "broken_symlinks": broken_symlinks
+            }
+            
+            return ToolResult(
+                success=True,
+                tool_name="cleanup_data",
+                data={
+                    "checked": checked_files,
+                    "found": len(corrupted_files),
+                    "preview": True,
+                    "awaiting_confirmation": True
+                },
+                message=message
+            )
+        
+        # CONFIRMED - actually delete files
+        removed = []
+        failed = []
+        for f in corrupted_files:
+            try:
+                f.unlink()
+                removed.append(str(f))
+                logger.info(f"Removed corrupted file: {f}")
+            except Exception as e:
+                failed.append(f"{f}: {e}")
+        
+        # Remove broken symlinks
+        removed_symlinks = []
+        for f in broken_symlinks:
+            try:
+                f.unlink()
+                removed_symlinks.append(str(f))
+            except:
+                pass
+        
+        # Clear pending cleanup
+        self._pending_cleanup = None
+        
+        # Build response
+        removed_list = "\n".join([f"  - `{Path(r).name}`" for r in removed[:10]])
+        if len(removed) > 10:
+            removed_list += f"\n  - ... and {len(removed) - 10} more"
+        
+        message = f"""🧹 **Cleanup complete** in `{scan_path}`:
+
+**Removed {len(removed)} corrupted files:**
+{removed_list}
+"""
+        if removed_symlinks:
+            message += f"\n**Also removed {len(removed_symlinks)} broken symlinks.**"
+        
+        if failed:
+            message += f"\n\n⚠️ Failed to remove {len(failed)} files."
+        
+        return ToolResult(
+            success=True,
+            tool_name="cleanup_data",
+            data={
+                "checked": checked_files,
+                "removed": len(removed),
+                "removed_files": removed,
+                "removed_symlinks": removed_symlinks,
+                "failed": failed
+            },
+            message=message
+        )
+    
+    def confirm_cleanup(self) -> ToolResult:
+        """Confirm and execute pending cleanup operation."""
+        if not hasattr(self, '_pending_cleanup') or not self._pending_cleanup:
+            return ToolResult(
+                success=False,
+                tool_name="confirm_cleanup",
+                error="No pending cleanup",
+                message="⚠️ No cleanup operation pending. First run 'cleanup data' to scan for corrupted files."
+            )
+        
+        pending = self._pending_cleanup
+        return self.cleanup_data(str(pending["path"]), confirm=True)
     
     def search_databases(self, query: str = None) -> ToolResult:
         """
