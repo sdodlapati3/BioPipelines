@@ -246,6 +246,18 @@ class PermissionManager:
         
         # Pending approvals
         self._pending_approvals: Dict[str, ApprovalRequest] = {}
+    
+    @property
+    def autonomy_level(self) -> AutonomyLevel:
+        """Get the current autonomy level."""
+        return self._autonomy_level or AutonomyLevel.ASSISTED
+    
+    @autonomy_level.setter
+    def autonomy_level(self, level: AutonomyLevel):
+        """Set the autonomy level."""
+        self._autonomy_level = level
+        self.level = level.to_permission_level()
+        self.policy = DEFAULT_POLICIES.get(self.level, DEFAULT_POLICIES[PermissionLevel.SUGGEST])
         
     def can_execute(
         self,

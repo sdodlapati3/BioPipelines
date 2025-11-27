@@ -215,6 +215,16 @@ class AutonomousAgent:
                 ))
             )
     
+    @property
+    def autonomy_level(self) -> AutonomyLevel:
+        """Get current autonomy level."""
+        return self.permissions.autonomy_level
+    
+    @autonomy_level.setter
+    def autonomy_level(self, level: AutonomyLevel):
+        """Set autonomy level."""
+        self.permissions.autonomy_level = level
+    
     async def execute_action(self, action: Action) -> ActionResult:
         """
         Execute a single action.

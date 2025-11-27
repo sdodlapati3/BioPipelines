@@ -982,16 +982,17 @@ class FileReadTool(EnhancedTool):
         file_ops = self._get_file_ops()
         if file_ops:
             result = file_ops.read_file(str(file_path), encoding=encoding)
-            if result.success:
+            # FileContent doesn't have 'success', check if we got content
+            if hasattr(result, 'text') and result.text is not None:
                 return EnhancedToolResult(
                     status=ToolStatus.SUCCESS,
                     tool_name=self.name,
-                    data={"content": result.content, "path": str(file_path)},
-                    message=f"📄 Read `{file_path.name}` ({len(result.content)} bytes)",
+                    data={"content": result.text, "path": str(file_path)},
+                    message=f"📄 Read `{file_path.name}` ({result.size_bytes} bytes)",
                     start_time=start_time,
                     end_time=datetime.now(),
                 )
-            else:
+            elif hasattr(result, 'error'):
                 return EnhancedToolResult(
                     status=ToolStatus.FAILURE,
                     tool_name=self.name,
@@ -1000,6 +1001,7 @@ class FileReadTool(EnhancedTool):
                     start_time=start_time,
                     end_time=datetime.now(),
                 )
+            # Fall through to direct read
         
         # Direct read fallback
         try:
