@@ -11,7 +11,7 @@ Components:
 - BioinformaticsNER: Domain-specific named entity recognition
 - ConversationContext: Semantic memory and coreference resolution
 - DialogueManager: Conversation flow and multi-turn task tracking
-- ChatIntegration: Integration layer for UnifiedChatHandler
+- ChatIntegration: Integration layer for BioPipelines facade
 
 Architecture:
     ┌─────────────────────────────────────────────────────────────┐

@@ -4,7 +4,7 @@ Intent System Integration
 
 This module provides integration helpers for the enhanced intent system.
 
-It bridges the new DialogueManager with the existing UnifiedChatHandler.
+It bridges the DialogueManager with the BioPipelines facade.
 """
 
 import logging
@@ -25,24 +25,19 @@ logger = logging.getLogger(__name__)
 
 class ChatIntegration:
     """
-    Integration layer between DialogueManager and UnifiedChatHandler.
+    Integration layer between DialogueManager and BioPipelines facade.
     
     Usage:
-        # In UnifiedChatHandler.__init__:
         from workflow_composer.agents.intent.integration import ChatIntegration
-        self.intent_system = ChatIntegration()
         
-        # In handle_message:
-        result = self.intent_system.process_message(message, session_id)
+        intent_system = ChatIntegration()
+        result = intent_system.process_message(message, session_id)
         
         if result.should_execute_tool:
-            tool_result = self._call_tool(result.tool_name, result.tool_args)
-            follow_up = self.intent_system.handle_tool_result(
+            tool_result = execute_tool(result.tool_name, result.tool_args)
+            follow_up = intent_system.handle_tool_result(
                 session_id, result.tool_name, tool_result
             )
-            if follow_up:
-                # Execute follow-up action
-                ...
     """
     
     def __init__(self, llm_client=None):
@@ -206,10 +201,10 @@ def format_clarification_response(result: DialogueResult) -> str:
 
 def example_integration():
     """
-    Example of how to integrate with UnifiedChatHandler.
+    Example of how to integrate with BioPipelines facade.
     
-    This shows the pattern for replacing the existing intent detection
-    with the new DialogueManager.
+    This shows the pattern for using DialogueManager alongside
+    the BioPipelines.chat() method.
     """
     
     # Initialize

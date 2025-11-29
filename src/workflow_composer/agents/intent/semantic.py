@@ -93,6 +93,11 @@ INTENT_EXAMPLES = {
         "download that one",  # Coreference
         "can you download this",  # Question form
         "I want to download the data",  # First person
+        "download all",  # Batch download
+        "download all of them",  # Batch download
+        "download everything",  # Batch download
+        "get all the datasets",  # Batch download
+        "download all results",  # Batch download
     ],
     
     # Workflow Operations
@@ -1013,6 +1018,26 @@ class HybridQueryParser:
     ) -> Dict[str, str]:
         """Build slot dictionary from entities and pattern matches."""
         slots = dict(pattern_slots)
+        
+        # Clean up query slot if present - remove trailing instructions
+        if "query" in slots and slots["query"]:
+            query = slots["query"]
+            # Remove common trailing phrases
+            stop_phrases = [
+                ". if not", ".if not", ", if not", ",if not",
+                ". otherwise", ".otherwise", ", otherwise",
+                ". then", ".then", ", then",
+                ". else", ".else", ", else",
+                ". find online", ", find online",
+                ". search online", ", search online",
+            ]
+            query_lower = query.lower()
+            for phrase in stop_phrases:
+                idx = query_lower.find(phrase)
+                if idx > 0:
+                    query = query[:idx].strip()
+                    break
+            slots["query"] = query
         
         for entity in entities:
             if entity.entity_type == "ORGANISM":

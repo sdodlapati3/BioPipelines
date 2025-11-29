@@ -15,9 +15,12 @@ import re
 import json
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any, Tuple, TYPE_CHECKING
 from dataclasses import dataclass, field
 from enum import Enum
+
+if TYPE_CHECKING:
+    from .intent.context import ConversationContext as UnifiedContext
 
 logger = logging.getLogger(__name__)
 
@@ -55,10 +58,14 @@ class ValidationResult:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
-class ConversationContext:
+class ValidationContext:
     """
-    Maintains conversation context across tool calls.
-    Remembers what the user is looking for.
+    Lightweight validation context for ResponseValidator.
+    
+    NOTE: For full conversation management, use the unified ConversationContext
+    from workflow_composer.agents.intent.context instead.
+    
+    This class only handles intent extraction for validation purposes.
     """
     
     def __init__(self, max_history: int = 10):
@@ -366,7 +373,7 @@ class ResponseValidator:
     def __init__(self, llm_client=None, model: str = "gpt-4o"):
         self.llm_client = llm_client
         self.model = model
-        self.context = ConversationContext()
+        self.context = ValidationContext()  # Lightweight validation context
         self.metadata_manager = DataMetadataManager()
     
     def validate_scan_result(

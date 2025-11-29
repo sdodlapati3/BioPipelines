@@ -210,24 +210,27 @@ class TestENCODEAdapter:
         
         assert param_dict["type"] == "Experiment"
         assert param_dict["format"] == "json"
-        assert "ATAC-seq" in param_dict.get("assay_title", "")
+        # Now uses searchTerm containing assay info
+        assert "ATAC-seq" in param_dict.get("searchTerm", "")
         assert param_dict["limit"] == "5"
     
     def test_build_search_params_organism_mapping(self):
-        """Test organism name mapping."""
+        """Test organism name mapping via searchTerm."""
         adapter = ENCODEAdapter()
         
-        # Test human mapping
+        # Test human mapping - now uses searchTerm
         query = SearchQuery(raw_query="test", organism="human")
         params = adapter._build_search_params(query)
         param_dict = {k: v for k, v in params}
         
-        assert "Homo sapiens" in str(params)
+        # Organism is now in searchTerm
+        assert "human" in param_dict.get("searchTerm", "")
         
         # Test mouse mapping
         query = SearchQuery(raw_query="test", organism="mouse")
         params = adapter._build_search_params(query)
-        assert "Mus musculus" in str(params)
+        param_dict = {k: v for k, v in params}
+        assert "mouse" in param_dict.get("searchTerm", "")
     
     @patch('requests.Session.get')
     def test_search_success(self, mock_get):

@@ -4,8 +4,18 @@ Agents Module
 
 AI-powered agents for workflow generation and monitoring.
 
-RECOMMENDED USAGE (Tier 1 - Primary API):
-=========================================
+RECOMMENDED USAGE:
+==================
+
+For frontend/UI integration, use the BioPipelines facade:
+
+    from workflow_composer import BioPipelines
+    
+    bp = BioPipelines()
+    response = bp.chat("scan /data/raw for FASTQ files")
+    print(response.message)
+
+For programmatic access:
 
     from workflow_composer.agents import UnifiedAgent, AutonomyLevel
     
@@ -13,38 +23,47 @@ RECOMMENDED USAGE (Tier 1 - Primary API):
     response = agent.process_sync("scan /data/raw for FASTQ files")
     print(response.message)
 
-ADVANCED USAGE (Tier 2 - Tools & Autonomous):
-=============================================
+ADVANCED USAGE:
+===============
 
 For direct tool access:
     from workflow_composer.agents import AgentTools, ToolResult, ToolName
 
 For autonomous background jobs:
     from workflow_composer.agents.autonomous import AutonomousAgent
-
-INTERNAL/LEGACY (Tier 3 - Not recommended for new code):
-========================================================
-
-These are maintained for backward compatibility:
-- AgentOrchestrator → Use UnifiedAgent instead
-- AgentBridge → Use UnifiedAgent instead
-- AgentRouter → Internal use only
-
-Available Components:
---------------------
-- UnifiedAgent: **RECOMMENDED** Main entry point combining orchestration + tools
-- AutonomyLevel: Permission levels (READONLY, MONITORED, ASSISTED, SUPERVISED, AUTONOMOUS)
-- AgentTools: Tools that can be invoked during chat conversations
-- AgentOrchestrator: (Legacy) Coordinates multiple agents for complex tasks
-- AgentBridge: (Legacy) Bridges LLM routing with tool execution
-- AutonomousAgent: Full autonomous agent with execution capabilities
-- Executor Layer: Safe file/command execution with audit trail
 """
 
 from .tools import AgentTools, ToolResult, ToolName, process_tool_request
-from .context import ConversationContext
-from .router import AgentRouter, RouteResult, RoutingStrategy, AGENT_TOOLS, route_message
-from .bridge import AgentBridge, get_agent_bridge, process_with_agent
+
+# Unified context system from intent module
+from .intent import ConversationContext, ContextMemory, EntityTracker, MemoryItem
+
+# Archived/Deprecated: AgentRouter and AgentBridge moved to _archived/
+# Use UnifiedAgent instead. See _archived/__init__.py for migration guide.
+def __getattr__(name):
+    """Lazy load archived modules with deprecation warnings."""
+    if name in ("AgentRouter", "RouteResult", "RoutingStrategy", "AGENT_TOOLS", "route_message"):
+        import warnings
+        warnings.warn(
+            f"{name} is deprecated. Use UnifiedAgent with HybridQueryParser instead. "
+            "See agents/_archived/__init__.py for migration guide.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        from ._archived import router
+        return getattr(router, name)
+    if name in ("AgentBridge", "get_agent_bridge", "process_with_agent"):
+        import warnings
+        warnings.warn(
+            f"{name} is deprecated. Use UnifiedAgent instead. "
+            "See agents/_archived/__init__.py for migration guide.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        from ._archived import bridge
+        return getattr(bridge, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 from .coding_agent import (
     CodingAgent, 
     DiagnosisResult, 
@@ -85,12 +104,6 @@ from .self_healing import (
     get_self_healer,
     start_job_monitor,
     stop_job_monitor,
-)
-from .chat_integration import (
-    AgentChatHandler,
-    get_chat_handler,
-    create_gradio_chat_fn,
-    enhanced_chat_with_composer,
 )
 from .multi_model import (
     MultiModelDeployment,
@@ -150,7 +163,7 @@ from .enhanced_tools import (
     FileWriteTool,
     SystemHealthTool,
 )
-# Unified Agent (NEW - Main Entry Point)
+# Unified Agent (Main Entry Point)
 from .unified_agent import (
     UnifiedAgent,
     AgentResponse,
@@ -193,16 +206,10 @@ __all__ = [
     "process_tool_request",
     # Context
     "ConversationContext",
-    # Router
-    "AgentRouter",
-    "RouteResult",
-    "RoutingStrategy",
-    "AGENT_TOOLS",
-    "route_message",
-    # Bridge
-    "AgentBridge",
-    "get_agent_bridge",
-    "process_with_agent",
+    # === DEPRECATED: Router & Bridge (use UnifiedAgent instead) ===
+    # These are dynamically loaded with deprecation warnings via __getattr__
+    # "AgentRouter", "RouteResult", "RoutingStrategy", "AGENT_TOOLS", "route_message",
+    # "AgentBridge", "get_agent_bridge", "process_with_agent",
     # Coding Agent
     "CodingAgent",
     "DiagnosisResult",
@@ -218,18 +225,18 @@ __all__ = [
     "TaskResult",
     "get_orchestrator",
     "get_sync_orchestrator",
-    # Memory (new)
+    # Memory
     "AgentMemory",
     "MemoryEntry",
     "SearchResult",
     "EmbeddingModel",
-    # ReAct Agent (new)
+    # ReAct Agent
     "ReactAgent",
     "SimpleAgent",
     "AgentStep",
     "AgentState",
     "ReactToolResult",
-    # Self-Healing (new)
+    # Self-Healing
     "SelfHealer",
     "JobMonitor",
     "HealingAttempt",
@@ -239,12 +246,7 @@ __all__ = [
     "get_self_healer",
     "start_job_monitor",
     "stop_job_monitor",
-    # Gradio Integration (new)
-    "AgentChatHandler",
-    "get_chat_handler",
-    "create_gradio_chat_fn",
-    "enhanced_chat_with_composer",
-    # Multi-Model Deployment (new)
+    # Multi-Model Deployment
     "MultiModelDeployment",
     "ModelConfig",
     "ModelRole",

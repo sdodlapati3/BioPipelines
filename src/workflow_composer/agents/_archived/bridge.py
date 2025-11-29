@@ -23,7 +23,7 @@ import warnings
 from typing import Dict, Any, Optional
 
 from workflow_composer.agents.tools import AgentTools, ToolResult, ToolName
-from workflow_composer.agents.router import (
+from workflow_composer.agents._archived.router import (
     AgentRouter, 
     RouteResult, 
     RoutingStrategy,

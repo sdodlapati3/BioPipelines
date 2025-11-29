@@ -8,6 +8,7 @@ Tools for downloading, cleaning, and managing datasets.
 import logging
 import shutil
 import subprocess
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -32,6 +33,8 @@ DOWNLOAD_DATASET_PATTERNS = [
 
 def download_dataset_impl(
     dataset_id: str = None,
+    dataset_ids: list = None,
+    download_all: bool = False,
     output_dir: str = None,
     data_type: str = None,
     execute: bool = True,
@@ -41,6 +44,8 @@ def download_dataset_impl(
     
     Args:
         dataset_id: Dataset ID (GSE*, ENCSR*, or TCGA-*)
+        dataset_ids: List of dataset IDs for batch download
+        download_all: Whether this is a "download all" request
         output_dir: Output directory for downloaded files
         data_type: Type of data to download (methylation, rnaseq, etc.)
         execute: Whether to actually run download commands
@@ -48,6 +53,10 @@ def download_dataset_impl(
     Returns:
         ToolResult with download status
     """
+    # Handle batch download ("download all")
+    if download_all and dataset_ids:
+        return _download_batch(dataset_ids, output_dir, data_type, execute)
+    
     if not dataset_id:
         return ToolResult(
             success=False,
@@ -147,7 +156,7 @@ wget -r -np -nd -P {output_dir} \\
 
 
 def _download_encode(dataset_id: str, output_dir: str, execute: bool) -> ToolResult:
-    """Download from ENCODE."""
+    """Download from ENCODE - actually executes the download."""
     url = f"https://www.encodeproject.org/experiments/{dataset_id}"
     
     if not output_dir:
@@ -155,6 +164,82 @@ def _download_encode(dataset_id: str, output_dir: str, execute: bool) -> ToolRes
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     
+    if execute:
+        try:
+            import requests
+            
+            # Get file metadata from ENCODE API
+            api_url = f"{url}/?format=json"
+            response = requests.get(api_url, timeout=30)
+            response.raise_for_status()
+            exp_data = response.json()
+            
+            # Get downloadable files (prefer processed data)
+            files = exp_data.get("files", [])
+            download_urls = []
+            for f in files:
+                if f.get("status") == "released":
+                    href = f.get("href")
+                    if href:
+                        # Prefer bed, bigBed, bigWig, bam, or fastq
+                        file_format = f.get("file_format", "")
+                        if file_format in ["bed", "bigBed", "bigWig", "bam", "fastq"]:
+                            download_urls.append((f"https://www.encodeproject.org{href}", f.get("accession", "unknown")))
+            
+            if not download_urls:
+                # Fallback: get all released files
+                for f in files:
+                    if f.get("status") == "released" and f.get("href"):
+                        download_urls.append((f"https://www.encodeproject.org{f['href']}", f.get("accession", "unknown")))
+            
+            downloaded = []
+            failed = []
+            
+            for file_url, file_acc in download_urls[:10]:  # Limit to 10 files
+                try:
+                    file_name = file_url.split("/")[-1]
+                    file_path = output_dir / file_name
+                    
+                    logger.info(f"Downloading {file_name}...")
+                    file_response = requests.get(file_url, stream=True, timeout=300)
+                    file_response.raise_for_status()
+                    
+                    with open(file_path, "wb") as f:
+                        for chunk in file_response.iter_content(chunk_size=8192):
+                            f.write(chunk)
+                    
+                    downloaded.append(file_name)
+                except Exception as e:
+                    failed.append(f"{file_acc}: {str(e)}")
+                    logger.warning(f"Failed to download {file_acc}: {e}")
+            
+            if downloaded:
+                message = f"""✅ **Download Complete: {dataset_id}**
+
+| Property | Value |
+|----------|-------|
+| **Dataset** | [{dataset_id}]({url}) |
+| **Source** | ENCODE |
+| **Output** | `{output_dir}` |
+| **Files Downloaded** | {len(downloaded)} |
+| **Files** | {', '.join(downloaded[:5])}{'...' if len(downloaded) > 5 else ''} |
+
+{'⚠️ Some files failed: ' + ', '.join(failed[:3]) if failed else ''}
+
+Run `scan data in {output_dir}` to verify.
+"""
+                return ToolResult(
+                    success=True,
+                    tool_name="download_dataset",
+                    data={"id": dataset_id, "source": "ENCODE", "output": str(output_dir), 
+                          "status": "completed", "files": downloaded},
+                    message=message
+                )
+                
+        except Exception as e:
+            logger.warning(f"ENCODE download failed: {e}, falling back to instructions")
+    
+    # Fallback to instructions
     message = f"""📥 **Download Dataset: {dataset_id}**
 
 | Property | Value |
@@ -180,6 +265,243 @@ xargs -L 1 curl -O -J -L < files.txt
         tool_name="download_dataset",
         data={"id": dataset_id, "source": "ENCODE", "output": str(output_dir)},
         message=message
+    )
+
+
+def _download_batch(dataset_ids: list, output_dir: str, data_type: str, execute: bool) -> ToolResult:
+    """
+    Download multiple datasets via SLURM job submission (non-blocking).
+    
+    Creates a download script and submits it to SLURM, returning immediately.
+    """
+    if not dataset_ids:
+        return ToolResult(
+            success=False,
+            tool_name="download_dataset",
+            error="No datasets to download",
+            message="❌ No search results found to download. Please search for data first."
+        )
+    
+    base_output = Path(output_dir) if output_dir else Path.cwd() / "data" / "raw"
+    base_output.mkdir(parents=True, exist_ok=True)
+    
+    # Group by source
+    geo_ids = [d for d in dataset_ids if d.startswith("GSE")]
+    encode_ids = [d for d in dataset_ids if d.startswith("ENCSR")]
+    tcga_ids = [d for d in dataset_ids if d.startswith("TCGA") or ("-" in d and len(d) > 30)]
+    
+    # Create download script
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    script_dir = base_output / "download_jobs"
+    script_dir.mkdir(parents=True, exist_ok=True)
+    script_path = script_dir / f"download_batch_{timestamp}.sh"
+    log_path = script_dir / f"download_batch_{timestamp}.log"
+    
+    # Build the download script
+    script_lines = [
+        "#!/bin/bash",
+        f"#SBATCH --job-name=download_batch",
+        f"#SBATCH --partition=cpuspot",
+        f"#SBATCH --time=4:00:00",
+        f"#SBATCH --cpus-per-task=2",
+        f"#SBATCH --mem=4G",
+        f"#SBATCH --output={log_path}",
+        f"#SBATCH --error={log_path}",
+        "",
+        "# Batch Download Script - Generated by BioPipelines Agent",
+        f"# Created: {datetime.now().isoformat()}",
+        f"# Datasets: {len(dataset_ids)} total",
+        "",
+        f"cd {base_output}",
+        "echo '=== Starting batch download ==='",
+        f"echo 'Output directory: {base_output}'",
+        "",
+    ]
+    
+    # GEO downloads (using prefetch if available, else wget)
+    if geo_ids:
+        script_lines.append("# === GEO Downloads ===")
+        script_lines.append("echo 'Downloading GEO datasets...'")
+        for gse_id in geo_ids:
+            script_lines.append(f"echo 'Downloading {gse_id}...'")
+            script_lines.append(f"mkdir -p {gse_id}")
+            # Try prefetch first, fallback to wget
+            script_lines.append(f"if command -v prefetch &> /dev/null; then")
+            script_lines.append(f"    prefetch {gse_id} -O {gse_id}/ 2>&1 || echo 'prefetch failed for {gse_id}'")
+            script_lines.append(f"else")
+            script_lines.append(f"    wget -r -np -nd -P {gse_id} 'ftp://ftp.ncbi.nlm.nih.gov/geo/series/{gse_id[:6]}nnn/{gse_id}/suppl/' 2>&1 || echo 'wget failed for {gse_id}'")
+            script_lines.append(f"fi")
+            script_lines.append("")
+    
+    # ENCODE downloads (using curl)
+    if encode_ids:
+        script_lines.append("# === ENCODE Downloads ===")
+        script_lines.append("echo 'Downloading ENCODE datasets...'")
+        for enc_id in encode_ids:
+            script_lines.append(f"echo 'Downloading {enc_id}...'")
+            script_lines.append(f"mkdir -p {enc_id}")
+            script_lines.append(f"cd {enc_id}")
+            # Get file URLs and download
+            script_lines.append(f"curl -s 'https://www.encodeproject.org/experiments/{enc_id}/?format=json' | \\")
+            script_lines.append(f"    python3 -c \"import sys,json; files=json.load(sys.stdin).get('files',[]); [print('https://www.encodeproject.org'+f['href']) for f in files if f.get('status')=='released' and f.get('file_format') in ['bed','bigBed','bigWig','bam','fastq']]\" | \\")
+            script_lines.append(f"    head -5 | xargs -L1 -P2 curl -O -J -L 2>&1 || echo 'Download failed for {enc_id}'")
+            script_lines.append(f"cd {base_output}")
+            script_lines.append("")
+    
+    # TCGA downloads (using gdc-client)
+    if tcga_ids:
+        script_lines.append("# === TCGA/GDC Downloads ===")
+        script_lines.append("echo 'Downloading TCGA datasets...'")
+        script_lines.append("if command -v gdc-client &> /dev/null; then")
+        manifest_content = "\\n".join(tcga_ids)
+        script_lines.append(f"    echo -e '{manifest_content}' > gdc_manifest.txt")
+        script_lines.append(f"    gdc-client download -m gdc_manifest.txt -d tcga_data/ 2>&1 || echo 'gdc-client failed'")
+        script_lines.append("else")
+        script_lines.append("    echo 'gdc-client not found. Install with: pip install gdc-client'")
+        script_lines.append("    echo 'Or download from: https://gdc.cancer.gov/access-data/gdc-data-transfer-tool'")
+        script_lines.append("fi")
+        script_lines.append("")
+    
+    script_lines.extend([
+        "echo ''",
+        "echo '=== Download complete ==='",
+        f"echo 'Check logs at: {log_path}'",
+        f"ls -la {base_output}",
+    ])
+    
+    # Write script
+    script_content = "\n".join(script_lines)
+    script_path.write_text(script_content)
+    script_path.chmod(0o755)
+    
+    if execute:
+        # Check if sbatch is available
+        has_sbatch = shutil.which("sbatch") is not None
+        
+        if has_sbatch:
+            try:
+                result = subprocess.run(
+                    ["sbatch", str(script_path)],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                
+                if result.returncode == 0:
+                    # Parse job ID from output (e.g., "Submitted batch job 12345")
+                    job_id = None
+                    if "Submitted batch job" in result.stdout:
+                        job_id = result.stdout.strip().split()[-1]
+                    
+                    message = f"""✅ **Download Job Submitted**
+
+| Property | Value |
+|----------|-------|
+| **Job ID** | {job_id or 'N/A'} |
+| **Datasets** | {len(dataset_ids)} total |
+| **GEO** | {len(geo_ids)} datasets |
+| **ENCODE** | {len(encode_ids)} datasets |
+| **TCGA** | {len(tcga_ids)} datasets |
+| **Output** | `{base_output}` |
+| **Log** | `{log_path}` |
+
+**Commands:**
+- Check status: `job status {job_id}`
+- View logs: `cat {log_path}`
+- Cancel: `scancel {job_id}`
+
+💡 Downloads running in background. Continue chatting!
+"""
+                    return ToolResult(
+                        success=True,
+                        tool_name="download_dataset",
+                        data={
+                            "batch": True,
+                            "job_id": job_id,
+                            "total": len(dataset_ids),
+                            "script": str(script_path),
+                            "log": str(log_path),
+                            "output": str(base_output),
+                        },
+                        message=message
+                    )
+                else:
+                    logger.warning(f"sbatch failed: {result.stderr}")
+            except subprocess.TimeoutExpired:
+                logger.warning("sbatch timed out")
+            except Exception as e:
+                logger.warning(f"sbatch error: {e}")
+        
+        # Fallback: run in background with nohup
+        try:
+            subprocess.Popen(
+                ["nohup", "bash", str(script_path)],
+                stdout=open(log_path, "w"),
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
+            
+            message = f"""✅ **Download Started (Background)**
+
+| Property | Value |
+|----------|-------|
+| **Datasets** | {len(dataset_ids)} total |
+| **GEO** | {len(geo_ids)} datasets |
+| **ENCODE** | {len(encode_ids)} datasets |
+| **TCGA** | {len(tcga_ids)} datasets |
+| **Output** | `{base_output}` |
+| **Log** | `{log_path}` |
+
+**Commands:**
+- View progress: `tail -f {log_path}`
+- Check output: `ls -la {base_output}`
+
+💡 Downloads running in background. Continue chatting!
+"""
+            return ToolResult(
+                success=True,
+                tool_name="download_dataset",
+                data={
+                    "batch": True,
+                    "background": True,
+                    "total": len(dataset_ids),
+                    "script": str(script_path),
+                    "log": str(log_path),
+                    "output": str(base_output),
+                },
+                message=message
+            )
+        except Exception as e:
+            logger.warning(f"Background execution failed: {e}")
+    
+    # Non-execute / fallback: just show the script
+    message_parts = [f"📥 **Batch Download: {len(dataset_ids)} datasets**\n"]
+    message_parts.append(f"| Source | Count | IDs |")
+    message_parts.append(f"|--------|-------|-----|")
+    
+    if geo_ids:
+        message_parts.append(f"| GEO | {len(geo_ids)} | {', '.join(geo_ids[:3])}{'...' if len(geo_ids) > 3 else ''} |")
+    if encode_ids:
+        message_parts.append(f"| ENCODE | {len(encode_ids)} | {', '.join(encode_ids[:3])}{'...' if len(encode_ids) > 3 else ''} |")
+    if tcga_ids:
+        message_parts.append(f"| TCGA/GDC | {len(tcga_ids)} | {', '.join(tcga_ids[:3])}{'...' if len(tcga_ids) > 3 else ''} |")
+    
+    message_parts.append(f"\n**Script created:** `{script_path}`")
+    message_parts.append(f"\n**To submit:**")
+    message_parts.append(f"```bash")
+    message_parts.append(f"sbatch {script_path}")
+    message_parts.append(f"```")
+    
+    return ToolResult(
+        success=True,
+        tool_name="download_dataset",
+        data={
+            "batch": True,
+            "script": str(script_path),
+            "total": len(dataset_ids),
+            "output": str(base_output),
+        },
+        message="\n".join(message_parts)
     )
 
 

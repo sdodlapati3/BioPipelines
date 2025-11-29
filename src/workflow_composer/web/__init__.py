@@ -1,10 +1,12 @@
 """
 Web UI module for BioPipelines Workflow Composer.
 
-Provides a chat-first Gradio interface with:
-- Unified chat handler with tool integration
-- Session management
-- LLM fallback chain (local vLLM → GitHub Models → Gemini → OpenAI)
+Provides a chat-first Gradio interface.
+
+The frontend uses the BioPipelines facade directly:
+    from workflow_composer import BioPipelines
+    bp = BioPipelines()
+    response = bp.chat("analyze my RNA-seq data")
 
 Usage:
     # Start the web UI
@@ -22,13 +24,6 @@ except ImportError:
     create_app = None
     main = None
 
-# Import chat handler
-try:
-    from .chat_handler import UnifiedChatHandler, get_chat_handler
-except ImportError:
-    UnifiedChatHandler = None
-    get_chat_handler = None
-
 # Import utilities
 try:
     from .utils import detect_vllm_endpoint, get_default_port, use_local_llm
@@ -40,8 +35,6 @@ except ImportError:
 __all__ = [
     'create_app',
     'main',
-    'UnifiedChatHandler',
-    'get_chat_handler',
     'detect_vllm_endpoint',
     'get_default_port',
     'use_local_llm',

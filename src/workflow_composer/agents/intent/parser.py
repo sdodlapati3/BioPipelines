@@ -151,10 +151,15 @@ class Entity:
     """An extracted entity with metadata."""
     type: EntityType
     value: str
-    canonical: str  # Normalized form
-    span: Tuple[int, int]  # Character positions
+    canonical: str = None  # Normalized form (optional)
+    span: Tuple[int, int] = (0, 0)  # Character positions (optional)
     confidence: float = 1.0
     metadata: Dict[str, Any] = field(default_factory=dict)
+    
+    def __post_init__(self):
+        """Set canonical to value if not provided."""
+        if self.canonical is None:
+            self.canonical = self.value
 
 
 @dataclass  
@@ -260,6 +265,15 @@ INTENT_PATTERNS: List[Tuple[str, IntentType, Dict[str, int]]] = [
      IntentType.DATA_DOWNLOAD, {}),
     (r"(?:add|queue)\s+(.+?)\s+(?:to\s+)?(?:my\s+)?(?:download|manifest)",
      IntentType.DATA_DOWNLOAD, {"dataset_id": 1}),
+    # Download all / execute download commands
+    (r"download\s+(?:all|both|everything)",
+     IntentType.DATA_DOWNLOAD, {"download_all": True}),
+    (r"(?:execute|run)\s+(?:the\s+)?download(?:s|\s+commands?)?",
+     IntentType.DATA_DOWNLOAD, {"download_all": True}),
+    (r"(?:please\s+)?(?:execute|run)\s+(?:the\s+)?(?:suggested\s+)?commands?",
+     IntentType.DATA_DOWNLOAD, {"download_all": True}),
+    (r"download\s+(?:the\s+)?(?:encode|tcga|geo)\s+(?:and\s+)?(?:encode|tcga|geo)?\s*(?:datasets?|data)?",
+     IntentType.DATA_DOWNLOAD, {"download_all": True}),
     
     # Workflow creation
     (r"(?:create|generate|make|build|set\s+up)\s+(?:a\s+)?(?:new\s+)?(.+?)\s+(?:workflow|pipeline|analysis)",
@@ -542,12 +556,12 @@ class IntentParser:
                 # Extract slots from capture groups or literal values
                 slots = {}
                 for slot_name, group_val in slot_map.items():
-                    if isinstance(group_val, int):
-                        # It's a capture group index
+                    if isinstance(group_val, int) and not isinstance(group_val, bool):
+                        # It's a capture group index (but not a boolean)
                         if group_val <= len(match.groups()) and match.group(group_val):
                             slots[slot_name] = match.group(group_val).strip()
                     else:
-                        # It's a literal value
+                        # It's a literal value (including booleans)
                         slots[slot_name] = group_val
                 
                 if confidence > best_confidence:

@@ -64,9 +64,15 @@ LIST_JOBS_PATTERNS = [
 # SUBMIT_JOB
 # =============================================================================
 
+# Default partition - ODU HPC uses cpuspot/debugspot, not main
+DEFAULT_PARTITION = "cpuspot"
+
+
 def submit_job_impl(
     workflow_path: str = None,
     profile: str = "slurm",
+    partition: str = None,
+    execute: bool = True,
 ) -> ToolResult:
     """
     Submit a workflow job to SLURM.
@@ -74,21 +80,34 @@ def submit_job_impl(
     Args:
         workflow_path: Path to workflow main.nf
         profile: Execution profile (slurm, local, docker)
+        partition: SLURM partition (default: cpuspot)
+        execute: Whether to actually submit (True) or just show command (False)
         
     Returns:
         ToolResult with job submission status
     """
+    # Use default partition if not specified
+    partition = partition or DEFAULT_PARTITION
+    
     # Find most recent workflow if not specified
     if not workflow_path:
-        generated_dir = Path.cwd() / "generated_workflows"
-        if generated_dir.exists():
-            workflows = sorted(
-                [d for d in generated_dir.iterdir() if d.is_dir() and (d / "main.nf").exists()],
-                key=lambda x: x.stat().st_mtime,
-                reverse=True
-            )
-            if workflows:
-                workflow_path = str(workflows[0] / "main.nf")
+        # Try multiple possible locations
+        possible_dirs = [
+            Path.cwd() / "generated_workflows",
+            Path.home() / "BioPipelines" / "generated_workflows",
+            Path("/home/sdodl001_odu_edu/BioPipelines/generated_workflows"),
+        ]
+        
+        for generated_dir in possible_dirs:
+            if generated_dir.exists():
+                workflows = sorted(
+                    [d for d in generated_dir.iterdir() if d.is_dir() and (d / "main.nf").exists()],
+                    key=lambda x: x.stat().st_mtime,
+                    reverse=True
+                )
+                if workflows:
+                    workflow_path = str(workflows[0] / "main.nf")
+                    break
     
     if not workflow_path:
         return ToolResult(
@@ -108,34 +127,126 @@ def submit_job_impl(
         )
     
     # Build nextflow command
-    cmd = f"nextflow run {workflow_path} -profile {profile}"
+    nf_cmd = f"nextflow run {workflow_path} -profile {profile}"
     
-    message = f"""🚀 **Ready to Submit Workflow**
+    # Build SLURM command
+    job_name = workflow_path.parent.name if workflow_path.parent.name else "biopipeline"
+    sbatch_cmd = [
+        "sbatch",
+        f"--wrap={nf_cmd}",
+        f"--job-name={job_name}",
+        f"--partition={partition}",
+        "--time=24:00:00",
+        "--mem=16G",
+        "--cpus-per-task=4",
+        f"--output={workflow_path.parent}/slurm-%j.out",
+        f"--error={workflow_path.parent}/slurm-%j.err",
+    ]
+    
+    if execute:
+        # Actually submit the job
+        try:
+            result = subprocess.run(
+                sbatch_cmd,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                cwd=str(workflow_path.parent),
+            )
+            
+            if result.returncode == 0:
+                # Parse job ID from output
+                import re
+                match = re.search(r"Submitted batch job (\d+)", result.stdout)
+                job_id = match.group(1) if match else "Unknown"
+                
+                message = f"""✅ **Job Submitted Successfully**
+
+| Property | Value |
+|----------|-------|
+| **Job ID** | {job_id} |
+| **Workflow** | `{workflow_path.parent.name}` |
+| **Partition** | {partition} |
+| **Profile** | {profile} |
+
+**Monitor with:**
+- `check job status` - See all running jobs
+- `watch job {job_id}` - Detailed job info
+- `get logs {job_id}` - View output
+
+**Logs will be at:**
+- `{workflow_path.parent}/slurm-{job_id}.out`
+"""
+                return ToolResult(
+                    success=True,
+                    tool_name="submit_job",
+                    data={
+                        "job_id": job_id,
+                        "workflow": str(workflow_path),
+                        "partition": partition,
+                        "profile": profile,
+                    },
+                    message=message
+                )
+            else:
+                return ToolResult(
+                    success=False,
+                    tool_name="submit_job",
+                    error=result.stderr,
+                    message=f"""❌ **Job Submission Failed**
+
+**Error:** {result.stderr}
+
+**Tried command:**
+```bash
+{' '.join(sbatch_cmd)}
+```
+
+**Troubleshooting:**
+- Check partition is valid: `sinfo`
+- Available partitions: cpuspot, debugspot, gpuspot
+"""
+                )
+        except FileNotFoundError:
+            return ToolResult(
+                success=False,
+                tool_name="submit_job",
+                error="sbatch not found",
+                message="❌ SLURM is not available. Are you on a login node?"
+            )
+        except subprocess.TimeoutExpired:
+            return ToolResult(
+                success=False,
+                tool_name="submit_job",
+                error="Submission timed out",
+                message="❌ Job submission timed out. The cluster may be busy."
+            )
+        except Exception as e:
+            return ToolResult(
+                success=False,
+                tool_name="submit_job",
+                error=str(e),
+                message=f"❌ Submission error: {e}"
+            )
+    else:
+        # Just show the command
+        message = f"""🚀 **Ready to Submit Workflow**
 
 **Command:**
 ```bash
-{cmd}
+{' '.join(sbatch_cmd)}
 ```
 
-**Options:**
-- `-resume` - Resume from previous run
-- `-with-report` - Generate HTML report
-- `-with-timeline` - Generate timeline
+**Partition:** {partition} (use debugspot for quick tests)
 
-**To submit to SLURM:**
-```bash
-sbatch --wrap="{cmd}" --job-name=biopipeline --partition=main
-```
-
-Would you like me to submit this job?
+Say "yes" or "submit" to execute this job.
 """
-    
-    return ToolResult(
-        success=True,
-        tool_name="submit_job",
-        data={"workflow": str(workflow_path), "profile": profile, "command": cmd},
-        message=message
-    )
+        return ToolResult(
+            success=True,
+            tool_name="submit_job",
+            data={"workflow": str(workflow_path), "partition": partition, "command": ' '.join(sbatch_cmd)},
+            message=message
+        )
 
 
 # =============================================================================

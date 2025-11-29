@@ -248,6 +248,7 @@ class AgentTools:
             "explain_concept": lambda **kw: explain_concept_impl(**kw),
             "compare_samples": lambda **kw: compare_samples_impl(**kw),
             "get_help": lambda **kw: get_help_impl(),
+            "show_help": lambda **kw: get_help_impl(),  # Alias for get_help (matches ToolName.SHOW_HELP)
         }
         return dispatch
     

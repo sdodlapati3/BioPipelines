@@ -87,11 +87,14 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+# Ignore archived tests (deprecated code)
+norecursedirs = ["_archived", "__pycache__", ".git"]
 addopts = [
     "--verbose",
     "--cov=workflow_composer",
     "--cov-report=html",
     "--cov-report=term-missing",
+    "--ignore=tests/_archived",
 ]
 
 [tool.mypy]

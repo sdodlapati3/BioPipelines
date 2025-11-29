@@ -215,6 +215,9 @@ class GEOAdapter(BaseAdapter):
                 "ATAC-seq": "ATAC-Seq",
                 "scRNA-seq": "single cell RNA-Seq",
                 "WGS": "WGS",
+                "WGBS": "bisulfite",
+                "Bisulfite-seq": "bisulfite",
+                "methylation": "methylation",
             }
             assay_term = assay_map.get(query.assay_type, query.assay_type)
             terms.append(f'"{assay_term}"[Title/Abstract]')
@@ -228,12 +231,38 @@ class GEOAdapter(BaseAdapter):
         if query.cell_line:
             terms.append(f"{query.cell_line}[Title/Abstract]")
         
+        # For keywords, combine into a single term with OR to avoid over-filtering
+        # Skip keywords that are already covered by organism/tissue/assay
         if query.keywords:
+            # Filter out duplicates and already-used terms
+            skip_terms = set()
+            if query.organism:
+                skip_terms.update(query.organism.lower().split())
+            if query.tissue:
+                skip_terms.update(query.tissue.lower().split())
+            if query.assay_type:
+                skip_terms.update(query.assay_type.lower().replace("-", "").split())
+            
+            unique_keywords = []
             for kw in query.keywords:
-                terms.append(f"{kw}[Title/Abstract]")
+                kw_lower = kw.lower()
+                if kw_lower not in skip_terms and kw not in unique_keywords:
+                    unique_keywords.append(kw)
+            
+            # Only add a few keywords to avoid over-filtering
+            # Use OR to be less restrictive
+            if unique_keywords:
+                if len(unique_keywords) <= 2:
+                    for kw in unique_keywords:
+                        terms.append(f"{kw}[Title/Abstract]")
+                else:
+                    # Combine with OR for flexibility
+                    kw_term = " OR ".join(f"{kw}[Title/Abstract]" for kw in unique_keywords[:3])
+                    terms.append(f"({kw_term})")
         
-        # Default: only expression profiling by high-throughput sequencing
-        terms.append('"Expression profiling by high throughput sequencing"[DataSet Type]')
+        # Only add dataset type filter if we have other terms
+        if terms:
+            terms.append('"Expression profiling by high throughput sequencing"[DataSet Type]')
         
         return " AND ".join(terms) if terms else "RNA-Seq[Title]"
     

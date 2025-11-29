@@ -584,14 +584,14 @@ class AutonomousChatHandler:
                 yield "⚠️ Agent not running."
             return
         
-        # For other messages, use the standard chat flow
-        # This would integrate with the existing chat handler
+        # For other messages, use the BioPipelines facade
         yield "Processing with enhanced agent...\n\n"
         
-        # Fall through to standard processing
-        from workflow_composer.agents.chat_integration import get_chat_handler
-        handler = get_chat_handler()
-        yield from handler.chat(message, history, context)
+        # Use BioPipelines facade for chat
+        from workflow_composer import BioPipelines
+        bp = BioPipelines()
+        response = bp.chat(message, history=history)
+        yield response.message
 
 
 # =============================================================================

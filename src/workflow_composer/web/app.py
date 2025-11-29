@@ -5,10 +5,11 @@ BioPipelines - Chat-First Web Interface (Gradio 6.x)
 A minimal, focused UI where chat is the primary interface.
 All features are accessible through natural conversation.
 
-This refactored version uses:
-- Unified chat handler (handles tools, LLM fallback, validation)
-- Session management for persistent state
-- Clean separation of concerns
+This version uses:
+- BioPipelines facade (the single entry point)
+- ModelOrchestrator for LLM routing
+- Session management built into the facade
+- Job Status Panel for monitoring SLURM jobs
 """
 
 import os
@@ -27,25 +28,28 @@ sys.path.insert(0, str(PROJECT_ROOT))
 # ============================================================================
 
 from workflow_composer.web.utils import detect_vllm_endpoint, get_default_port, use_local_llm
+from workflow_composer.web.components.job_panel import (
+    get_user_jobs, format_jobs_table, get_recent_jobs, get_job_log, cancel_job
+)
 
 VLLM_URL = detect_vllm_endpoint()
 USE_LOCAL_LLM = use_local_llm()
 DEFAULT_PORT = get_default_port()
 
 # ============================================================================
-# Import Unified Chat Handler
+# Import BioPipelines Facade
 # ============================================================================
 
-chat_handler = None
-HANDLER_AVAILABLE = False
+bp = None
+BP_AVAILABLE = False
 
 try:
-    from workflow_composer.web.chat_handler import get_chat_handler, UnifiedChatHandler
-    chat_handler = get_chat_handler()
-    HANDLER_AVAILABLE = True
-    print("✓ Unified chat handler initialized")
+    from workflow_composer import BioPipelines
+    bp = BioPipelines()
+    BP_AVAILABLE = True
+    print("✓ BioPipelines facade initialized")
 except Exception as e:
-    print(f"⚠ Chat handler not available: {e}")
+    print(f"⚠ BioPipelines facade not available: {e}")
     import traceback
     traceback.print_exc()
 
@@ -56,7 +60,7 @@ except Exception as e:
 
 def chat_response(message: str, history: List[Dict]) -> Generator[List[Dict], None, None]:
     """
-    Generate chat response using the unified handler.
+    Generate chat response using the BioPipelines facade.
     
     Args:
         message: User's input message
@@ -69,17 +73,20 @@ def chat_response(message: str, history: List[Dict]) -> Generator[List[Dict], No
         yield history
         return
     
-    if not chat_handler:
+    if not bp:
         yield history + [
             {"role": "user", "content": message},
-            {"role": "assistant", "content": "⚠️ Chat handler not available."}
+            {"role": "assistant", "content": "⚠️ BioPipelines not available."}
         ]
         return
     
-    # Use the unified handler's chat method
+    # Use the facade's chat method
     try:
-        for response in chat_handler.chat(message, history):
-            yield response
+        response = bp.chat(message, history=history)
+        yield history + [
+            {"role": "user", "content": message},
+            {"role": "assistant", "content": response.message}
+        ]
     except Exception as e:
         yield history + [
             {"role": "user", "content": message},
@@ -93,12 +100,17 @@ def chat_response(message: str, history: List[Dict]) -> Generator[List[Dict], No
 
 def get_status() -> str:
     """Get current status as HTML."""
-    if chat_handler:
-        session = chat_handler.session_manager.get_session()
-        handler_status = "🟢 Ready" if chat_handler._tools_available else "🟡 Limited"
-        session_status = session.summary()
-        return f"{handler_status} | {session_status}"
-    return "🔴 Handler not available"
+    if bp:
+        health = bp.health_check()
+        status_parts = []
+        if health.get("llm_available"):
+            status_parts.append(f"🟢 LLM: {health.get('llm_provider', 'unknown')}")
+        else:
+            status_parts.append("🔴 No LLM")
+        if health.get("tools_available"):
+            status_parts.append(f"🛠️ {health.get('tool_count', 0)} tools")
+        return " | ".join(status_parts) if status_parts else "🟢 Ready"
+    return "🔴 BioPipelines not available"
 
 
 # ============================================================================
@@ -131,26 +143,55 @@ def create_app() -> gr.Blocks:
         # Status bar (auto-refresh every 30s)
         status = gr.Markdown(value=get_status, every=30)
         
-        # Main Chat
-        chatbot = gr.Chatbot(
-            label="Chat",
-            height=500,
-            placeholder="Ask me to scan data, create workflows, or run analyses...",
-            examples=EXAMPLES,
-            buttons=["copy"],
-            avatar_images=(None, "🧬"),
-            layout="bubble",
-        )
-        
-        # Input
+        # Main layout: Chat + Job Panel side by side
         with gr.Row():
-            msg = gr.Textbox(
-                placeholder="Type your message here...",
-                show_label=False,
-                scale=9,
-                lines=1,
-            )
-            send = gr.Button("Send", variant="primary", scale=1)
+            # Main Chat Column (75%)
+            with gr.Column(scale=3):
+                # Main Chat
+                chatbot = gr.Chatbot(
+                    label="Chat",
+                    height=450,
+                    placeholder="Ask me to scan data, create workflows, or run analyses...",
+                    examples=EXAMPLES,
+                    buttons=["copy"],
+                    avatar_images=(None, "🧬"),
+                    layout="bubble",
+                )
+                
+                # Input
+                with gr.Row():
+                    msg = gr.Textbox(
+                        placeholder="Type your message here...",
+                        show_label=False,
+                        scale=9,
+                        lines=1,
+                    )
+                    send = gr.Button("Send", variant="primary", scale=1)
+            
+            # Job Status Panel (25%)
+            with gr.Column(scale=1, min_width=280):
+                gr.Markdown("### 📊 Jobs")
+                
+                # Active jobs with auto-refresh
+                with gr.Group():
+                    jobs_refresh_btn = gr.Button("🔄 Refresh", size="sm")
+                    active_jobs_html = gr.HTML(value="<p>Loading...</p>")
+                
+                # Recent jobs (collapsed)
+                with gr.Accordion("📋 Recent (24h)", open=False):
+                    recent_jobs_html = gr.HTML(value="<p>Click refresh...</p>")
+                
+                # Quick job actions
+                with gr.Accordion("⚡ Quick Actions", open=False):
+                    quick_job_id = gr.Textbox(
+                        label="Job ID",
+                        placeholder="Enter job ID...",
+                        scale=1,
+                    )
+                    with gr.Row():
+                        view_log_btn = gr.Button("📄 Log", size="sm")
+                        cancel_job_btn = gr.Button("❌ Cancel", size="sm", variant="stop")
+                    job_action_output = gr.Markdown("")
         
         # Feedback section (for intent corrections)
         with gr.Accordion("📝 Feedback & Learning", open=False):
@@ -187,10 +228,11 @@ def create_app() -> gr.Blocks:
         
         # Settings (collapsed)
         with gr.Accordion("⚙️ Settings", open=False):
-            settings_info = "**Handler:** " + ("Available ✓" if HANDLER_AVAILABLE else "Not available")
-            if chat_handler:
-                settings_info += f"\n**Tools:** {len(chat_handler.agent_tools.tools) if chat_handler.agent_tools else 0}"
-                settings_info += f"\n**Intent Parser:** {'Available ✓' if chat_handler.intent_parser else 'Not available'}"
+            settings_info = "**BioPipelines:** " + ("Available ✓" if BP_AVAILABLE else "Not available")
+            if bp:
+                health = bp.health_check()
+                settings_info += f"\n**LLM:** {health.get('llm_provider', 'Not configured')}"
+                settings_info += f"\n**Tools:** {health.get('tool_count', 0)}"
             gr.Markdown(settings_info)
             clear = gr.Button("🗑️ Clear Chat")
         
@@ -202,25 +244,31 @@ def create_app() -> gr.Blocks:
                 yield response, ""
         
         def clear_chat():
-            if chat_handler:
-                # Clear session state
-                chat_handler.session_manager.clear_session()
             return [], ""
         
         def submit_feedback(query, intent, text):
-            if not chat_handler:
-                return "❌ Handler not available"
+            if not bp:
+                return "❌ BioPipelines not available"
             if not query or not intent:
                 return "⚠️ Please provide both query and correct intent"
-            result = chat_handler.submit_feedback(query, intent, text)
-            if "error" in result:
-                return f"❌ {result['error']}"
-            return f"✅ Feedback recorded! (ID: {result.get('feedback_id', 'N/A')})"
+            # Feedback through the agent if available
+            try:
+                if hasattr(bp, 'agent') and bp.agent:
+                    bp.agent.submit_feedback(query, intent, text)
+                    return "✅ Feedback recorded!"
+                return "⚠️ Feedback system not available"
+            except Exception as e:
+                return f"❌ {e}"
         
         def get_learning_stats():
-            if not chat_handler:
+            if not bp:
                 return {}
-            return chat_handler.get_learning_stats()
+            try:
+                if hasattr(bp, 'agent') and bp.agent and hasattr(bp.agent, 'get_learning_stats'):
+                    return bp.agent.get_learning_stats()
+            except Exception:
+                pass
+            return {"message": "Stats not available"}
         
         # Wire up events
         msg.submit(submit, [msg, chatbot], [chatbot, msg])
@@ -228,6 +276,34 @@ def create_app() -> gr.Blocks:
         clear.click(clear_chat, outputs=[chatbot, msg])
         feedback_btn.click(submit_feedback, [feedback_query, feedback_intent, feedback_text], feedback_result)
         stats_btn.click(get_learning_stats, outputs=stats_output)
+        
+        # Job panel events
+        def refresh_jobs():
+            return format_jobs_table(get_user_jobs())
+        
+        def refresh_recent():
+            return format_jobs_table(get_recent_jobs())
+        
+        def view_job_log(job_id):
+            if not job_id or not job_id.strip():
+                return "Enter a job ID"
+            return get_job_log(job_id.strip())
+        
+        def cancel_slurm_job(job_id):
+            if not job_id or not job_id.strip():
+                return "Enter a job ID"
+            return cancel_job(job_id.strip())
+        
+        jobs_refresh_btn.click(refresh_jobs, outputs=[active_jobs_html])
+        view_log_btn.click(view_job_log, inputs=[quick_job_id], outputs=[job_action_output])
+        cancel_job_btn.click(cancel_slurm_job, inputs=[quick_job_id], outputs=[job_action_output])
+        
+        # Auto-refresh jobs every 30 seconds
+        job_timer = gr.Timer(value=30)
+        job_timer.tick(refresh_jobs, outputs=[active_jobs_html])
+        
+        # Load jobs on page open
+        app.load(refresh_jobs, outputs=[active_jobs_html])
     
     return app
 
@@ -251,9 +327,13 @@ def main():
     print("║                    🧬 BioPipelines                         ║")
     print("╠════════════════════════════════════════════════════════════╣")
     print(f"║  Server: http://localhost:{args.port:<5}                          ║")
-    print(f"║  Handler: {'Unified Chat Handler ✓' if HANDLER_AVAILABLE else 'Not available ✗':<30}    ║")
-    if chat_handler and chat_handler.agent_tools:
-        print(f"║  Tools: {len(chat_handler.agent_tools.tools):<3} available                                   ║")
+    print(f"║  Facade: {'BioPipelines ✓' if BP_AVAILABLE else 'Not available ✗':<30}    ║")
+    if bp:
+        health = bp.health_check()
+        llm_provider = health.get('llm_provider') or 'None'
+        tool_count = health.get('tool_count') or 0
+        print(f"║  LLM: {llm_provider:<10}                                   ║")
+        print(f"║  Tools: {tool_count:<3} available                                   ║")
     print("╚════════════════════════════════════════════════════════════╝")
     print()
     

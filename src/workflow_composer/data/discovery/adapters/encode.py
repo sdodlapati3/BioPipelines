@@ -286,83 +286,61 @@ class ENCODEAdapter(BaseAdapter):
     
     def _build_search_params(self, query: SearchQuery) -> List[tuple]:
         """Build ENCODE search parameters from query."""
-        # Build params as list of tuples to handle duplicate keys
-        # Use simpler field names that ENCODE API actually supports
+        # Build params as list of tuples - keep it SIMPLE to avoid 404 errors
         params = [
             ("type", "Experiment"),
             ("format", "json"),
-            ("limit", str(query.max_results)),
-            ("status", "released"),  # Only show released datasets
-            ("field", "accession"),
-            ("field", "description"),
-            ("field", "assay_title"),
-            ("field", "biosample_ontology"),
-            ("field", "target"),
-            ("field", "replicates"),
-            ("field", "files"),
-            ("field", "date_released"),
-            ("field", "lab"),
-            ("field", "award"),
-            ("field", "status"),
-            ("field", "assembly"),
+            ("limit", str(min(query.max_results, 25))),  # Cap at 25 for reliability
+            ("status", "released"),
         ]
         
-        # Organism - use simple organism.scientific_name
-        if query.organism:
-            organism_map = {
-                "human": "Homo sapiens",
-                "mouse": "Mus musculus",
-                "fly": "Drosophila melanogaster",
-                "worm": "Caenorhabditis elegans",
-            }
-            scientific_name = organism_map.get(query.organism.lower(), query.organism)
-            # Use the correct ENCODE field path
-            params.append(("replicates.library.biosample.donor.organism.scientific_name", scientific_name))
+        # Build a single searchTerm combining all criteria
+        search_parts = []
         
-        # Assay type - ENCODE uses specific assay_title values
+        # Assay type
         if query.assay_type:
             assay_lower = query.assay_type.lower()
-            # Map common names to ENCODE assay_title values
             if "chip" in assay_lower:
-                # For ChIP-seq, add to searchTerm instead of strict filter
-                params.append(("searchTerm", "ChIP-seq"))
+                search_parts.append("ChIP-seq")
             elif "rna-seq" in assay_lower or "rnaseq" in assay_lower:
-                params.append(("searchTerm", "RNA-seq"))
+                search_parts.append("RNA-seq")
             elif "atac" in assay_lower:
-                params.append(("assay_title", "ATAC-seq"))
+                search_parts.append("ATAC-seq")
             elif "dnase" in assay_lower:
-                params.append(("assay_title", "DNase-seq"))
+                search_parts.append("DNase-seq")
             elif "wgbs" in assay_lower or "methylation" in assay_lower or "bisulfite" in assay_lower:
-                # WGBS can be listed as different variants
-                params.append(("searchTerm", "WGBS"))
+                search_parts.append("methylation")
             elif "hi-c" in assay_lower or "hic" in assay_lower:
-                params.append(("searchTerm", "Hi-C"))
+                search_parts.append("Hi-C")
             else:
-                params.append(("searchTerm", query.assay_type))
+                search_parts.append(query.assay_type)
         
-        # Target (for ChIP-seq, CUT&RUN, etc.)
-        if query.target:
-            params.append(("target.label", query.target))
-        
-        # Tissue or cell line - use biosample term in searchTerm
-        # The biosample_ontology.term_name can be too strict
+        # Tissue
         if query.tissue:
-            params.append(("searchTerm", query.tissue))
+            search_parts.append(query.tissue)
         
         # Cell line
         if query.cell_line:
-            params.append(("searchTerm", query.cell_line))
+            search_parts.append(query.cell_line)
+            
+        # Target
+        if query.target:
+            search_parts.append(query.target)
         
-        # Assembly
-        if query.assembly:
-            params.append(("assembly", query.assembly))
+        # Organism - add last as it's less specific
+        if query.organism:
+            search_parts.append(query.organism)
         
-        # Keywords - combine into single searchTerm to avoid 404 errors
-        # Multiple searchTerm params can cause issues with ENCODE API
+        # Keywords
         if query.keywords:
-            # Join keywords with space for AND search
-            keyword_str = " ".join(query.keywords)
-            params.append(("searchTerm", keyword_str))
+            # Only use first 3 keywords to avoid overly long URLs
+            search_parts.extend(query.keywords[:3])
+        
+        # Combine into single searchTerm
+        if search_parts:
+            # Use only unique terms
+            unique_terms = list(dict.fromkeys(search_parts))  # Preserves order, removes dupes
+            params.append(("searchTerm", " ".join(unique_terms)))
         
         return params
     

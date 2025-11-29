@@ -72,7 +72,50 @@ from .autonomous import HealthChecker, RecoveryManager, JobMonitor
 # Unified classification (Phase 1 refactoring)
 from .classification import TaskType, classify_task as _classify_task_impl
 
+# Intent parsing (hybrid parser integration)
+from .intent import HybridQueryParser, QueryParseResult, ConversationContext, DialogueManager
+
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Intent-to-Tool Mapping
+# =============================================================================
+
+# Maps semantic intent names to ToolName enums
+INTENT_TO_TOOL: Dict[str, ToolName] = {
+    # Data Discovery
+    "DATA_SCAN": ToolName.SCAN_DATA,
+    "DATA_SEARCH": ToolName.SEARCH_DATABASES,
+    "DATA_DOWNLOAD": ToolName.DOWNLOAD_DATASET,
+    
+    # Workflow Operations
+    "WORKFLOW_CREATE": ToolName.GENERATE_WORKFLOW,
+    "WORKFLOW_VISUALIZE": ToolName.VISUALIZE_WORKFLOW,
+    
+    # Job Operations
+    "JOB_SUBMIT": ToolName.SUBMIT_JOB,
+    "JOB_STATUS": ToolName.GET_JOB_STATUS,
+    "JOB_LOGS": ToolName.GET_LOGS,
+    
+    # Diagnostics
+    "DIAGNOSE_ERROR": ToolName.DIAGNOSE_ERROR,
+    "ANALYSIS_INTERPRET": ToolName.ANALYZE_RESULTS,
+    
+    # Reference Management
+    "REFERENCE_CHECK": ToolName.CHECK_REFERENCES,
+    "REFERENCE_DOWNLOAD": ToolName.DOWNLOAD_REFERENCE,
+    
+    # Education
+    "EDUCATION_EXPLAIN": ToolName.EXPLAIN_CONCEPT,
+    "EDUCATION_HELP": ToolName.SHOW_HELP,
+    
+    # Meta/Composite (handled specially)
+    "META_CONFIRM": None,
+    "META_CANCEL": None,
+    "META_GREETING": ToolName.SHOW_HELP,
+    "META_UNKNOWN": ToolName.SHOW_HELP,
+}
 
 
 # =============================================================================
@@ -334,8 +377,18 @@ class UnifiedAgent:
         self._job_monitor: Optional[JobMonitor] = None
         self._orchestrator = None
         
+        # Hybrid intent parser (lazy loaded)
+        self._query_parser: Optional[HybridQueryParser] = None
+        
+        # Conversation context for multi-turn memory
+        self._context: Optional[ConversationContext] = None
+        self._dialogue_manager: Optional[DialogueManager] = None
+        
         # Execution history
         self._history: List[AgentResponse] = []
+        
+        # Last search results for "download all" support (deprecated - use context)
+        self._last_search_results: List[str] = []
         
         logger.info(f"UnifiedAgent initialized with autonomy level: {autonomy_level.value}")
         
@@ -346,6 +399,53 @@ class UnifiedAgent:
             self._tools = get_agent_tools()
         return self._tools
         
+    @property
+    def query_parser(self) -> HybridQueryParser:
+        """Get or initialize the hybrid query parser."""
+        if self._query_parser is None:
+            try:
+                self._query_parser = HybridQueryParser()
+                logger.info("HybridQueryParser initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize HybridQueryParser: {e}")
+                self._query_parser = None
+        return self._query_parser
+    
+    @property
+    def context(self) -> ConversationContext:
+        """
+        Get or initialize the conversation context.
+        
+        Provides multi-turn memory including:
+        - Entity tracking across turns
+        - Coreference resolution ("it", "that", "the data")
+        - Working memory for active tasks
+        - State management (last search results, current workflow, etc.)
+        """
+        if self._context is None:
+            self._context = ConversationContext(session_id=f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+            logger.info(f"ConversationContext initialized: {self._context.session_id}")
+        return self._context
+    
+    @property
+    def dialogue_manager(self) -> DialogueManager:
+        """
+        Get or initialize the dialogue manager.
+        
+        Coordinates:
+        - Intent parsing with context
+        - Coreference resolution
+        - Task state management
+        - Slot filling for incomplete requests
+        """
+        if self._dialogue_manager is None:
+            self._dialogue_manager = DialogueManager(
+                intent_parser=None,  # Uses its own parser
+                context=self.context
+            )
+            logger.info("DialogueManager initialized")
+        return self._dialogue_manager
+    
     @property
     def health_checker(self) -> HealthChecker:
         """Get or initialize the health checker."""
@@ -502,6 +602,11 @@ class UnifiedAgent:
         # Execute the tool
         try:
             result = self.tools.execute_tool(tool_name.value, **kwargs)
+            
+            # Store search results for "download all" support
+            if tool_name == ToolName.SEARCH_DATABASES and result.success:
+                self._store_search_results(result)
+                
         except Exception as e:
             logger.error(f"Tool execution failed: {e}")
             result = ToolResult(
@@ -534,6 +639,8 @@ class UnifiedAgent:
         Process a user query asynchronously.
         
         This is the main entry point for the agent.
+        Uses hybrid intent parsing (semantic + pattern + NER) for robust detection.
+        Maintains conversation context across turns.
         
         Args:
             query: User's natural language query
@@ -547,14 +654,58 @@ class UnifiedAgent:
         task_type = classify_task(query)
         logger.info(f"Task classified as: {task_type.value}")
         
-        # Detect tool from query using AgentTools
-        detection = self.tools.detect_tool(query)
+        # Try hybrid intent parsing first (semantic + pattern + NER)
         detected_tool = None
         detected_args = []
+        hybrid_params = None  # Params from hybrid parser (preferred)
+        parse_result: Optional[QueryParseResult] = None
+        extracted_entities = []  # For context tracking
         
-        if detection:
-            detected_tool, detected_args = detection
-            logger.info(f"Detected tool: {detected_tool.value} with args: {detected_args}")
+        if self.query_parser:
+            try:
+                parse_result = self.query_parser.parse(query)
+                logger.info(f"HybridParser: intent={parse_result.intent}, confidence={parse_result.intent_confidence:.2f}")
+                
+                # Extract entities for context
+                extracted_entities = parse_result.entities if parse_result.entities else []
+                
+                # Map intent to tool if confidence is reasonable (0.35 threshold allows semantic matching)
+                if parse_result.intent_confidence >= 0.35 and parse_result.intent in INTENT_TO_TOOL:
+                    detected_tool = INTENT_TO_TOOL[parse_result.intent]
+                    
+                    # Build clean params from slots and entities
+                    hybrid_params = self._build_params_from_parse_result(parse_result, query)
+                    detected_args = list(hybrid_params.values()) if hybrid_params else []
+                    logger.info(f"Mapped intent '{parse_result.intent}' to tool: {detected_tool}, params: {hybrid_params}")
+            except Exception as e:
+                logger.warning(f"HybridParser failed, falling back to regex: {e}")
+        
+        # Add user turn to conversation context
+        # Note: We pass entities=[] because BioEntity and Entity have different structures
+        # The context still tracks the message and intent
+        self.context.add_turn(
+            role="user",
+            content=query,
+            entities=[],  # BioEntity not compatible with Entity, store separately
+            intent=parse_result.intent if parse_result else None
+        )
+        
+        # Store extracted entities in context state for later use
+        if extracted_entities:
+            self.context.update_state("last_entities", [
+                {"type": e.entity_type, "text": e.text, "canonical": e.canonical}
+                for e in extracted_entities
+            ])
+        
+        # Fallback to regex-based detection if hybrid parsing didn't find a tool
+        if not detected_tool:
+            detection = self.tools.detect_tool(query)
+            if detection:
+                detected_tool, detected_args = detection
+                logger.info(f"Regex detected tool: {detected_tool.value} with args: {detected_args}")
+        
+        if detected_tool:
+            logger.info(f"Final detected tool: {detected_tool.value} with args: {detected_args}")
             
             # Check permission
             perm = self.check_tool_permission(detected_tool)
@@ -586,10 +737,13 @@ class UnifiedAgent:
                     suggestions=["Approve or deny this action"],
                 )
                 
-            # Use detected args to build params, fallback to extraction
-            params = self._build_params_from_args(detected_tool, detected_args)
-            if not params:
-                params = self._extract_parameters(query, detected_tool)
+            # Use hybrid params if available, else build from args, else extract from query
+            if hybrid_params:
+                params = hybrid_params
+            else:
+                params = self._build_params_from_args(detected_tool, detected_args)
+                if not params:
+                    params = self._extract_parameters(query, detected_tool)
             execution = self.execute_tool(detected_tool, **params)
             
             # Build response
@@ -602,6 +756,14 @@ class UnifiedAgent:
         else:
             # No specific tool detected - handle as general query
             response = await self._handle_general_query(query, task_type)
+        
+        # Add assistant response to conversation context
+        self.context.add_turn(
+            role="assistant",
+            content=response.message[:500] if response.message else "",  # Truncate long messages
+            entities=[],  # Could extract entities from response if needed
+            intent=parse_result.intent if parse_result else None
+        )
             
         # Save to history
         self._history.append(response)
@@ -637,6 +799,102 @@ class UnifiedAgent:
     # =========================================================================
     # Internal Methods
     # =========================================================================
+    
+    def _build_params_from_parse_result(
+        self, 
+        parse_result: QueryParseResult, 
+        original_query: str
+    ) -> Dict[str, Any]:
+        """
+        Build clean tool parameters from parse result.
+        
+        Uses entities to construct a clean search query instead of raw user input.
+        Deduplicates terms to avoid overly restrictive queries.
+        """
+        params = {}
+        slots = parse_result.slots
+        entities = parse_result.entities
+        intent = parse_result.intent
+        
+        # For data search, build query from entities if available
+        if intent == "DATA_SEARCH" and entities:
+            # Build a clean query from entities - deduplicate!
+            seen_terms = set()
+            query_parts = []
+            for entity in entities:
+                if entity.entity_type in ("ORGANISM", "TISSUE", "DISEASE", "ASSAY_TYPE"):
+                    term = (entity.canonical or entity.text).lower()
+                    # Skip duplicates (case-insensitive)
+                    if term not in seen_terms:
+                        seen_terms.add(term)
+                        query_parts.append(entity.canonical or entity.text)
+            if query_parts:
+                params["query"] = " ".join(query_parts)
+            elif "query" in slots:
+                params["query"] = slots["query"]
+        elif intent == "DATA_DOWNLOAD":
+            # For download, check for dataset IDs or "download all"
+            if "dataset_id" in slots:
+                params["dataset_id"] = slots["dataset_id"]
+            else:
+                # Check entities for dataset IDs
+                for entity in entities:
+                    if entity.entity_type == "DATASET_ID":
+                        params["dataset_id"] = entity.text
+                        break
+                        
+            # Check for "download all" / "execute commands" / "run downloads"
+            if not params.get("dataset_id"):
+                query_lower = original_query.lower()
+                # Extended patterns for "download all" and "execute commands"
+                download_all_patterns = [
+                    "all" in query_lower,
+                    "everything" in query_lower,
+                    "both" in query_lower,
+                    "execute" in query_lower and ("command" in query_lower or "download" in query_lower),
+                    "run" in query_lower and ("command" in query_lower or "download" in query_lower),
+                    slots.get("download_all") is True,  # From intent pattern
+                ]
+                
+                if any(download_all_patterns):
+                    # Try context first, then fall back to instance variable
+                    context_ids = self.context.get_state("last_search_ids")
+                    if context_ids:
+                        params["dataset_ids"] = context_ids.copy()
+                        params["download_all"] = True
+                        logger.info(f"Using {len(context_ids)} dataset IDs from context memory")
+                    elif self._last_search_results:
+                        params["dataset_ids"] = self._last_search_results.copy()
+                        params["download_all"] = True
+                        logger.info(f"Using {len(self._last_search_results)} dataset IDs from last search")
+        elif intent and intent.startswith("EDUCATION"):
+            # For education/explain intents, only pass the concept
+            if "concept" in slots:
+                params["concept"] = slots["concept"]
+            elif "topic" in slots:
+                params["concept"] = slots["topic"]
+        else:
+            # Default: use slots directly
+            params = dict(slots)
+        
+        return params
+    
+    def _store_search_results(self, result: ToolResult) -> None:
+        """Store dataset IDs from search results in conversation context."""
+        if result.data and "results" in result.data:
+            dataset_ids = [
+                r.get("id") for r in result.data["results"] 
+                if r.get("id")
+            ]
+            # Store in both places for compatibility
+            self._last_search_results = dataset_ids
+            
+            # Store in conversation context for proper memory
+            self.context.update_state("last_search_results", result.data["results"])
+            self.context.update_state("last_search_ids", dataset_ids)
+            self.context.update_state("last_search_query", result.data.get("query", ""))
+            
+            logger.info(f"Stored {len(dataset_ids)} dataset IDs in conversation context")
     
     def _build_params_from_args(self, tool: ToolName, args: List[str]) -> Dict[str, Any]:
         """
@@ -810,6 +1068,13 @@ class UnifiedAgent:
             execution = self.execute_tool(ToolName.LIST_JOBS)
             return self._build_response(task_type, [execution], query)
             
+        elif task_type == TaskType.DATA:
+            # Handle data queries - extract search terms from query
+            # For natural language data queries, search databases
+            search_query = query  # Use full query as search
+            execution = self.execute_tool(ToolName.SEARCH_DATABASES, query=search_query)
+            return self._build_response(task_type, [execution], query)
+            
         else:
             # Return help
             execution = self.execute_tool(ToolName.SHOW_HELP)
@@ -857,6 +1122,31 @@ class UnifiedAgent:
     def clear_history(self):
         """Clear execution history."""
         self._history.clear()
+        
+    def get_context_summary(self) -> str:
+        """
+        Get a summary of the current conversation context.
+        
+        Useful for:
+        - LLM prompting (providing context for responses)
+        - Debugging conversation state
+        - Generating summaries for users
+        
+        Returns:
+            Formatted context summary
+        """
+        return self.context.get_context_summary()
+    
+    def get_recent_entities(self, limit: int = 5) -> List:
+        """Get recently mentioned entities from context."""
+        return self.context.get_salient_entities(limit)
+    
+    def reset_context(self):
+        """Reset conversation context (start fresh session)."""
+        self._context = None
+        self._dialogue_manager = None
+        self._last_search_results = []
+        logger.info("Conversation context reset")
 
 
 # =============================================================================

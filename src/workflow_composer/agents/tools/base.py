@@ -66,8 +66,25 @@ class ToolName(Enum):
     SHOW_HELP = "show_help"
 
 
-# Legacy tool patterns - maintained for backward compatibility
-# New modular patterns are defined in each category module
+# =============================================================================
+# LEGACY TOOL_PATTERNS - DEPRECATED
+# =============================================================================
+# These patterns are maintained ONLY for backward compatibility with
+# AgentTools.detect_tool() as a fallback when HybridQueryParser is unavailable.
+#
+# NEW CODE should use:
+#   from workflow_composer.agents.intent import HybridQueryParser
+#   parser = HybridQueryParser()
+#   result = parser.parse(query)
+#
+# The HybridQueryParser provides:
+# - Semantic similarity matching (handles paraphrases)
+# - Domain-specific NER (extracts organisms, tissues, etc.)
+# - Higher accuracy than regex patterns
+# - Confidence scores for intent classification
+#
+# These patterns will be removed in a future version.
+# =============================================================================
 TOOL_PATTERNS = [
     # Data scanning
     (r"(?:scan|find|look for)\s+(?:data|files?|samples?)", ToolName.SCAN_DATA),

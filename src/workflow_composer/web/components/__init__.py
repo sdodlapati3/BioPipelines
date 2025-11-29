@@ -24,6 +24,21 @@ except ImportError:
     create_reference_manager_ui = None
     create_data_summary_panel = None
 
+# Import job panel components
+try:
+    from .job_panel import (
+        get_user_jobs,
+        get_recent_jobs,
+        format_jobs_table,
+        get_job_log,
+        cancel_job,
+        create_job_panel,
+        create_job_tab,
+    )
+    _JOB_PANEL_AVAILABLE = True
+except ImportError:
+    _JOB_PANEL_AVAILABLE = False
+
 __all__ = [
     # Data tab utilities
     "DataTabState",
@@ -31,4 +46,12 @@ __all__ = [
     "create_remote_search_ui",
     "create_reference_manager_ui",
     "create_data_summary_panel",
+    # Job panel utilities
+    "get_user_jobs",
+    "get_recent_jobs",
+    "format_jobs_table",
+    "get_job_log",
+    "cancel_job",
+    "create_job_panel",
+    "create_job_tab",
 ]
