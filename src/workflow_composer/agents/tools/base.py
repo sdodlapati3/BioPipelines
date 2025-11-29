@@ -43,6 +43,7 @@ class ToolName(Enum):
     RESTART_VLLM = "restart_vllm"
     RESUBMIT_JOB = "resubmit_job"
     WATCH_JOB = "watch_job"
+    LIST_JOBS = "list_jobs"
     
     # Monitoring
     MONITOR_JOBS = "monitor_jobs"

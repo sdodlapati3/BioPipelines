@@ -71,6 +71,7 @@ from .execution import (
     RESTART_VLLM_PATTERNS,
     RESUBMIT_JOB_PATTERNS,
     WATCH_JOB_PATTERNS,
+    LIST_JOBS_PATTERNS,
     submit_job_impl,
     get_job_status_impl,
     get_logs_impl,
@@ -79,6 +80,7 @@ from .execution import (
     restart_vllm_impl,
     resubmit_job_impl,
     watch_job_impl,
+    list_jobs_impl,
 )
 
 from .diagnostics import (
@@ -132,6 +134,7 @@ ALL_TOOL_PATTERNS = [
     (ToolName.RESTART_VLLM, RESTART_VLLM_PATTERNS),
     (ToolName.RESUBMIT_JOB, RESUBMIT_JOB_PATTERNS),
     (ToolName.WATCH_JOB, WATCH_JOB_PATTERNS),
+    (ToolName.LIST_JOBS, LIST_JOBS_PATTERNS),
     (ToolName.SUBMIT_JOB, SUBMIT_JOB_PATTERNS),
     (ToolName.GET_JOB_STATUS, GET_JOB_STATUS_PATTERNS),
     (ToolName.GET_LOGS, GET_LOGS_PATTERNS),
@@ -217,6 +220,7 @@ class AgentTools:
             "restart_vllm": lambda **kw: restart_vllm_impl(**kw),
             "resubmit_job": lambda **kw: resubmit_job_impl(**kw),
             "watch_job": lambda **kw: watch_job_impl(**kw),
+            "list_jobs": lambda **kw: list_jobs_impl(**kw),
             
             # Diagnostics
             "diagnose_error": lambda **kw: diagnose_error_impl(**kw),
@@ -476,6 +480,19 @@ class AgentTools:
                         "job_id": {"type": "string", "description": "SLURM job ID to monitor"},
                         "include_logs": {"type": "boolean", "description": "Include recent log output for failed jobs"},
                         "tail_lines": {"type": "integer", "description": "Number of log lines to include (default: 50)"},
+                    },
+                    "required": []
+                }
+            },
+            {
+                "name": "list_jobs",
+                "description": "List all SLURM jobs for the current user. Shows job IDs, names, states, and runtimes.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "user": {"type": "string", "description": "Filter by username (default: current user)"},
+                        "state": {"type": "string", "description": "Filter by state: pending, running, completed, failed"},
+                        "partition": {"type": "string", "description": "Filter by partition name"},
                     },
                     "required": []
                 }

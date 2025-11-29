@@ -1255,3 +1255,195 @@ Try `sacct -j {job_id}` for historical jobs.
             error=str(e),
             message=f"❌ Watch job failed: {e}"
         )
+
+
+# =============================================================================
+# LIST_JOBS - Quick overview of all user's SLURM jobs
+# =============================================================================
+
+LIST_JOBS_PATTERNS = [
+    r"list\s+(?:my\s+)?(?:slurm\s+)?jobs",
+    r"show\s+(?:my\s+)?(?:slurm\s+)?jobs",
+    r"(?:my|all)\s+jobs",
+    r"what\s+jobs\s+(?:are|do\s+i\s+have)\s+running",
+    r"squeue",
+]
+
+
+def list_jobs_impl(
+    user: str = None,
+    state: str = None,
+    partition: str = None,
+) -> ToolResult:
+    """
+    List SLURM jobs for the current user.
+    
+    Args:
+        user: Filter by user (default: current user)
+        state: Filter by state (pending, running, completed, failed)
+        partition: Filter by partition
+        
+    Returns:
+        ToolResult with job list
+    """
+    try:
+        from workflow_composer.agents.autonomous.job_monitor import JobMonitor, JobState
+        
+        # Get running jobs
+        jobs = JobMonitor.list_running_jobs(user=user)
+        
+        if not jobs:
+            return ToolResult(
+                success=True,
+                tool_name="list_jobs",
+                data={"jobs": []},
+                message="""📋 **No Running Jobs**
+
+You don't have any jobs currently running or pending.
+
+To submit a workflow: `submit workflow`
+To check recent completed jobs: `sacct --starttime=today`
+"""
+            )
+        
+        # Filter by state if specified
+        if state:
+            state_map = {
+                "pending": ["PD"],
+                "running": ["R"],
+                "completing": ["CG"],
+            }
+            filter_states = state_map.get(state.lower(), [state.upper()])
+            jobs = [j for j in jobs if j["state"] in filter_states]
+        
+        # Filter by partition if specified
+        if partition:
+            jobs = [j for j in jobs if j["partition"] == partition]
+        
+        if not jobs:
+            return ToolResult(
+                success=True,
+                tool_name="list_jobs",
+                data={"jobs": []},
+                message=f"📋 No jobs matching filters (state={state}, partition={partition})"
+            )
+        
+        # State emoji
+        state_emoji = {
+            "PD": "⏳",
+            "R": "🏃",
+            "CG": "🔄",
+        }
+        
+        # Build table
+        job_rows = []
+        for j in jobs:
+            emoji = state_emoji.get(j["state"], "❓")
+            job_rows.append(
+                f"| {j['job_id']} | {j['name'][:25]} | {emoji} {j['state']} | {j['time']} | {j['partition']} | {j['nodelist']} |"
+            )
+        
+        table = "\n".join(job_rows)
+        
+        # Count by state
+        pending = sum(1 for j in jobs if j["state"] == "PD")
+        running = sum(1 for j in jobs if j["state"] == "R")
+        
+        message = f"""📋 **Your SLURM Jobs** ({len(jobs)} total)
+
+| Job ID | Name | State | Time | Partition | Node(s) |
+|--------|------|-------|------|-----------|---------|
+{table}
+
+**Summary:** ⏳ {pending} pending, 🏃 {running} running
+
+**Commands:**
+- `watch job <id>` - Detailed info on specific job
+- `cancel job <id>` - Cancel a job
+- `get logs <id>` - View job output
+"""
+        
+        return ToolResult(
+            success=True,
+            tool_name="list_jobs",
+            data={
+                "jobs": jobs,
+                "pending": pending,
+                "running": running,
+            },
+            message=message
+        )
+        
+    except ImportError:
+        # Fallback to direct squeue
+        try:
+            cmd = ["squeue", "--format=%i|%j|%t|%M|%P|%N", "--noheader"]
+            if user:
+                cmd.extend(["-u", user])
+            else:
+                cmd.append("--me")
+            
+            if partition:
+                cmd.extend(["-p", partition])
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            
+            if result.returncode != 0:
+                return ToolResult(
+                    success=False,
+                    tool_name="list_jobs",
+                    error=result.stderr,
+                    message=f"❌ squeue failed: {result.stderr}"
+                )
+            
+            if not result.stdout.strip():
+                return ToolResult(
+                    success=True,
+                    tool_name="list_jobs",
+                    data={"jobs": []},
+                    message="📋 No jobs currently running or pending."
+                )
+            
+            # Parse output
+            jobs = []
+            for line in result.stdout.strip().split("\n"):
+                parts = line.split("|")
+                if len(parts) >= 6:
+                    jobs.append({
+                        "job_id": parts[0],
+                        "name": parts[1],
+                        "state": parts[2],
+                        "time": parts[3],
+                        "partition": parts[4],
+                        "nodelist": parts[5],
+                    })
+            
+            # Build simple output
+            job_lines = [f"  • **{j['job_id']}**: {j['name']} ({j['state']}) - {j['time']}" for j in jobs]
+            
+            return ToolResult(
+                success=True,
+                tool_name="list_jobs",
+                data={"jobs": jobs},
+                message=f"""📋 **Your Jobs** ({len(jobs)} total)
+
+{chr(10).join(job_lines)}
+"""
+            )
+            
+        except Exception as e:
+            return ToolResult(
+                success=False,
+                tool_name="list_jobs",
+                error=str(e),
+                message=f"❌ Failed to list jobs: {e}"
+            )
+    
+    except Exception as e:
+        logger.error(f"list_jobs failed: {e}")
+        return ToolResult(
+            success=False,
+            tool_name="list_jobs",
+            error=str(e),
+            message=f"❌ List jobs failed: {e}"
+        )
