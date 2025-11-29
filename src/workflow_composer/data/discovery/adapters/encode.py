@@ -105,11 +105,12 @@ class ENCODEAdapter(BaseAdapter):
         logger.info(f"Searching ENCODE: {params}")
         
         try:
-            response = self.session.get(
-                self.SEARCH_URL,
-                params=params,
-                timeout=self.timeout
-            )
+            # Build URL manually to handle ENCODE's specific format
+            # ENCODE expects: /search/?type=Experiment&field=accession&...
+            url = self._build_search_url(params)
+            logger.debug(f"ENCODE search URL: {url}")
+            
+            response = self.session.get(url, timeout=self.timeout)
             response.raise_for_status()
             data = response.json()
             
@@ -128,6 +129,69 @@ class ENCODEAdapter(BaseAdapter):
             
         except requests.RequestException as e:
             logger.error(f"ENCODE search failed: {e}")
+            # Try alternative search approach
+            return self._fallback_search(query)
+    
+    def _build_search_url(self, params: list) -> str:
+        """
+        Build ENCODE search URL with proper encoding.
+        
+        ENCODE API is picky about URL format - build it manually.
+        """
+        from urllib.parse import quote
+        
+        base = f"{self.BASE_URL}/search/?"
+        param_parts = []
+        
+        for key, value in params:
+            # URL encode the value properly
+            encoded_value = quote(str(value), safe='')
+            param_parts.append(f"{key}={encoded_value}")
+        
+        return base + "&".join(param_parts)
+    
+    def _fallback_search(self, query: SearchQuery) -> List[DatasetInfo]:
+        """
+        Fallback search using simpler ENCODE API parameters.
+        
+        When the full search fails, try a simpler approach.
+        """
+        try:
+            # Use searchTerm for a broader search
+            search_terms = []
+            if query.organism:
+                search_terms.append(query.organism)
+            if query.assay_type:
+                search_terms.append(query.assay_type)
+            if query.tissue:
+                search_terms.append(query.tissue)
+            if query.target:
+                search_terms.append(query.target)
+            
+            if not search_terms:
+                return []
+            
+            # Simple search URL
+            search_term = " ".join(search_terms)
+            url = f"{self.BASE_URL}/search/?type=Experiment&format=json&limit={query.max_results}&status=released&searchTerm={requests.utils.quote(search_term)}"
+            
+            logger.info(f"ENCODE fallback search: {url}")
+            
+            response = self.session.get(url, timeout=self.timeout)
+            response.raise_for_status()
+            data = response.json()
+            
+            datasets = []
+            for item in data.get("@graph", []):
+                dataset = self._parse_experiment(item)
+                if dataset:
+                    datasets.append(dataset)
+            
+            logger.info(f"Fallback found {len(datasets)} datasets")
+            return datasets
+            
+        except Exception as e:
+            logger.error(f"ENCODE fallback search also failed: {e}")
             return []
     
     def get_dataset(self, dataset_id: str) -> Optional[DatasetInfo]:
@@ -213,17 +277,30 @@ class ENCODEAdapter(BaseAdapter):
             logger.error(f"Failed to get ENCODE files for {dataset_id}: {e}")
             return []
     
-    def _build_search_params(self, query: SearchQuery) -> Dict[str, Any]:
+    def _build_search_params(self, query: SearchQuery) -> List[tuple]:
         """Build ENCODE search parameters from query."""
         # Build params as list of tuples to handle duplicate keys
+        # Use simpler field names that ENCODE API actually supports
         params = [
             ("type", "Experiment"),
             ("format", "json"),
             ("limit", str(query.max_results)),
             ("status", "released"),  # Only show released datasets
+            ("field", "accession"),
+            ("field", "description"),
+            ("field", "assay_title"),
+            ("field", "biosample_ontology"),
+            ("field", "target"),
+            ("field", "replicates"),
+            ("field", "files"),
+            ("field", "date_released"),
+            ("field", "lab"),
+            ("field", "award"),
+            ("field", "status"),
+            ("field", "assembly"),
         ]
         
-        # Organism - use the full facet field path
+        # Organism - use simple organism.scientific_name
         if query.organism:
             organism_map = {
                 "human": "Homo sapiens",
@@ -232,43 +309,42 @@ class ENCODEAdapter(BaseAdapter):
                 "worm": "Caenorhabditis elegans",
             }
             scientific_name = organism_map.get(query.organism.lower(), query.organism)
+            # Use the correct ENCODE field path
             params.append(("replicates.library.biosample.donor.organism.scientific_name", scientific_name))
         
         # Assay type - ENCODE uses specific assay_title values
-        # Handle multiple possible titles for common searches
         if query.assay_type:
             assay_lower = query.assay_type.lower()
             # Map common names to ENCODE assay_title values
-            # ChIP-seq is split into TF ChIP-seq and Histone ChIP-seq
-            # Use searchTerm for broader matching or add multiple params
             if "chip" in assay_lower:
-                # For ChIP-seq, we'll use assay_slims which is broader
-                params.append(("assay_slims", "DNA binding"))
+                # For ChIP-seq, add to searchTerm instead of strict filter
+                params.append(("searchTerm", "ChIP-seq"))
             elif "rna-seq" in assay_lower or "rnaseq" in assay_lower:
-                # Use searchTerm for RNA-seq variants
                 params.append(("searchTerm", "RNA-seq"))
             elif "atac" in assay_lower:
                 params.append(("assay_title", "ATAC-seq"))
             elif "dnase" in assay_lower:
                 params.append(("assay_title", "DNase-seq"))
-            elif "wgbs" in assay_lower:
-                params.append(("assay_title", "WGBS"))
+            elif "wgbs" in assay_lower or "methylation" in assay_lower or "bisulfite" in assay_lower:
+                # WGBS can be listed as different variants
+                params.append(("searchTerm", "WGBS"))
             elif "hi-c" in assay_lower or "hic" in assay_lower:
-                params.append(("assay_title", "intact Hi-C"))
+                params.append(("searchTerm", "Hi-C"))
             else:
-                params.append(("assay_title", query.assay_type))
+                params.append(("searchTerm", query.assay_type))
         
         # Target (for ChIP-seq, CUT&RUN, etc.)
         if query.target:
             params.append(("target.label", query.target))
         
-        # Tissue or cell line - use biosample term
+        # Tissue or cell line - use biosample term in searchTerm
+        # The biosample_ontology.term_name can be too strict
         if query.tissue:
-            params.append(("biosample_ontology.term_name", query.tissue))
+            params.append(("searchTerm", query.tissue))
         
         # Cell line
         if query.cell_line:
-            params.append(("biosample_ontology.term_name", query.cell_line))
+            params.append(("searchTerm", query.cell_line))
         
         # Assembly
         if query.assembly:
@@ -276,7 +352,8 @@ class ENCODEAdapter(BaseAdapter):
         
         # Keywords in searchTerm
         if query.keywords:
-            params.append(("searchTerm", " ".join(query.keywords)))
+            for keyword in query.keywords:
+                params.append(("searchTerm", keyword))
         
         return params
     

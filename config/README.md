@@ -58,8 +58,9 @@ paths:
 Edit SLURM settings in `slurm.yaml`:
 ```yaml
 cluster:
-  partition: "main"      # Change to your cluster's partition name
-  account: "my_account"  # Add your account if required
+  partition: "cpuspot"           # Change to your cluster's partition name
+  gpu_partition: "h100quadflex"  # GPU partition for model inference
+  account: "my_account"          # Add your account if required
 ```
 
 ### For Specific Pipelines

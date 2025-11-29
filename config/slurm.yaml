@@ -3,7 +3,8 @@
 
 # Cluster Configuration
 cluster:
-  partition: "main"              # Default partition (adjust for your cluster)
+  partition: "cpuspot"           # Default partition (adjust for your cluster)
+  gpu_partition: "h100quadflex"  # GPU partition for model inference
   account: null                  # Account name (if required by your cluster)
   
 # Default Resource Allocations

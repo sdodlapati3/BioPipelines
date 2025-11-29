@@ -149,6 +149,11 @@ class QueryParser:
         "methylation": "WGBS",
         "whole genome": "WGS",
         "wgs": "WGS",
+        "gene expression": "RNA-seq",
+        "expression": "RNA-seq",
+        "transcriptome": "RNA-seq",
+        "transcriptomic": "RNA-seq",
+        "mrna": "RNA-seq",
     }
     
     def __init__(self, llm_client=None):

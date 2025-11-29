@@ -650,7 +650,8 @@ execution:
 ### 5.2 SLURM Config: `config/slurm.yaml`
 
 ```yaml
-default_partition: main
+default_partition: cpuspot       # CPU jobs (downloads, etc.)
+gpu_partition: h100quadflex      # GPU jobs (LLM inference, etc.)
 default_time: "48:00:00"
 default_memory: "8G"
 
