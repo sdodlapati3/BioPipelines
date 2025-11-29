@@ -475,6 +475,90 @@ class AgentTools:
                 }
             },
             {
+                "name": "compare_samples",
+                "description": "Compare two samples or conditions with statistical analysis and visualization suggestions",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "sample1": {"type": "string", "description": "First sample or condition"},
+                        "sample2": {"type": "string", "description": "Second sample or condition"},
+                        "comparison_type": {"type": "string", "description": "Type: expression, methylation, variants, peaks"},
+                    },
+                    "required": ["sample1", "sample2"]
+                }
+            },
+            {
+                "name": "describe_files",
+                "description": "Get detailed description and statistics for a data file (FASTQ, BAM, VCF, etc.)",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {"type": "string", "description": "Path to the file to describe"},
+                    },
+                    "required": ["file_path"]
+                }
+            },
+            {
+                "name": "validate_dataset",
+                "description": "Validate a dataset for completeness, format, and quality issues",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string", "description": "Path to dataset directory or file"},
+                        "expected_samples": {"type": "integer", "description": "Expected number of samples"},
+                    },
+                    "required": ["path"]
+                }
+            },
+            {
+                "name": "cleanup_data",
+                "description": "Identify and optionally remove unnecessary files (temp files, logs, intermediate outputs)",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string", "description": "Directory to scan for cleanup"},
+                        "dry_run": {"type": "boolean", "description": "If true, only report what would be deleted"},
+                    },
+                    "required": ["path"]
+                }
+            },
+            {
+                "name": "confirm_cleanup",
+                "description": "Confirm and execute a previously proposed cleanup operation",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "cleanup_id": {"type": "string", "description": "Cleanup operation ID from previous dry run"},
+                        "confirmed": {"type": "boolean", "description": "Set to true to confirm deletion"},
+                    },
+                    "required": ["cleanup_id", "confirmed"]
+                }
+            },
+            {
+                "name": "get_logs",
+                "description": "Get workflow execution logs from Nextflow or SLURM",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "workflow_dir": {"type": "string", "description": "Workflow directory path"},
+                        "job_id": {"type": "string", "description": "SLURM job ID"},
+                        "tail_lines": {"type": "integer", "description": "Number of lines from end (default: 50)"},
+                    },
+                    "required": []
+                }
+            },
+            {
+                "name": "cancel_job",
+                "description": "Cancel a running SLURM job",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "job_id": {"type": "string", "description": "SLURM job ID to cancel"},
+                    },
+                    "required": ["job_id"]
+                }
+            },
+            {
                 "name": "get_help",
                 "description": "Show help information about available commands",
                 "parameters": {"type": "object", "properties": {}, "required": []}
