@@ -520,17 +520,13 @@ class UnifiedAgent:
         logger.info(f"Task classified as: {task_type.value}")
         
         # Detect tool from query using AgentTools
-        detected_tool_name = self.tools.detect_tool(query)
+        detection = self.tools.detect_tool(query)
         detected_tool = None
+        detected_args = []
         
-        if detected_tool_name:
-            try:
-                detected_tool = ToolName(detected_tool_name)
-            except ValueError:
-                logger.warning(f"Unknown tool name: {detected_tool_name}")
-        
-        if detected_tool:
-            logger.info(f"Detected tool: {detected_tool.value}")
+        if detection:
+            detected_tool, detected_args = detection
+            logger.info(f"Detected tool: {detected_tool.value} with args: {detected_args}")
             
             # Check permission
             perm = self.check_tool_permission(detected_tool)
@@ -562,8 +558,10 @@ class UnifiedAgent:
                     suggestions=["Approve or deny this action"],
                 )
                 
-            # Extract parameters and execute
-            params = self._extract_parameters(query, detected_tool)
+            # Use detected args to build params, fallback to extraction
+            params = self._build_params_from_args(detected_tool, detected_args)
+            if not params:
+                params = self._extract_parameters(query, detected_tool)
             execution = self.execute_tool(detected_tool, **params)
             
             # Build response
@@ -611,6 +609,43 @@ class UnifiedAgent:
     # =========================================================================
     # Internal Methods
     # =========================================================================
+    
+    def _build_params_from_args(self, tool: ToolName, args: List[str]) -> Dict[str, Any]:
+        """
+        Build kwargs from positional args captured by detect_tool patterns.
+        
+        This uses the same mapping as AgentTools._TOOL_ARG_MAPPING.
+        """
+        if not args or not any(args):
+            return {}
+        
+        # Mapping of tool names to their primary argument names
+        ARG_MAPPING = {
+            ToolName.SCAN_DATA: ["path"],
+            ToolName.SEARCH_DATABASES: ["query"],
+            ToolName.SEARCH_TCGA: ["query", "cancer_type"],
+            ToolName.DESCRIBE_FILES: ["path"],
+            ToolName.VALIDATE_DATASET: ["path"],
+            ToolName.DOWNLOAD_DATASET: ["dataset_id", "destination"],
+            ToolName.DOWNLOAD_REFERENCE: ["genome"],
+            ToolName.BUILD_INDEX: ["reference", "tool"],
+            ToolName.GENERATE_WORKFLOW: ["pipeline_type", "input_dir"],
+            ToolName.CHECK_REFERENCES: ["genome"],
+            ToolName.SUBMIT_JOB: ["workflow_dir"],
+            ToolName.GET_JOB_STATUS: ["job_id"],
+            ToolName.GET_LOGS: ["job_id"],
+            ToolName.CANCEL_JOB: ["job_id"],
+            ToolName.DIAGNOSE_ERROR: ["job_id", "log_content"],
+        }
+        
+        params = {}
+        if tool in ARG_MAPPING:
+            arg_names = ARG_MAPPING[tool]
+            for i, arg in enumerate(args):
+                if arg and i < len(arg_names):
+                    params[arg_names[i]] = arg
+        
+        return params
     
     def _extract_parameters(self, query: str, tool: ToolName) -> Dict[str, Any]:
         """Extract tool parameters from the query."""

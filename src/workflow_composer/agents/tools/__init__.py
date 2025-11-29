@@ -14,7 +14,7 @@ Usage:
 import logging
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -266,7 +266,61 @@ class AgentTools:
                 message=f"❌ Error executing {tool_name}: {e}"
             )
     
-    def detect_tool(self, message: str) -> Optional[str]:
+    # Mapping of tool names to their primary argument names
+    _TOOL_ARG_MAPPING = {
+        ToolName.SCAN_DATA: ["path"],
+        ToolName.SEARCH_DATABASES: ["query"],
+        ToolName.SEARCH_TCGA: ["query", "cancer_type"],
+        ToolName.DESCRIBE_FILES: ["path"],
+        ToolName.VALIDATE_DATASET: ["path"],
+        ToolName.DOWNLOAD_DATASET: ["dataset_id", "destination"],
+        ToolName.DOWNLOAD_REFERENCE: ["genome"],
+        ToolName.BUILD_INDEX: ["reference", "tool"],
+        ToolName.GENERATE_WORKFLOW: ["pipeline_type", "input_dir"],
+        ToolName.CHECK_REFERENCES: ["genome"],
+        ToolName.SUBMIT_JOB: ["workflow_dir"],
+        ToolName.GET_JOB_STATUS: ["job_id"],
+        ToolName.GET_LOGS: ["job_id"],
+        ToolName.CANCEL_JOB: ["job_id"],
+        ToolName.DIAGNOSE_ERROR: ["job_id", "log_content"],
+    }
+    
+    def execute(self, tool_name_or_enum, args: List[str] = None) -> ToolResult:
+        """
+        Execute a tool, converting positional args to kwargs.
+        
+        This method handles the conversion from pattern-captured args to
+        proper keyword arguments for tool implementations.
+        
+        Args:
+            tool_name_or_enum: Tool name (str or ToolName enum)
+            args: List of captured arguments from pattern matching
+            
+        Returns:
+            ToolResult with execution results
+        """
+        # Normalize tool name
+        if isinstance(tool_name_or_enum, ToolName):
+            tool_name = tool_name_or_enum.value
+            tool_enum = tool_name_or_enum
+        else:
+            tool_name = str(tool_name_or_enum)
+            try:
+                tool_enum = ToolName(tool_name)
+            except ValueError:
+                tool_enum = None
+        
+        # Build kwargs from positional args
+        kwargs = {}
+        if args and tool_enum and tool_enum in self._TOOL_ARG_MAPPING:
+            arg_names = self._TOOL_ARG_MAPPING[tool_enum]
+            for i, arg in enumerate(args):
+                if arg and i < len(arg_names):
+                    kwargs[arg_names[i]] = arg
+        
+        return self.execute_tool(tool_name, **kwargs)
+    
+    def detect_tool(self, message: str) -> Optional[Tuple[ToolName, List[str]]]:
         """
         Detect which tool a user message is requesting.
         
@@ -274,16 +328,63 @@ class AgentTools:
             message: User message to analyze
             
         Returns:
-            Tool name if detected, None otherwise
+            Tuple of (ToolName, captured_args) if detected, None otherwise
         """
         message_lower = message.lower().strip()
         
         for tool_name, patterns in ALL_TOOL_PATTERNS:
             for pattern in patterns:
-                if re.search(pattern, message_lower, re.IGNORECASE):
-                    return tool_name.value
+                match = re.search(pattern, message_lower, re.IGNORECASE)
+                if match:
+                    # Extract captured groups as args
+                    args = list(match.groups()) if match.groups() else []
+                    return (tool_name, args)
         
         return None
+    
+    def show_help(self) -> ToolResult:
+        """
+        Show help information about available tools.
+        
+        Returns:
+            ToolResult with help content
+        """
+        categories = {
+            "Data Discovery": [
+                "scan_data - Scan directories for data files",
+                "search_databases - Search ENCODE, GEO, SRA for datasets",
+                "describe_files - Get metadata about files",
+            ],
+            "Workflow Generation": [
+                "generate_workflow - Create analysis pipelines",
+                "check_references - Verify reference genomes",
+                "list_workflows - Show available workflow types",
+            ],
+            "Job Management": [
+                "submit_job - Submit jobs to SLURM",
+                "get_job_status - Check job status",
+                "get_logs - View job logs",
+                "cancel_job - Cancel running jobs",
+            ],
+            "Diagnostics": [
+                "diagnose_error - Analyze job failures",
+                "check_system_health - Check system status",
+            ],
+        }
+        
+        help_text = "# Available Tools\n\n"
+        for category, tools in categories.items():
+            help_text += f"## {category}\n"
+            for tool in tools:
+                help_text += f"- {tool}\n"
+            help_text += "\n"
+        
+        return ToolResult(
+            success=True,
+            tool_name="help",
+            data=categories,
+            message=help_text
+        )
     
     def get_openai_functions(self) -> List[Dict[str, Any]]:
         """

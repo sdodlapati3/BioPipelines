@@ -147,9 +147,8 @@ class TestAgentBridge:
         """Test bridge processes scan_data correctly."""
         bridge = AgentBridge(use_llm_routing=False)
         
-        # Mock the scanner to avoid filesystem access
-        with patch.object(bridge.tools, '_get_scanner', return_value=None):
-            result = await bridge.process_message("scan data in /nonexistent")
+        # scan_data handles missing paths gracefully, no mock needed
+        result = await bridge.process_message("scan data in /nonexistent")
         
         assert result is not None
         assert result.get("strategy") == "regex_fallback"
