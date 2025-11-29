@@ -313,11 +313,11 @@ biopipelines-web        # Gradio interface
 | 1 | Merge orchestrator.py into unified_agent.py | High | Medium | P1 | ⏸️ Deferred (deprecation notice added) |
 | 2 | Merge bridge.py into unified_agent.py | High | Low | P1 | ⏸️ Deferred (deprecation notice added) |
 | 3 | Unify classify_task() into single module | High | Medium | P1 | ✅ Done (classification.py created) |
-| 4 | Split execution.py into 3 files | Medium | Low | P2 | ⏸️ Deferred (TODO added) |
-| 5 | Reduce __init__.py exports to ~10 | Medium | Low | P2 | 🔄 Partial (tiered documentation added) |
-| 6 | Move react_agent.py into autonomous/ | Low | Low | P3 | Not started |
-| 7 | Merge coding_agent.py into diagnosis/ | Low | Medium | P3 | Not started |
-| 8 | Merge llm/ into providers/ | Low | High | P3 | Not started |
+| 4 | Split execution.py into 3 files | Medium | Low | P2 | ✅ Done (execution/ package created) |
+| 5 | Reduce __init__.py exports to ~10 | Medium | Low | P2 | ✅ Done (exactly 10 exports in __all__) |
+| 6 | Move react_agent.py into autonomous/ | Low | Low | P3 | ⏸️ Deferred (still used by chat_integration.py) |
+| 7 | Merge coding_agent.py into diagnosis/ | Low | Medium | P3 | ⏸️ Deferred (still used by chat_integration, orchestrator, autonomous) |
+| 8 | Merge llm/ into providers/ | Low | High | P3 | ⏸️ Deferred (llm/ still heavily used in examples/docs) |
 | 9 | Fix detect_tool() API consistency | High | Medium | P1 | ✅ Done (returns tuple with args now) |
 
 ### November 29, 2025 Updates:
@@ -326,6 +326,8 @@ biopipelines-web        # Gradio interface
 - **47 tests passing**: Fixed all 9 previously failing tests
 - **Deprecation notices**: Added to orchestrator.py and bridge.py
 - **Tiered documentation**: Added PRIMARY/ADVANCED/INTERNAL tiers to __init__.py
+- **execution.py split**: 1462-line file split into execution/ package (slurm.py, vllm.py, monitoring.py)
+- **__all__ exports**: Verified exactly 10 exports (ToolResult, ToolName, TOOL_PATTERNS, ToolRegistry, get_registry, AgentTools, get_agent_tools, process_tool_request, ALL_TOOL_PATTERNS, CONCEPT_KNOWLEDGE)
 
 ---
 
@@ -336,15 +338,17 @@ biopipelines-web        # Gradio interface
 - Unified the `detect_tool()` API to return consistent `(ToolName, args)` tuples
 - Added deprecation notices to legacy modules (`orchestrator.py`, `bridge.py`)
 - Fixed all 9 failing tests (47 tests now pass)
+- Split execution.py (1462 lines) into modular execution/ package
+- Verified __init__.py exports at exactly 10 items
 
-**Professional Standards**: Improved from **C+** to **B-** level. To reach **A** level:
+**Professional Standards**: Improved from **C+** to **B** level. To reach **A** level:
 1. ~~Single source of truth for task classification~~ ✅ Done
 2. One clear agent entry point (UnifiedAgent) - in progress
-3. Files under 400 lines - some remain
-4. Minimal `__init__.py` exports - tiered docs added
+3. ~~Files under 400 lines~~ ✅ Mostly done (execution.py split)
+4. ~~Minimal `__init__.py` exports~~ ✅ Done (10 exports)
 5. Clear layer separation - improved
 
-**Effort Remaining**: ~1-2 days for remaining P2/P3 items.
+**Effort Remaining**: ~0.5-1 day for remaining P3 items (optional).
 
 ---
 
