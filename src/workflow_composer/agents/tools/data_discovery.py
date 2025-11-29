@@ -204,12 +204,24 @@ def search_databases_impl(query: str = None, include_tcga: bool = True) -> ToolR
         logger.info(f"Starting comprehensive search for: {query} (sources: {all_sources})")
         search_results = discovery.search(query, sources=all_sources, max_results=10)
         
-        # Convert DatasetInfo objects to result dicts
+        # Convert DatasetInfo objects to result dicts (including file metadata)
         for dataset in search_results.datasets:
             source_name = dataset.source.value.upper() if dataset.source else "UNKNOWN"
             # Map GDC to TCGA for display consistency
             if source_name == "GDC":
                 source_name = "TCGA"
+            
+            # Get file metadata
+            file_count = dataset.file_count or len(dataset.download_urls)
+            size_str = dataset.total_size_human if hasattr(dataset, 'total_size_human') else "Unknown"
+            
+            # Get file types from download URLs
+            file_types = set()
+            for url in dataset.download_urls[:10]:  # Check first 10 files
+                fmt = getattr(url, 'file_format', None) or ''
+                if fmt:
+                    file_types.add(fmt.upper())
+            
             results.append({
                 "source": source_name,
                 "id": dataset.id,
@@ -217,7 +229,10 @@ def search_databases_impl(query: str = None, include_tcga: bool = True) -> ToolR
                 "organism": dataset.organism or "",
                 "assay": dataset.assay_type or "",
                 "tissue": getattr(dataset, 'tissue', '') or "",
-                "url": dataset.web_url or ""
+                "url": dataset.web_url or "",
+                "file_count": file_count,
+                "total_size": size_str,
+                "file_types": list(file_types)[:5],  # Top 5 file types
             })
         
         # Add any search errors
@@ -257,10 +272,23 @@ def search_databases_impl(query: str = None, include_tcga: bool = True) -> ToolR
             # Group by source for better display
             sources_found = list(set(r['source'] for r in results))
             
-            result_list = "\n".join([
-                f"  - **{r['source']}**: [{r['id']}]({get_url(r)}) | {r.get('assay', '') or r.get('tissue', '')} | {(r['title'][:40] + '...') if len(r.get('title', '')) > 40 else r.get('title', '')}"
-                for r in results[:15]
-            ])
+            def format_result(r):
+                """Format a single result with file metadata."""
+                assay_info = r.get('assay', '') or r.get('tissue', '')
+                title = (r['title'][:35] + '...') if len(r.get('title', '')) > 35 else r.get('title', '')
+                
+                # File info
+                file_info = ""
+                if r.get('file_count'):
+                    file_info = f" | 📁 {r['file_count']} files"
+                if r.get('total_size') and r['total_size'] != 'Unknown':
+                    file_info += f" ({r['total_size']})"
+                if r.get('file_types'):
+                    file_info += f" | {', '.join(r['file_types'][:3])}"
+                
+                return f"  - **{r['source']}**: [{r['id']}]({get_url(r)}) | {assay_info}{file_info} | {title}"
+            
+            result_list = "\n".join([format_result(r) for r in results[:15]])
             
             sources_info = f"Searched: {', '.join(sources_found)}"
             if errors:
