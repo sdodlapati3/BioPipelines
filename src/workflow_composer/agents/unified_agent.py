@@ -1216,9 +1216,24 @@ class UnifiedAgent:
             return self._build_response(task_type, [execution], query)
             
         elif task_type == TaskType.DATA:
-            # Handle data queries - extract search terms from query
+            # Handle data queries - but validate query first
+            # Don't send conversational or non-search queries to ENCODE/GEO APIs
+            if not self._is_valid_search_query(query):
+                return AgentResponse(
+                    success=True,
+                    message="I understand you're asking about data. Could you please specify what you'd like to search for?\n\n"
+                            "**Examples:**\n"
+                            "- `search for human RNA-seq liver`\n"
+                            "- `find ATAC-seq brain datasets`\n"
+                            "- `search TCGA for GBM methylation`\n\n"
+                            "Or use:\n"
+                            "- `scan data` - to see your local files\n"
+                            "- `show jobs` - to check job status",
+                    response_type=ResponseType.INFO,
+                    task_type=task_type,
+                )
             # For natural language data queries, search databases
-            search_query = query  # Use full query as search
+            search_query = query
             execution = self.execute_tool(ToolName.SEARCH_DATABASES, query=search_query)
             return self._build_response(task_type, [execution], query)
             
@@ -1226,6 +1241,63 @@ class UnifiedAgent:
             # Return help
             execution = self.execute_tool(ToolName.SHOW_HELP)
             return self._build_response(task_type, [execution], query)
+    
+    def _is_valid_search_query(self, query: str) -> bool:
+        """
+        Validate if a query is suitable for database search.
+        
+        Rejects conversational phrases that would cause 404s on ENCODE/GEO APIs.
+        """
+        query_lower = query.lower().strip()
+        
+        # Allow dataset IDs even if they're short (1 word)
+        dataset_id_patterns = [
+            r'\bGSE\d+\b',      # GEO accession
+            r'\bENCSR[A-Z0-9]+\b',  # ENCODE accession
+            r'\bSR[RXPS]\d+\b',     # SRA accession
+            r'\bPRJNA\d+\b',        # BioProject
+        ]
+        for pattern in dataset_id_patterns:
+            if re.search(pattern, query, re.IGNORECASE):
+                return True
+        
+        # Reject short queries (less than 2 words typically not useful)
+        words = query_lower.split()
+        if len(words) < 2:
+            return False
+        
+        # Reject conversational phrases
+        conversational_patterns = [
+            r'^(?:yes|no|ok|okay|sure|thanks|thank you)',
+            r'^(?:you have|i have|we have|there are|there is)',
+            r'^(?:job|jobs?)\s+(?:completed|done|finished|running|failed)',
+            r'^(?:can you|could you|would you|please)\s+(?:inspect|check|show|look|see)',
+            r'^(?:what|how)\s+(?:about|did|do|does|is|are|was|were)',
+            r'^(?:it|that|this|they)\s+(?:is|are|was|were|has|have|looks?)',
+            r'^(?:great|good|nice|perfect|excellent|awesome)',
+            r'^(?:the|a|an)\s+(?:job|file|result|output|log)',
+            r'(?:inspect|completed|finished|running|failed|details|metadata)\s*(?:\.|\?|!)?$',
+        ]
+        
+        for pattern in conversational_patterns:
+            if re.search(pattern, query_lower):
+                return False
+        
+        # Must contain at least one biological/data-related term
+        bio_terms = [
+            'rna', 'dna', 'chip', 'atac', 'seq', 'sequencing', 'methylation', 'expression',
+            'human', 'mouse', 'rat', 'genome', 'transcriptome', 'epigenome',
+            'cancer', 'tumor', 'brain', 'liver', 'heart', 'lung', 'kidney',
+            'cell', 'tissue', 'sample', 'experiment', 'dataset',
+            'h3k', 'histone', 'chromatin', 'accessibility',
+            'encode', 'geo', 'tcga', 'gdc', 'sra',
+            'gse', 'encsr', 'srr', 'srp',
+            'fastq', 'bam', 'bed', 'bigwig', 'vcf',
+        ]
+        
+        has_bio_term = any(term in query_lower for term in bio_terms)
+        
+        return has_bio_term
             
     # =========================================================================
     # Approval Workflow

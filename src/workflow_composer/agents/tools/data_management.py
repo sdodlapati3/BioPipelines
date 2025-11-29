@@ -466,8 +466,21 @@ def _download_batch(dataset_ids: list, output_dir: str, data_type: str, execute:
         else:
             failed_submissions.append(result)
     
-    # Submit ENCODE job
+    # Submit ENCODE job with file format filtering
     if encode_ids:
+        # Build format filter for ENCODE downloads
+        if include_only:
+            # Only include specific formats
+            format_list = "','".join([f.lower() for f in include_only])
+            format_filter = f"f.get('file_format','').lower() in ['{format_list}']"
+        elif exclude_formats:
+            # Exclude specific formats
+            format_list = "','".join([f.lower() for f in exclude_formats])
+            format_filter = f"f.get('file_format','').lower() not in ['{format_list}']"
+        else:
+            # Default: common useful formats
+            format_filter = "f.get('file_format') in ['bed','bigBed','bigWig','bam','fastq']"
+        
         encode_commands = []
         for enc_id in encode_ids:
             encode_commands.extend([
@@ -475,7 +488,7 @@ def _download_batch(dataset_ids: list, output_dir: str, data_type: str, execute:
                 f"mkdir -p {enc_id}",
                 f"cd {enc_id}",
                 f"curl -s 'https://www.encodeproject.org/experiments/{enc_id}/?format=json' | \\",
-                f"    python3 -c \"import sys,json; files=json.load(sys.stdin).get('files',[]); [print('https://www.encodeproject.org'+f['href']) for f in files if f.get('status')=='released' and f.get('file_format') in ['bed','bigBed','bigWig','bam','fastq']]\" | \\",
+                f"    python3 -c \"import sys,json; files=json.load(sys.stdin).get('files',[]); [print('https://www.encodeproject.org'+f['href']) for f in files if f.get('status')=='released' and {format_filter}]\" | \\",
                 f"    head -5 | xargs -L1 -P2 curl -O -J -L 2>&1 || {{ echo 'Download failed for {enc_id}'; FAILED=1; }}",
                 f"cd {base_output}",
                 "",
@@ -486,20 +499,54 @@ def _download_batch(dataset_ids: list, output_dir: str, data_type: str, execute:
         else:
             failed_submissions.append(result)
     
-    # Submit TCGA job
+    # Submit TCGA job - try gdc-client first, fallback to direct API download
     if tcga_ids:
-        manifest_content = "\\n".join(tcga_ids)
+        # Generate manifest file content
+        manifest_lines = []
+        for tid in tcga_ids:
+            # Each line should be a file UUID
+            manifest_lines.append(tid)
+        manifest_content = "\\n".join(manifest_lines)
+        
         tcga_commands = [
+            "# TCGA/GDC Download Script",
+            f"mkdir -p TCGA",
+            f"cd TCGA",
+            "",
+            "# Try gdc-client first (fastest and most reliable)",
             "if command -v gdc-client &> /dev/null; then",
+            f"    echo 'Using gdc-client for download...'",
             f"    echo -e '{manifest_content}' > gdc_manifest.txt",
-            f"    mkdir -p TCGA-GBM",
-            f"    gdc-client download -m gdc_manifest.txt -d TCGA-GBM/ 2>&1 || {{ echo 'gdc-client failed'; FAILED=1; }}",
+            f"    gdc-client download -m gdc_manifest.txt 2>&1 || {{ echo 'gdc-client failed'; FAILED=1; }}",
+            "",
+            "# Try module load (common on HPC clusters)",
+            "elif module avail gdc-client 2>&1 | grep -q gdc; then",
+            "    echo 'Loading gdc-client module...'",
+            "    module load gdc-client",
+            f"    echo -e '{manifest_content}' > gdc_manifest.txt",
+            f"    gdc-client download -m gdc_manifest.txt 2>&1 || {{ echo 'gdc-client failed'; FAILED=1; }}",
+            "",
+            "# Fallback to direct GDC API download",
             "else",
-            "    echo 'ERROR: gdc-client not found'",
-            "    echo 'Install with: pip install gdc-client'",
-            "    echo 'Or download from: https://gdc.cancer.gov/access-data/gdc-data-transfer-tool'",
-            "    FAILED=1",
+            "    echo 'gdc-client not found, using direct API download...'",
+            "    echo 'Note: This method is slower but works without gdc-client'",
+            "",
+            "    # Download each file via GDC API",
+            f"    for FILE_UUID in {' '.join(tcga_ids[:10])}; do",  # Limit to 10 for safety
+            "        echo \"Downloading $FILE_UUID...\"",
+            "        # Get file info from API",
+            "        FILE_INFO=$(curl -s \"https://api.gdc.cancer.gov/files/$FILE_UUID?fields=file_name,file_size\")",
+            "        FILE_NAME=$(echo $FILE_INFO | python3 -c \"import sys,json; print(json.load(sys.stdin).get('data',{}).get('file_name','$FILE_UUID'))\" 2>/dev/null || echo \"$FILE_UUID\")",
+            "",
+            "        # Download the file",
+            "        curl -o \"$FILE_NAME\" \"https://api.gdc.cancer.gov/data/$FILE_UUID\" 2>&1 || {",
+            "            echo \"Failed to download $FILE_UUID\"",
+            "            FAILED=1",
+            "        }",
+            "    done",
             "fi",
+            "",
+            f"cd {base_output}",
         ]
         result = submit_source_job("TCGA", tcga_ids, tcga_commands)
         if result.get("job_id"):
