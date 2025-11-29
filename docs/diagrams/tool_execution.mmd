@@ -1,0 +1,76 @@
+%%{init: {'theme': 'base'}}%%
+
+stateDiagram-v2
+    [*] --> ToolCall: execute_tool(name, params)
+
+    state "Permission Check" as PermCheck {
+        [*] --> GetCategory: TOOL_PERMISSION_MAPPING[tool]
+        GetCategory --> CheckLevel: category (read/write/execute/delete)
+        
+        state CheckLevel <<choice>>
+        CheckLevel --> Allowed: category in LEVEL_PERMISSIONS[level]
+        CheckLevel --> NeedsApproval: execute at ASSISTED level
+        CheckLevel --> Denied: category not allowed
+    }
+
+    ToolCall --> PermCheck
+
+    state "Denied Path" as DeniedPath {
+        Denied --> CreateError: ToolResult(success=False)
+        CreateError --> ReturnError: error = reason
+    }
+
+    state "Approval Path" as ApprovalPath {
+        NeedsApproval --> LogApproval: logger.info("requires approval")
+        LogApproval --> ContinueExec: Mark for approval
+    }
+
+    state "Execution Path" as ExecPath {
+        Allowed --> AuditCall: audit.log_tool_call()
+        ContinueExec --> AuditCall
+        
+        AuditCall --> TryExec: try:
+        
+        state TryExec <<choice>>
+        TryExec --> ToolHandler: tools.execute_tool()
+        TryExec --> CatchError: Exception raised
+        
+        ToolHandler --> ToolResult: ToolResult object
+        CatchError --> ErrorResult: ToolResult(success=False)
+        
+        ToolResult --> CalcDuration: Calculate duration_ms
+        ErrorResult --> CalcDuration
+        
+        CalcDuration --> AuditResult: audit.log_tool_result()
+    }
+
+    AuditResult --> CreateExecution: ToolExecution(...)
+
+    state "Tool Execution Record" as ExecRecord {
+        CreateExecution --> RecordTool: tool_name
+        RecordTool --> RecordParams: parameters
+        RecordParams --> RecordResult: result
+        RecordResult --> RecordDuration: duration_ms
+        RecordDuration --> RecordTime: timestamp
+    }
+
+    ReturnError --> [*]: Return ToolExecution
+    RecordTime --> [*]: Return ToolExecution
+
+    note right of PermCheck
+        Permission Categories:
+        ━━━━━━━━━━━━━━━━━━━━
+        read: Always allowed
+        write: ASSISTED+
+        execute: SUPERVISED+
+        delete: Always needs approval
+    end note
+
+    note right of ExecPath
+        Audit Trail:
+        ━━━━━━━━━━━━━━━━━━━━
+        1. Log tool call with params
+        2. Execute tool handler
+        3. Log result (success/fail)
+        4. Record duration
+    end note

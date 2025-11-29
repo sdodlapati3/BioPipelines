@@ -1,0 +1,130 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#4a90d9', 'secondaryColor': '#f4f4f4', 'tertiaryColor': '#fff', 'primaryTextColor': '#333', 'lineColor': '#666'}}}%%
+
+flowchart TB
+    subgraph USER["👤 User Interface Layer"]
+        CLI["🖥️ CLI<br/>cli.py"]
+        WEB["🌐 Web Interface<br/>web/app.py"]
+        API["📡 Programmatic API"]
+    end
+
+    subgraph ORCHESTRATION["🤖 Orchestration Layer"]
+        UA["🎯 UnifiedAgent<br/>unified_agent.py<br/>━━━━━━━━━━━━━━<br/>• Task Classification<br/>• Permission Control<br/>• Tool Dispatch<br/>• Response Building"]
+        
+        COMPOSER["📋 Composer<br/>composer.py<br/>━━━━━━━━━━━━━━<br/>• Query Parsing<br/>• Tool Selection<br/>• Workflow Generation"]
+    end
+
+    subgraph CAPABILITIES["⚡ Capability Layers"]
+        direction TB
+        
+        subgraph TOOLS["🔧 Tools (32 total)"]
+            T_DATA["📊 Data Discovery<br/>6 tools"]
+            T_MGMT["📁 Data Management<br/>4 tools"]
+            T_WF["📋 Workflow<br/>5 tools"]
+            T_EXEC["⚡ Execution<br/>8 tools"]
+            T_DIAG["🔍 Diagnostics<br/>5 tools"]
+            T_EDU["📚 Education<br/>4 tools"]
+        end
+
+        subgraph AUTONOMOUS["🔄 Autonomous System"]
+            AUTO_AGENT["AutonomousAgent"]
+            HEALTH["HealthChecker"]
+            JOB_MON["JobMonitor"]
+            RECOVERY["RecoveryManager"]
+        end
+
+        subgraph EXECUTOR["🛡️ Executor Layer"]
+            PERM["PermissionManager<br/>━━━━━━━━━━━━━━<br/>5 Autonomy Levels"]
+            SANDBOX["CommandSandbox<br/>━━━━━━━━━━━━━━<br/>Safe Execution"]
+            AUDIT["AuditLogger<br/>━━━━━━━━━━━━━━<br/>Complete Trail"]
+            FILE_OPS["FileOperations"]
+            PROC_MGR["ProcessManager"]
+        end
+    end
+
+    subgraph SERVICES["📚 Core Services"]
+        direction TB
+        
+        subgraph CORE["Core Processing"]
+            QP["QueryParser"]
+            TS["ToolSelector"]
+            MM["ModuleMapper"]
+            WG["WorkflowGenerator"]
+        end
+
+        subgraph PROVIDERS["🧠 LLM Providers (6)"]
+            P_OPENAI["OpenAI"]
+            P_ANTHROPIC["Anthropic"]
+            P_GEMINI["Gemini"]
+            P_OLLAMA["Ollama"]
+            P_VLLM["vLLM"]
+            P_LIGHTNING["Lightning"]
+        end
+
+        subgraph DATA["🗄️ Data Layer"]
+            DISCOVERY["DataDiscovery"]
+            DOWNLOAD["Downloader"]
+            REF_MGR["ReferenceManager"]
+            SCANNER["Scanner"]
+        end
+    end
+
+    subgraph INFRASTRUCTURE["🏗️ Infrastructure"]
+        SLURM["SLURM HPC"]
+        CONTAINERS["Containers<br/>12 categories"]
+        STORAGE["Storage<br/>Local/Cloud"]
+    end
+
+    %% Connections - User to Orchestration
+    CLI --> UA
+    WEB --> UA
+    API --> UA
+    CLI --> COMPOSER
+    
+    %% Orchestration internal
+    UA <--> COMPOSER
+    
+    %% Orchestration to Capabilities
+    UA --> TOOLS
+    UA --> EXECUTOR
+    UA --> AUTONOMOUS
+    
+    %% Capabilities internal
+    TOOLS --> EXECUTOR
+    AUTONOMOUS --> EXECUTOR
+    AUTONOMOUS --> TOOLS
+    
+    %% Executor internal
+    PERM --> SANDBOX
+    SANDBOX --> AUDIT
+    SANDBOX --> FILE_OPS
+    SANDBOX --> PROC_MGR
+    
+    %% Capabilities to Services
+    TOOLS --> CORE
+    TOOLS --> DATA
+    COMPOSER --> CORE
+    CORE --> PROVIDERS
+    
+    %% Autonomous internal
+    AUTO_AGENT --> HEALTH
+    AUTO_AGENT --> JOB_MON
+    AUTO_AGENT --> RECOVERY
+    
+    %% Services to Infrastructure
+    CORE --> INFRASTRUCTURE
+    DATA --> STORAGE
+    EXECUTOR --> SLURM
+    EXECUTOR --> CONTAINERS
+
+    %% Styling
+    classDef userLayer fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    classDef orchestration fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef capabilities fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    classDef services fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    classDef infra fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+
+    class CLI,WEB,API userLayer
+    class UA,COMPOSER orchestration
+    class TOOLS,AUTONOMOUS,EXECUTOR capabilities
+    class CORE,PROVIDERS,DATA services
+    class SLURM,CONTAINERS,STORAGE infra

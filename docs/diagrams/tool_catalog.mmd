@@ -1,0 +1,104 @@
+%%{init: {'theme': 'base'}}%%
+
+graph TB
+    subgraph TOOLS_32["🔧 32 Agent Tools"]
+        direction TB
+        
+        subgraph CAT_DATA["📊 Data Discovery (6)"]
+            T1["scan_data<br/>🔍 Scan directories"]
+            T2["search_databases<br/>🗃️ Query GEO/ENCODE/SRA"]
+            T3["search_tcga<br/>🏥 TCGA cancer data"]
+            T4["describe_files<br/>📋 File metadata"]
+            T5["validate_dataset<br/>✅ Data validation"]
+            T6["check_references<br/>🧬 Reference status"]
+        end
+
+        subgraph CAT_MGMT["📁 Data Management (4)"]
+            T7["download_dataset<br/>⬇️ Fetch from source"]
+            T8["download_reference<br/>🧬 Get reference genome"]
+            T9["build_index<br/>🔨 Create alignments index"]
+            T10["cleanup_data<br/>🗑️ Remove old data"]
+        end
+
+        subgraph CAT_WF["📋 Workflow (5)"]
+            T11["generate_workflow<br/>⚙️ Create pipeline"]
+            T12["list_workflows<br/>📜 Show available"]
+            T13["visualize_workflow<br/>📊 DAG visualization"]
+            T14["analyze_results<br/>📈 Interpret outputs"]
+            T15["compare_samples<br/>🔄 Sample comparison"]
+        end
+
+        subgraph CAT_EXEC["⚡ Execution (8)"]
+            T16["submit_job<br/>🚀 Submit to SLURM"]
+            T17["get_job_status<br/>📊 Check status"]
+            T18["get_logs<br/>📝 View logs"]
+            T19["cancel_job<br/>🛑 Stop job"]
+            T20["resubmit_job<br/>🔄 Retry failed"]
+            T21["watch_job<br/>👁️ Live monitoring"]
+            T22["list_jobs<br/>📋 All jobs"]
+            T23["monitor_jobs<br/>📺 Dashboard"]
+        end
+
+        subgraph CAT_DIAG["🔍 Diagnostics (5)"]
+            T24["diagnose_error<br/>🔬 Analyze failure"]
+            T25["recover_error<br/>🔧 Auto-fix"]
+            T26["check_system_health<br/>💚 System status"]
+            T27["restart_vllm<br/>🔄 Restart LLM"]
+            T28["download_results<br/>📦 Get outputs"]
+        end
+
+        subgraph CAT_EDU["📚 Education (4)"]
+            T29["explain_concept<br/>💡 Explain terms"]
+            T30["show_help<br/>❓ Show commands"]
+            T31["run_command<br/>⌨️ Safe shell"]
+            T32["confirm_cleanup<br/>✅ Confirm delete"]
+        end
+    end
+
+    subgraph PERMISSIONS["🔒 Permission Categories"]
+        P_READ["📖 READ<br/>━━━━━━━━━━━━━━<br/>Always allowed<br/>No side effects"]
+        P_WRITE["📝 WRITE<br/>━━━━━━━━━━━━━━<br/>ASSISTED+ level<br/>Creates files"]
+        P_EXEC["⚡ EXECUTE<br/>━━━━━━━━━━━━━━<br/>SUPERVISED+ level<br/>Runs processes"]
+        P_DEL["🗑️ DELETE<br/>━━━━━━━━━━━━━━<br/>Always approval<br/>Destructive"]
+    end
+
+    %% Permission mappings
+    T1 & T2 & T3 & T4 & T5 & T6 --> P_READ
+    T12 & T13 & T14 & T15 --> P_READ
+    T17 & T18 & T21 & T22 & T23 --> P_READ
+    T24 & T26 --> P_READ
+    T29 & T30 --> P_READ
+
+    T7 & T8 --> P_WRITE
+    T11 --> P_WRITE
+    T28 --> P_WRITE
+
+    T9 --> P_EXEC
+    T16 & T19 & T20 --> P_EXEC
+    T25 & T27 --> P_EXEC
+    T31 --> P_EXEC
+
+    T10 & T32 --> P_DEL
+
+    subgraph REGISTRY["📋 ToolRegistry"]
+        REG["@ToolRegistry.register()<br/>━━━━━━━━━━━━━━<br/>• name<br/>• description<br/>• parameters<br/>• patterns<br/>• category"]
+        
+        OPENAI["to_openai_format()<br/>━━━━━━━━━━━━━━<br/>OpenAI function<br/>calling format"]
+        
+        DETECT["detect_tool(message)<br/>━━━━━━━━━━━━━━<br/>Pattern matching<br/>Tool selection"]
+    end
+
+    CAT_DATA & CAT_MGMT & CAT_WF & CAT_EXEC & CAT_DIAG & CAT_EDU --> REG
+    REG --> OPENAI
+    REG --> DETECT
+
+    %% Styling
+    classDef read fill:#c8e6c9,stroke:#2e7d32
+    classDef write fill:#fff3e0,stroke:#f57c00
+    classDef execute fill:#e3f2fd,stroke:#1976d2
+    classDef delete fill:#ffcdd2,stroke:#c62828
+
+    class P_READ,T1,T2,T3,T4,T5,T6,T12,T13,T14,T15,T17,T18,T21,T22,T23,T24,T26,T29,T30 read
+    class P_WRITE,T7,T8,T11,T28 write
+    class P_EXEC,T9,T16,T19,T20,T25,T27,T31 execute
+    class P_DEL,T10,T32 delete

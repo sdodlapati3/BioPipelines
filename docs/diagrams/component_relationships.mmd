@@ -1,0 +1,173 @@
+%%{init: {'theme': 'base', 'themeVariables': {'fontSize': '14px'}}}%%
+
+graph TB
+    subgraph ENTRY["Entry Points"]
+        CLI["cli.py"]
+        WEB["web/app.py"]
+        PROG["Programmatic"]
+    end
+
+    subgraph UNIFIED["UnifiedAgent (unified_agent.py)"]
+        UA_CORE["UnifiedAgent"]
+        UA_RESP["AgentResponse"]
+        UA_TASK["TaskType"]
+        UA_EXEC["ToolExecution"]
+    end
+
+    subgraph TOOLS["Tools Layer (tools/)"]
+        T_BASE["base.py<br/>━━━━━━━━<br/>ToolName<br/>ToolResult<br/>ToolParameter<br/>RegisteredTool"]
+        T_REG["registry.py<br/>━━━━━━━━<br/>ToolRegistry"]
+        
+        T_DD["data_discovery.py"]
+        T_DM["data_management.py"]
+        T_WF["workflow.py"]
+        T_EX["execution.py"]
+        T_DG["diagnostics.py"]
+        T_ED["education.py"]
+    end
+
+    subgraph EXECUTOR["Executor Layer (executor/)"]
+        E_PERM["permissions.py<br/>━━━━━━━━<br/>PermissionManager<br/>AutonomyLevel<br/>ApprovalRequest"]
+        E_SAND["sandbox.py<br/>━━━━━━━━<br/>CommandSandbox"]
+        E_AUDIT["audit.py<br/>━━━━━━━━<br/>AuditLogger"]
+        E_FILE["file_ops.py<br/>━━━━━━━━<br/>FileOperations"]
+        E_PROC["process_manager.py<br/>━━━━━━━━<br/>ProcessManager"]
+    end
+
+    subgraph AUTONOMOUS["Autonomous Layer (autonomous/)"]
+        A_AGENT["agent.py<br/>━━━━━━━━<br/>AutonomousAgent<br/>Task<br/>Action"]
+        A_HEALTH["health_checker.py<br/>━━━━━━━━<br/>HealthChecker<br/>HealthStatus"]
+        A_JOB["job_monitor.py<br/>━━━━━━━━<br/>JobMonitor<br/>JobEvent"]
+        A_RECOV["recovery.py<br/>━━━━━━━━<br/>RecoveryManager<br/>RecoveryLoop"]
+    end
+
+    subgraph PROVIDERS["LLM Providers (providers/)"]
+        P_BASE["base.py<br/>━━━━━━━━<br/>BaseProvider<br/>Message<br/>ProviderResponse"]
+        P_FACT["factory.py"]
+        P_ROUTE["router.py"]
+        P_REG["registry.py"]
+        
+        P_OAI["openai.py"]
+        P_ANT["anthropic.py"]
+        P_GEM["gemini.py"]
+        P_OLL["ollama.py"]
+        P_VLM["vllm.py"]
+        P_LIT["lightning.py"]
+    end
+
+    subgraph CORE["Core Services (core/)"]
+        C_QP["query_parser.py"]
+        C_TS["tool_selector.py"]
+        C_MM["module_mapper.py"]
+        C_WG["workflow_generator.py"]
+        C_PV["preflight_validator.py"]
+    end
+
+    subgraph DATA["Data Layer (data/)"]
+        D_DOWN["downloader.py"]
+        D_REF["reference_manager.py"]
+        D_SCAN["scanner.py"]
+        D_DISC["discovery/<br/>orchestrator.py"]
+    end
+
+    subgraph DIAG["Diagnosis (diagnosis/)"]
+        DG_AGENT["agent.py<br/>DiagnosisAgent"]
+        DG_FIX["auto_fix.py"]
+        DG_CAT["categories.py"]
+        DG_LOG["log_collector.py"]
+    end
+
+    subgraph RESULTS["Results (results/)"]
+        R_COLL["collector.py"]
+        R_ARCH["archiver.py"]
+        R_CLOUD["cloud_transfer.py"]
+    end
+
+    subgraph LEGACY["Legacy/Isolated"]
+        L_LLM["llm/ (deprecated)"]
+        L_REACT["react_agent.py"]
+        L_HEAL["self_healing.py"]
+        L_MEM["memory.py"]
+        L_ENH["enhanced_tools.py"]
+    end
+
+    %% Entry to UnifiedAgent
+    CLI --> UA_CORE
+    WEB --> UA_CORE
+    PROG --> UA_CORE
+
+    %% UnifiedAgent dependencies
+    UA_CORE --> T_REG
+    UA_CORE --> E_PERM
+    UA_CORE --> E_SAND
+    UA_CORE --> E_AUDIT
+    UA_CORE --> A_HEALTH
+    UA_CORE --> A_JOB
+    UA_CORE --> A_RECOV
+
+    %% Tools layer
+    T_REG --> T_BASE
+    T_DD --> T_BASE
+    T_DM --> T_BASE
+    T_WF --> T_BASE
+    T_EX --> T_BASE
+    T_DG --> T_BASE
+    T_ED --> T_BASE
+
+    %% Executor internal
+    E_SAND --> E_AUDIT
+    E_SAND --> E_FILE
+    E_SAND --> E_PROC
+
+    %% Autonomous dependencies
+    A_AGENT --> E_PERM
+    A_AGENT --> E_SAND
+    A_AGENT --> E_AUDIT
+    A_AGENT --> A_HEALTH
+    A_AGENT --> A_JOB
+    A_AGENT --> A_RECOV
+
+    %% Provider dependencies
+    P_FACT --> P_BASE
+    P_ROUTE --> P_REG
+    P_OAI --> P_BASE
+    P_ANT --> P_BASE
+    P_GEM --> P_BASE
+    P_OLL --> P_BASE
+    P_VLM --> P_BASE
+    P_LIT --> P_BASE
+
+    %% Core to Providers
+    C_QP --> P_ROUTE
+    C_WG --> P_ROUTE
+
+    %% Tools to services
+    T_WF --> C_WG
+    T_DD --> D_DISC
+    T_DM --> D_DOWN
+    T_DM --> D_REF
+    T_DG --> DG_AGENT
+    T_EX --> R_COLL
+
+    %% Styling
+    classDef entry fill:#e3f2fd,stroke:#1976d2
+    classDef unified fill:#fff3e0,stroke:#f57c00
+    classDef tools fill:#e8f5e9,stroke:#388e3c
+    classDef executor fill:#fce4ec,stroke:#c2185b
+    classDef autonomous fill:#f3e5f5,stroke:#7b1fa2
+    classDef providers fill:#e0f7fa,stroke:#00838f
+    classDef core fill:#fff8e1,stroke:#ff8f00
+    classDef data fill:#f1f8e9,stroke:#558b2f
+    classDef legacy fill:#eceff1,stroke:#546e7a,stroke-dasharray: 5 5
+
+    class CLI,WEB,PROG entry
+    class UA_CORE,UA_RESP,UA_TASK,UA_EXEC unified
+    class T_BASE,T_REG,T_DD,T_DM,T_WF,T_EX,T_DG,T_ED tools
+    class E_PERM,E_SAND,E_AUDIT,E_FILE,E_PROC executor
+    class A_AGENT,A_HEALTH,A_JOB,A_RECOV autonomous
+    class P_BASE,P_FACT,P_ROUTE,P_REG,P_OAI,P_ANT,P_GEM,P_OLL,P_VLM,P_LIT providers
+    class C_QP,C_TS,C_MM,C_WG,C_PV core
+    class D_DOWN,D_REF,D_SCAN,D_DISC data
+    class DG_AGENT,DG_FIX,DG_CAT,DG_LOG data
+    class R_COLL,R_ARCH,R_CLOUD data
+    class L_LLM,L_REACT,L_HEAL,L_MEM,L_ENH legacy

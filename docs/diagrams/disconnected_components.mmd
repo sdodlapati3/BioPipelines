@@ -1,0 +1,83 @@
+%%{init: {'theme': 'base'}}%%
+
+flowchart TB
+    subgraph CONNECTED["✅ FULLY CONNECTED (Core System)"]
+        direction TB
+        
+        UA["🎯 UnifiedAgent"]
+        TOOLS["🔧 Tools (32)"]
+        EXECUTOR["🛡️ Executor"]
+        AUTONOMOUS["🔄 Autonomous"]
+        PROVIDERS["🧠 Providers"]
+        CORE["📚 Core"]
+        DATA["🗄️ Data"]
+        
+        UA <--> TOOLS
+        UA <--> EXECUTOR
+        UA <--> AUTONOMOUS
+        TOOLS <--> CORE
+        CORE <--> PROVIDERS
+        TOOLS <--> DATA
+    end
+
+    subgraph INTEGRATED["✅ CORRECTLY INTEGRATED (Verified via grep)"]
+        direction TB
+        
+        LLM_MODULE["llm/<br/>━━━━━━━━━━━━━━<br/>✅ ACTIVE (12+ imports)<br/>Used by composer, cli<br/>High-level LLM factory"]
+        
+        DIAG_MODULE["diagnosis/<br/>━━━━━━━━━━━━━━<br/>✅ INTEGRATED<br/>Via tools/diagnostics.py<br/>diagnose_error() delegates"]
+        
+        REACT["react_agent.py<br/>━━━━━━━━━━━━━━<br/>✅ USED<br/>By AutonomousAgent<br/>Multi-step ReAct pattern"]
+        
+        SELF_HEAL["self_healing.py<br/>━━━━━━━━━━━━━━<br/>✅ USED<br/>By chat_integration<br/>Complements recovery.py"]
+        
+        MEMORY["memory.py<br/>━━━━━━━━━━━━━━<br/>✅ USED<br/>By AutonomousAgent<br/>Vector RAG for context"]
+        
+        ENHANCED["enhanced_tools.py<br/>━━━━━━━━━━━━━━<br/>✅ USED<br/>By AutonomousAgent<br/>Retry + detailed errors"]
+        
+        MULTI_MODEL["multi_model.py<br/>━━━━━━━━━━━━━━<br/>✅ CONFIG MODULE<br/>H100 deployment specs<br/>Exported, not internal"]
+        
+        MODELS["models/<br/>━━━━━━━━━━━━━━<br/>✅ ENUMS + CONFIG<br/>Used across system"]
+        
+        TEMPLATES["templates/<br/>━━━━━━━━━━━━━━<br/>📁 PLACEHOLDER<br/>Reserved for future"]
+    end
+
+    subgraph DEPRECATED["⚫ DEPRECATED (Labeled)"]
+        direction TB
+        
+        DEP_DIR["deprecated/<br/>━━━━━━━━━━━━━━<br/>⚫ HISTORICAL<br/>Not in import path<br/>━━━━━━━━━━━━━━<br/>• alignment/<br/>• preprocessing/<br/>• variant_calling/<br/>• expression/<br/>• peak_calling/<br/>• visualization/"]
+    end
+
+    %% Connections showing verified integration
+    AUTONOMOUS -->|"uses"| REACT
+    AUTONOMOUS -->|"uses"| MEMORY
+    AUTONOMOUS -->|"uses"| ENHANCED
+    
+    TOOLS -->|"diagnose_error"| DIAG_MODULE
+    
+    CORE -->|"get_llm()"| LLM_MODULE
+    
+    LLM_MODULE -.->|"wraps"| PROVIDERS
+    
+    %% Styling
+    classDef connected fill:#c8e6c9,stroke:#2e7d32,stroke-width:2px
+    classDef integrated fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    classDef deprecated fill:#eceff1,stroke:#546e7a,stroke-width:2px,stroke-dasharray: 5 5
+
+    class UA,TOOLS,EXECUTOR,AUTONOMOUS,PROVIDERS,CORE,DATA connected
+    class LLM_MODULE,DIAG_MODULE,REACT,SELF_HEAL,MEMORY,ENHANCED,MULTI_MODEL,MODELS,TEMPLATES integrated
+    class DEP_DIR deprecated
+
+    subgraph LEGEND["Legend"]
+        L1["━━ Verified integration"]
+        L2["→ Direct usage"]
+        L3["┈→ Wrapper/adapter"]
+        L4["✅ Keep as-is"]
+        L5["⚫ No action needed"]
+    end
+
+    subgraph CONCLUSION["CONCLUSION: No Refactoring Needed"]
+        C1["✓ All components properly connected"]
+        C2["✓ No redundancy - complementary roles"]
+        C3["✓ deprecated/ already labeled"]
+    end

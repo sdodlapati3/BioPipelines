@@ -1,0 +1,79 @@
+%%{init: {'theme': 'base'}}%%
+
+flowchart TB
+    START([📝 User Query<br/>"RNA-seq differential expression for mouse"])
+    
+    subgraph PARSE["1️⃣ Query Parsing"]
+        QP["QueryParser"]
+        QP --> INTENT["ParsedIntent<br/>━━━━━━━━━━━━━━<br/>analysis_type: rna_seq<br/>organism: mouse<br/>data_type: paired_end<br/>goal: differential_expression"]
+    end
+
+    subgraph SELECT["2️⃣ Tool Selection"]
+        TS["ToolSelector"]
+        TS --> TOOLS_NEEDED["Required Tools:<br/>• STAR aligner<br/>• featureCounts<br/>• DESeq2<br/>• MultiQC"]
+    end
+
+    subgraph MAP["3️⃣ Module Mapping"]
+        MM["ModuleMapper"]
+        MM --> MODULES["Nextflow Modules:<br/>━━━━━━━━━━━━━━<br/>• nf-core/rnaseq<br/>• modules/star<br/>• modules/deseq2"]
+    end
+
+    subgraph GENERATE["4️⃣ Workflow Generation"]
+        WG["WorkflowGenerator"]
+        
+        subgraph LLM_CALL["LLM Processing"]
+            PROMPT["Build Prompt<br/>+ Context"]
+            PROVIDER["ProviderRouter<br/>Select best LLM"]
+            LLM["Generate Code"]
+        end
+
+        subgraph OUTPUT["Generated Files"]
+            MAIN["main.nf<br/>━━━━━━━━━━━━━━<br/>Workflow definition<br/>Process declarations<br/>Channel definitions"]
+            CONFIG["nextflow.config<br/>━━━━━━━━━━━━━━<br/>Container settings<br/>Resource allocation<br/>Executor config"]
+            MODULES_DIR["modules/<br/>━━━━━━━━━━━━━━<br/>star/main.nf<br/>featurecounts/main.nf<br/>deseq2/main.nf"]
+            PARAMS["params.yaml<br/>━━━━━━━━━━━━━━<br/>Input paths<br/>Reference genome<br/>Analysis options"]
+        end
+    end
+
+    subgraph VALIDATE["5️⃣ Validation"]
+        PV["PreflightValidator"]
+        PV --> CHECKS["Validation Checks:<br/>✓ Syntax valid<br/>✓ Containers exist<br/>✓ References available<br/>✓ Resources adequate"]
+    end
+
+    subgraph SAVE["6️⃣ Output"]
+        SAVE_DIR["generated_workflows/<br/>rnaseq_20251129_xxxxx/"]
+        SAVE_DIR --> FILES["📁 Complete Workflow<br/>Ready to execute"]
+    end
+
+    START --> QP
+    INTENT --> TS
+    TOOLS_NEEDED --> MM
+    MODULES --> WG
+    
+    WG --> PROMPT
+    PROMPT --> PROVIDER
+    PROVIDER --> LLM
+    LLM --> MAIN
+    LLM --> CONFIG
+    LLM --> MODULES_DIR
+    LLM --> PARAMS
+
+    MAIN & CONFIG & MODULES_DIR & PARAMS --> PV
+    CHECKS --> SAVE_DIR
+    FILES --> RESULT([✅ Workflow Generated])
+
+    %% Error handling
+    CHECKS -->|Validation Failed| ERROR["❌ Return Errors<br/>with Suggestions"]
+    ERROR --> FIX["Auto-fix or<br/>User Correction"]
+    FIX --> WG
+
+    %% Styling
+    classDef startEnd fill:#c8e6c9,stroke:#2e7d32,stroke-width:2px
+    classDef process fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    classDef output fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef error fill:#ffcdd2,stroke:#c62828,stroke-width:2px
+
+    class START,RESULT startEnd
+    class QP,TS,MM,WG,PV process
+    class MAIN,CONFIG,MODULES_DIR,PARAMS,FILES output
+    class ERROR error

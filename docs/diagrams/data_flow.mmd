@@ -1,0 +1,84 @@
+%%{init: {'theme': 'base'}}%%
+
+sequenceDiagram
+    autonumber
+    
+    participant U as 👤 User
+    participant UA as 🎯 UnifiedAgent
+    participant PM as 🔒 PermissionManager
+    participant TR as 📋 ToolRegistry
+    participant TH as 🔧 Tool Handler
+    participant AL as 📝 AuditLogger
+    participant CS as 🛡️ CommandSandbox
+    participant LLM as 🧠 LLM Provider
+    participant HPC as 🖥️ SLURM/HPC
+
+    rect rgb(230, 245, 255)
+        Note over U,UA: Query Initiation
+        U->>+UA: process_query("Generate RNA-seq workflow")
+        UA->>UA: classify_task() → WORKFLOW
+    end
+
+    rect rgb(255, 243, 224)
+        Note over UA,TR: Tool Detection
+        UA->>+TR: detect_tool(query)
+        TR->>TR: Match patterns/keywords
+        TR-->>-UA: GENERATE_WORKFLOW
+    end
+
+    rect rgb(255, 235, 238)
+        Note over UA,PM: Permission Check
+        UA->>+PM: check_tool_permission(GENERATE_WORKFLOW)
+        PM->>PM: Map tool → "write" category
+        PM->>PM: Check ASSISTED level permissions
+        PM-->>-UA: {allowed: true, requires_approval: false}
+    end
+
+    rect rgb(232, 245, 233)
+        Note over UA,AL: Audit & Execution
+        UA->>+AL: log_tool_call("generate_workflow", params)
+        AL-->>-UA: logged
+        
+        UA->>UA: _extract_parameters(query, tool)
+        UA->>+TH: execute(analysis_type="rna_seq", organism="mouse")
+    end
+
+    rect rgb(243, 229, 245)
+        Note over TH,LLM: LLM-Powered Generation
+        TH->>TH: Build workflow spec
+        TH->>+LLM: generate(prompt, context)
+        LLM->>LLM: Process with selected model
+        LLM-->>-TH: Generated Nextflow code
+        TH->>TH: Save to generated_workflows/
+    end
+
+    rect rgb(232, 245, 233)
+        Note over TH,UA: Result Processing
+        TH-->>-UA: ToolResult(success=true, data={workflow_path: ...})
+        UA->>+AL: log_tool_result(success, data)
+        AL-->>-UA: logged
+    end
+
+    rect rgb(230, 245, 255)
+        Note over UA,U: Response
+        UA->>UA: _build_response(executions)
+        UA->>UA: Save to _history
+        UA-->>-U: AgentResponse(success=true, message="✓ Generated...")
+    end
+
+    Note over U,HPC: Optional: Job Submission Flow
+    
+    rect rgb(255, 248, 225)
+        U->>+UA: process_query("Submit the workflow")
+        UA->>+PM: check_tool_permission(SUBMIT_JOB)
+        PM-->>-UA: {allowed: true, requires_approval: true}
+        UA-->>-U: NEEDS_APPROVAL response
+        
+        U->>+UA: approve_action(request_id)
+        UA->>+CS: execute(sbatch command)
+        CS->>CS: Validate command safety
+        CS->>+HPC: sbatch workflow.sh
+        HPC-->>-CS: Job ID: 12345
+        CS-->>-UA: ExecutionResult
+        UA-->>-U: AgentResponse(job_id=12345)
+    end

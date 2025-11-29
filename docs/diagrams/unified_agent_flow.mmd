@@ -1,0 +1,78 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#4a90d9'}}}%%
+
+flowchart TB
+    START([🎯 User Query]) --> CLASSIFY
+
+    subgraph CLASSIFICATION["1️⃣ Task Classification"]
+        CLASSIFY["classify_task(query)"]
+        CLASSIFY --> TASK_TYPE{"Task Type?"}
+        
+        TASK_TYPE -->|workflow| TT_WF["WORKFLOW<br/>generate, pipeline, RNA-seq..."]
+        TASK_TYPE -->|diagnosis| TT_DIAG["DIAGNOSIS<br/>error, fail, debug..."]
+        TASK_TYPE -->|data| TT_DATA["DATA<br/>scan, search, download..."]
+        TASK_TYPE -->|job| TT_JOB["JOB<br/>submit, status, cancel..."]
+        TASK_TYPE -->|education| TT_EDU["EDUCATION<br/>explain, what is, help..."]
+        TASK_TYPE -->|system| TT_SYS["SYSTEM<br/>health, vllm, restart..."]
+        TASK_TYPE -->|general| TT_GEN["GENERAL<br/>other queries"]
+    end
+
+    TT_WF & TT_DIAG & TT_DATA & TT_JOB & TT_EDU & TT_SYS & TT_GEN --> DETECT
+
+    subgraph DETECTION["2️⃣ Tool Detection"]
+        DETECT["tools.detect_tool(query)"]
+        DETECT --> TOOL_FOUND{"Tool<br/>Detected?"}
+        
+        TOOL_FOUND -->|Yes| SPECIFIC["Specific Tool<br/>e.g., GENERATE_WORKFLOW"]
+        TOOL_FOUND -->|No| GENERAL_HANDLER["General Handler<br/>Route by TaskType"]
+    end
+
+    SPECIFIC --> PERM_CHECK
+    GENERAL_HANDLER --> DEFAULT_TOOL["Select Default Tool<br/>for TaskType"]
+    DEFAULT_TOOL --> PERM_CHECK
+
+    subgraph PERMISSION["3️⃣ Permission Check"]
+        PERM_CHECK["check_tool_permission(tool)"]
+        PERM_CHECK --> PERM_MAP["Map Tool → Permission<br/>read/write/execute/delete"]
+        PERM_MAP --> LEVEL_CHECK{"Allowed at<br/>Current Level?"}
+        
+        LEVEL_CHECK -->|Denied| PERM_DENIED["❌ Permission Denied<br/>Return Error Response"]
+        LEVEL_CHECK -->|Needs Approval| APPROVAL["🔔 Request Approval<br/>NEEDS_APPROVAL response"]
+        LEVEL_CHECK -->|Allowed| EXTRACT
+    end
+
+    PERM_DENIED --> RESPONSE
+    APPROVAL --> RESPONSE
+
+    subgraph EXECUTION["4️⃣ Tool Execution"]
+        EXTRACT["_extract_parameters(query, tool)"]
+        EXTRACT --> EXEC["execute_tool(tool, **params)"]
+        
+        EXEC --> AUDIT_LOG["📝 AuditLogger<br/>log_tool_call()"]
+        AUDIT_LOG --> TOOL_HANDLER["Tool Handler<br/>Actual Implementation"]
+        TOOL_HANDLER --> RESULT["ToolResult<br/>success/error + data"]
+        RESULT --> AUDIT_RESULT["📝 AuditLogger<br/>log_tool_result()"]
+    end
+
+    AUDIT_RESULT --> BUILD
+
+    subgraph RESPONSE_BUILD["5️⃣ Response Building"]
+        BUILD["_build_response()"]
+        BUILD --> COMBINE["Combine:<br/>• Messages<br/>• Data<br/>• Suggestions"]
+        COMBINE --> AGENT_RESP["AgentResponse<br/>━━━━━━━━━━━━━━<br/>success: bool<br/>message: str<br/>task_type: TaskType<br/>tool_executions: list<br/>data: dict<br/>suggestions: list"]
+    end
+
+    AGENT_RESP --> HISTORY["Save to _history"]
+    HISTORY --> RESPONSE([📤 Return AgentResponse])
+
+    %% Styling
+    classDef startEnd fill:#c8e6c9,stroke:#2e7d32,stroke-width:2px
+    classDef process fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    classDef decision fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef error fill:#ffcdd2,stroke:#c62828,stroke-width:2px
+    classDef approval fill:#fff9c4,stroke:#f9a825,stroke-width:2px
+
+    class START,RESPONSE startEnd
+    class CLASSIFY,DETECT,PERM_CHECK,EXTRACT,EXEC,BUILD process
+    class TASK_TYPE,TOOL_FOUND,LEVEL_CHECK decision
+    class PERM_DENIED error
+    class APPROVAL approval

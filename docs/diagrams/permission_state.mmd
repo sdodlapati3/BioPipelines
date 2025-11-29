@@ -1,0 +1,85 @@
+%%{init: {'theme': 'base'}}%%
+
+stateDiagram-v2
+    [*] --> READONLY: Default safe mode
+
+    state "🔒 READONLY" as READONLY {
+        note right of READONLY
+            Permissions: {read}
+            ━━━━━━━━━━━━━━━━━━━
+            ✓ scan_data
+            ✓ search_databases
+            ✓ describe_files
+            ✓ get_job_status
+            ✓ explain_concept
+            ✗ All write/execute
+        end note
+    }
+
+    state "📋 MONITORED" as MONITORED {
+        note right of MONITORED
+            Permissions: {read}
+            ━━━━━━━━━━━━━━━━━━━
+            Same as READONLY
+            + All actions logged
+            + Detailed audit trail
+        end note
+    }
+
+    state "✏️ ASSISTED" as ASSISTED {
+        note right of ASSISTED
+            Permissions: {read, write}
+            ━━━━━━━━━━━━━━━━━━━
+            ✓ All read operations
+            ✓ download_dataset
+            ✓ generate_workflow
+            ⚠️ execute needs approval
+            ✗ delete operations
+        end note
+    }
+
+    state "👀 SUPERVISED" as SUPERVISED {
+        note right of SUPERVISED
+            Permissions: {read, write, execute}
+            ━━━━━━━━━━━━━━━━━━━
+            ✓ All read/write
+            ✓ submit_job
+            ✓ cancel_job
+            ✓ restart_vllm
+            ⚠️ delete needs approval
+        end note
+    }
+
+    state "🤖 AUTONOMOUS" as AUTONOMOUS {
+        note right of AUTONOMOUS
+            Permissions: {read, write, execute, delete}
+            ━━━━━━━━━━━━━━━━━━━
+            ✓ All operations
+            ⚠️ delete still logged
+            ⚠️ dangerous cmds blocked
+        end note
+    }
+
+    READONLY --> MONITORED: set_autonomy_level(MONITORED)
+    MONITORED --> ASSISTED: set_autonomy_level(ASSISTED)
+    ASSISTED --> SUPERVISED: set_autonomy_level(SUPERVISED)
+    SUPERVISED --> AUTONOMOUS: set_autonomy_level(AUTONOMOUS)
+    
+    AUTONOMOUS --> SUPERVISED: Reduce permissions
+    SUPERVISED --> ASSISTED: Reduce permissions
+    ASSISTED --> MONITORED: Reduce permissions
+    MONITORED --> READONLY: Reduce permissions
+
+    state "Approval Workflow" as APPROVAL {
+        [*] --> Pending: request_approval()
+        Pending --> Approved: approve()
+        Pending --> Denied: deny()
+        Pending --> Expired: timeout
+        Approved --> [*]: Execute action
+        Denied --> [*]: Block action
+        Expired --> [*]: Block action
+    }
+
+    ASSISTED --> APPROVAL: Execute action at ASSISTED
+    SUPERVISED --> APPROVAL: Delete action
+    AUTONOMOUS --> APPROVAL: Dangerous command

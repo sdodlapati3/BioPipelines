@@ -1,0 +1,92 @@
+%%{init: {'theme': 'base'}}%%
+
+flowchart TB
+    subgraph AUTONOMOUS_LOOP["🔄 Autonomous Operation Loop"]
+        direction TB
+        
+        START([🚀 Start Autonomous Mode])
+        
+        subgraph MONITOR["Continuous Monitoring"]
+            HEALTH_CHECK["HealthChecker<br/>━━━━━━━━━━━━━━<br/>• GPU status<br/>• Memory usage<br/>• Disk space<br/>• vLLM health"]
+            
+            JOB_MONITOR["JobMonitor<br/>━━━━━━━━━━━━━━<br/>• SLURM jobs<br/>• Pipeline status<br/>• Queue position"]
+        end
+
+        subgraph EVENTS["Event Detection"]
+            EVENT_Q{"Event<br/>Detected?"}
+            
+            E_HEALTH["🔴 Health Issue"]
+            E_JOB_FAIL["❌ Job Failed"]
+            E_JOB_DONE["✅ Job Complete"]
+            E_NEW_DATA["📁 New Data"]
+        end
+
+        subgraph RECOVERY["Recovery Actions"]
+            RECOV_MGR["RecoveryManager"]
+            
+            R_RESTART["Restart Service"]
+            R_RESUBMIT["Resubmit Job"]
+            R_NOTIFY["Notify User"]
+            R_CLEANUP["Cleanup Resources"]
+        end
+
+        subgraph RESULTS["Result Processing"]
+            COLLECT["ResultCollector<br/>Gather outputs"]
+            ARCHIVE["ResultArchiver<br/>Create archive"]
+            TRANSFER["CloudTransfer<br/>Upload to GCS/S3"]
+        end
+
+        START --> HEALTH_CHECK
+        START --> JOB_MONITOR
+        
+        HEALTH_CHECK --> EVENT_Q
+        JOB_MONITOR --> EVENT_Q
+        
+        EVENT_Q -->|Health| E_HEALTH
+        EVENT_Q -->|Job Fail| E_JOB_FAIL
+        EVENT_Q -->|Job Done| E_JOB_DONE
+        EVENT_Q -->|New Data| E_NEW_DATA
+        EVENT_Q -->|No Event| HEALTH_CHECK
+        
+        E_HEALTH --> RECOV_MGR
+        E_JOB_FAIL --> RECOV_MGR
+        
+        RECOV_MGR --> R_RESTART
+        RECOV_MGR --> R_RESUBMIT
+        RECOV_MGR --> R_NOTIFY
+        
+        E_JOB_DONE --> COLLECT
+        COLLECT --> ARCHIVE
+        ARCHIVE --> TRANSFER
+        TRANSFER --> R_CLEANUP
+        
+        R_RESTART --> HEALTH_CHECK
+        R_RESUBMIT --> JOB_MONITOR
+        R_NOTIFY --> HEALTH_CHECK
+        R_CLEANUP --> HEALTH_CHECK
+        
+        E_NEW_DATA --> NEW_WF["Generate New Workflow"]
+        NEW_WF --> JOB_MONITOR
+    end
+
+    subgraph INTEGRATION["🔗 Integration with UnifiedAgent"]
+        UA["UnifiedAgent"]
+        
+        UA -->|"check_system_health()"| HEALTH_CHECK
+        UA -->|"monitor_jobs()"| JOB_MONITOR
+        UA -->|"recover_error()"| RECOV_MGR
+        UA -->|"download_results()"| COLLECT
+    end
+
+    %% Styling
+    classDef monitor fill:#e3f2fd,stroke:#1976d2
+    classDef event fill:#fff3e0,stroke:#f57c00
+    classDef recovery fill:#fce4ec,stroke:#c2185b
+    classDef results fill:#e8f5e9,stroke:#388e3c
+    classDef agent fill:#f3e5f5,stroke:#7b1fa2
+
+    class HEALTH_CHECK,JOB_MONITOR monitor
+    class E_HEALTH,E_JOB_FAIL,E_JOB_DONE,E_NEW_DATA event
+    class RECOV_MGR,R_RESTART,R_RESUBMIT,R_NOTIFY,R_CLEANUP recovery
+    class COLLECT,ARCHIVE,TRANSFER results
+    class UA agent

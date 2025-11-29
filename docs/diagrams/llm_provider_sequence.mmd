@@ -1,0 +1,90 @@
+%%{init: {'theme': 'base'}}%%
+
+sequenceDiagram
+    autonumber
+    participant App as 🎯 Application
+    participant Router as 🔀 ProviderRouter
+    participant Registry as 📋 ProviderRegistry
+    participant Factory as 🏭 ProviderFactory
+    participant Health as 💚 HealthChecker
+    participant Provider as 🧠 Provider Instance
+    participant API as ☁️ External API
+
+    rect rgb(230, 245, 255)
+        Note over App,Registry: Initialization
+        App->>+Router: get_router()
+        Router->>+Registry: get_available_providers()
+        Registry-->>-Router: [openai, anthropic, ollama, ...]
+        Router->>+Health: check_all_providers()
+        
+        loop For each provider
+            Health->>+Provider: health_check()
+            Provider->>+API: GET /health or test request
+            API-->>-Provider: 200 OK / error
+            Provider-->>-Health: HealthStatus
+        end
+        
+        Health-->>-Router: {openai: healthy, ollama: healthy, vllm: unhealthy}
+        Router-->>-App: Router ready
+    end
+
+    rect rgb(255, 243, 224)
+        Note over App,API: Request Routing
+        App->>+Router: generate(prompt, model_preference="auto")
+        
+        Router->>Router: Select best available provider
+        Note right of Router: Selection criteria:<br/>1. Health status<br/>2. Model capability<br/>3. Cost/latency<br/>4. Load balancing
+        
+        Router->>+Factory: get_provider("openai")
+        Factory-->>-Router: OpenAIProvider instance
+    end
+
+    rect rgb(232, 245, 233)
+        Note over Router,API: LLM Request
+        Router->>+Provider: generate(messages, options)
+        Provider->>Provider: Build API request
+        Provider->>+API: POST /v1/chat/completions
+        
+        alt Success
+            API-->>Provider: 200 + response body
+            Provider->>Provider: Parse response
+            Provider-->>Router: ProviderResponse(content, tokens, latency)
+        else Rate Limited
+            API-->>Provider: 429 Too Many Requests
+            Provider-->>Router: RateLimitError
+            Router->>Router: Try next provider
+        else API Error
+            API-->>Provider: 500/503 Error
+            Provider-->>Router: ProviderError
+            Router->>Router: Mark unhealthy, try next
+        end
+        
+        deactivate API
+        deactivate Provider
+    end
+
+    rect rgb(243, 229, 245)
+        Note over Router,App: Response Processing
+        Router->>Router: Record metrics
+        Note right of Router: Metrics:<br/>• tokens_used<br/>• latency_ms<br/>• provider used<br/>• cache hit
+        Router-->>-App: ProviderResponse
+    end
+
+    rect rgb(255, 235, 238)
+        Note over App,API: Failover Scenario
+        App->>+Router: generate(prompt)
+        Router->>+Provider: generate() [Primary: OpenAI]
+        Provider->>+API: POST request
+        API-->>-Provider: 503 Service Unavailable
+        Provider-->>-Router: ProviderError
+        
+        Router->>Router: Mark openai unhealthy
+        Router->>+Factory: get_provider("anthropic")
+        Factory-->>-Router: AnthropicProvider
+        
+        Router->>+Provider: generate() [Fallback: Anthropic]
+        Provider->>+API: POST request
+        API-->>-Provider: 200 OK
+        Provider-->>-Router: ProviderResponse
+        Router-->>-App: Response (from fallback)
+    end
