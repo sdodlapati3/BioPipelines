@@ -2,7 +2,19 @@
 Execution Tools
 ===============
 
-Tools for submitting and managing SLURM jobs.
+Tools for submitting and managing SLURM jobs, vLLM management, and job monitoring.
+
+This is a large module (~1450 lines) that handles:
+- SLURM job management: submit_job, get_job_status, cancel_job, resubmit_job, list_jobs
+- vLLM management: check_system_health, restart_vllm
+- Job monitoring: get_logs, watch_job
+
+TODO: Future refactoring could split this into:
+- slurm.py: SLURM job operations
+- vllm.py: vLLM server management
+- monitoring.py: Log viewing and job watching
+
+For now, kept as single file to maintain stability.
 """
 
 import logging

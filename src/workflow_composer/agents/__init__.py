@@ -4,26 +4,41 @@ Agents Module
 
 AI-powered agents for workflow generation and monitoring.
 
-Available components:
-- UnifiedAgent: **NEW** Main entry point combining orchestration + tools
-- AgentTools: Tools that can be invoked during chat conversations
-- ConversationContext: Tracks conversation state for multi-turn dialogue
-- AgentRouter: LLM-based intent routing with function calling
-- AgentBridge: Bridges LLM routing with tool execution
-- CodingAgent: Specialized agent for error diagnosis and code fixes
-- AgentOrchestrator: Coordinates multiple agents for complex tasks
-- AgentMemory: Vector-based RAG memory for learning from interactions
-- ReactAgent: Multi-step ReAct reasoning agent
-- AutonomousAgent: Full autonomous agent with execution capabilities
-- Executor Layer: Safe file/command execution with audit trail
+RECOMMENDED USAGE (Tier 1 - Primary API):
+=========================================
 
-Quick Start:
-    # Use the unified agent (recommended)
     from workflow_composer.agents import UnifiedAgent, AutonomyLevel
     
     agent = UnifiedAgent(autonomy_level=AutonomyLevel.ASSISTED)
     response = agent.process_sync("scan /data/raw for FASTQ files")
     print(response.message)
+
+ADVANCED USAGE (Tier 2 - Tools & Autonomous):
+=============================================
+
+For direct tool access:
+    from workflow_composer.agents import AgentTools, ToolResult, ToolName
+
+For autonomous background jobs:
+    from workflow_composer.agents.autonomous import AutonomousAgent
+
+INTERNAL/LEGACY (Tier 3 - Not recommended for new code):
+========================================================
+
+These are maintained for backward compatibility:
+- AgentOrchestrator → Use UnifiedAgent instead
+- AgentBridge → Use UnifiedAgent instead
+- AgentRouter → Internal use only
+
+Available Components:
+--------------------
+- UnifiedAgent: **RECOMMENDED** Main entry point combining orchestration + tools
+- AutonomyLevel: Permission levels (READONLY, MONITORED, ASSISTED, SUPERVISED, AUTONOMOUS)
+- AgentTools: Tools that can be invoked during chat conversations
+- AgentOrchestrator: (Legacy) Coordinates multiple agents for complex tasks
+- AgentBridge: (Legacy) Bridges LLM routing with tool execution
+- AutonomousAgent: Full autonomous agent with execution capabilities
+- Executor Layer: Safe file/command execution with audit trail
 """
 
 from .tools import AgentTools, ToolResult, ToolName, process_tool_request
@@ -146,11 +161,17 @@ from .unified_agent import (
     reset_agent,
     process_query,
     process_query_sync,
+)
+
+# Classification (Single Source of Truth)
+from .classification import (
     classify_task,
+    classify_simple,
+    TaskType,
 )
 
 __all__ = [
-    # === NEW: Unified Agent (Main Entry Point) ===
+    # === PRIMARY: Unified Agent (Recommended Entry Point) ===
     "UnifiedAgent",
     "AgentResponse",
     "TaskType",
@@ -160,7 +181,11 @@ __all__ = [
     "reset_agent",
     "process_query",
     "process_query_sync",
+    # === PRIMARY: Classification (Single Source of Truth) ===
     "classify_task",
+    "classify_simple",
+    # === PRIMARY: Core Autonomy ===
+    "AutonomyLevel",
     # Tools
     "AgentTools",
     "ToolResult",
