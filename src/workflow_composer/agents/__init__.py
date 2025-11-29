@@ -5,6 +5,7 @@ Agents Module
 AI-powered agents for workflow generation and monitoring.
 
 Available components:
+- UnifiedAgent: **NEW** Main entry point combining orchestration + tools
 - AgentTools: Tools that can be invoked during chat conversations
 - ConversationContext: Tracks conversation state for multi-turn dialogue
 - AgentRouter: LLM-based intent routing with function calling
@@ -15,6 +16,14 @@ Available components:
 - ReactAgent: Multi-step ReAct reasoning agent
 - AutonomousAgent: Full autonomous agent with execution capabilities
 - Executor Layer: Safe file/command execution with audit trail
+
+Quick Start:
+    # Use the unified agent (recommended)
+    from workflow_composer.agents import UnifiedAgent, AutonomyLevel
+    
+    agent = UnifiedAgent(autonomy_level=AutonomyLevel.ASSISTED)
+    response = agent.process_sync("scan /data/raw for FASTQ files")
+    print(response.message)
 """
 
 from .tools import AgentTools, ToolResult, ToolName, process_tool_request
@@ -126,8 +135,32 @@ from .enhanced_tools import (
     FileWriteTool,
     SystemHealthTool,
 )
+# Unified Agent (NEW - Main Entry Point)
+from .unified_agent import (
+    UnifiedAgent,
+    AgentResponse,
+    TaskType,
+    ResponseType,
+    ToolExecution,
+    get_agent,
+    reset_agent,
+    process_query,
+    process_query_sync,
+    classify_task,
+)
 
 __all__ = [
+    # === NEW: Unified Agent (Main Entry Point) ===
+    "UnifiedAgent",
+    "AgentResponse",
+    "TaskType",
+    "ResponseType",
+    "ToolExecution",
+    "get_agent",
+    "reset_agent",
+    "process_query",
+    "process_query_sync",
+    "classify_task",
     # Tools
     "AgentTools",
     "ToolResult",

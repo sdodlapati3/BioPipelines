@@ -52,6 +52,8 @@ class ActionType(Enum):
     PROCESS_START = "process_start"
     PROCESS_STOP = "process_stop"
     RECOVERY_ATTEMPT = "recovery_attempt"
+    TOOL_CALL = "tool_call"
+    TOOL_RESULT = "tool_result"
     ERROR = "error"
 
 
@@ -353,6 +355,75 @@ class AuditLogger:
         )
         self._write_entry(entry)
         
+    def log_tool_call(
+        self,
+        tool_name: str,
+        parameters: Dict[str, Any],
+    ):
+        """
+        Log a tool call.
+        
+        Args:
+            tool_name: Name of the tool being called
+            parameters: Tool parameters
+        """
+        entry = AuditEntry(
+            timestamp=datetime.now().isoformat(),
+            action_type=ActionType.TOOL_CALL.value,
+            description=f"Tool call: {tool_name}",
+            user=self.user,
+            session_id=self.session_id,
+            success=True,
+            details={
+                "tool_name": tool_name,
+                "parameters": {k: str(v)[:200] for k, v in parameters.items()},  # Truncate large values
+            },
+            severity=Severity.INFO.value,
+        )
+        self._write_entry(entry)
+        
+    def log_tool_result(
+        self,
+        tool_name: str,
+        success: bool,
+        result_data: Optional[Dict[str, Any]] = None,
+    ):
+        """
+        Log a tool result.
+        
+        Args:
+            tool_name: Name of the tool
+            success: Whether the tool succeeded
+            result_data: Result data (optional, will be summarized)
+        """
+        # Summarize result data to avoid huge logs
+        summary = {}
+        if result_data:
+            for key, value in result_data.items():
+                if isinstance(value, list):
+                    summary[key] = f"[{len(value)} items]"
+                elif isinstance(value, dict):
+                    summary[key] = f"{{...{len(value)} keys}}"
+                elif isinstance(value, str) and len(value) > 200:
+                    summary[key] = value[:200] + "..."
+                else:
+                    summary[key] = value
+                    
+        entry = AuditEntry(
+            timestamp=datetime.now().isoformat(),
+            action_type=ActionType.TOOL_RESULT.value,
+            description=f"Tool result: {tool_name} - {'success' if success else 'failed'}",
+            user=self.user,
+            session_id=self.session_id,
+            success=success,
+            details={
+                "tool_name": tool_name,
+                "result_summary": summary,
+            },
+            severity=Severity.INFO.value if success else Severity.WARNING.value,
+        )
+        self._write_entry(entry)
+
     def get_entries(
         self,
         since: Optional[str] = None,
