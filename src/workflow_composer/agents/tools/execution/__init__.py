@@ -1,21 +1,24 @@
 """
-Execution Tools
-===============
+Execution Tools Package
+=======================
 
-Tools for submitting and managing SLURM jobs, vLLM management, and job monitoring.
+Job submission, monitoring, and system management tools.
 
-This module has been refactored into the execution/ package:
-- execution/slurm.py: SLURM job operations (submit, cancel, status, resubmit, list)
-- execution/vllm.py: vLLM server management (health check, restart)
-- execution/monitoring.py: Log viewing and job watching
+Split into submodules for maintainability:
+- slurm: SLURM job management (submit, cancel, status, resubmit, list)
+- vllm: vLLM server management (health check, restart)
+- monitoring: Job monitoring and logs (get_logs, watch_job)
 
-This file now re-exports everything from the package for backward compatibility.
-New code should import directly from the submodules.
+Usage:
+    # Direct import (preferred)
+    from workflow_composer.agents.tools.execution import submit_job_impl
+    
+    # Or via parent package
+    from workflow_composer.agents.tools import submit_job_impl
 """
 
-# Re-export everything from the execution package
-from .execution import (
-    # SLURM
+# Re-export everything for backward compatibility
+from .slurm import (
     SUBMIT_JOB_PATTERNS,
     GET_JOB_STATUS_PATTERNS,
     CANCEL_JOB_PATTERNS,
@@ -26,12 +29,16 @@ from .execution import (
     cancel_job_impl,
     resubmit_job_impl,
     list_jobs_impl,
-    # vLLM
+)
+
+from .vllm import (
     CHECK_SYSTEM_HEALTH_PATTERNS,
     RESTART_VLLM_PATTERNS,
     check_system_health_impl,
     restart_vllm_impl,
-    # Monitoring
+)
+
+from .monitoring import (
     GET_LOGS_PATTERNS,
     WATCH_JOB_PATTERNS,
     get_logs_impl,
