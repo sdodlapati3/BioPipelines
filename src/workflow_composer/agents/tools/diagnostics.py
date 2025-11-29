@@ -541,3 +541,247 @@ def _fallback_analyze_results(results_path: str, result_type: str, error_msg: st
 {note}
 """
     )
+
+
+# =============================================================================
+# RECOVER_ERROR
+# =============================================================================
+
+RECOVER_ERROR_PATTERNS = [
+    r"(?:recover|fix|repair|resolve)\s+(?:the\s+)?(?:error|failure|issue|problem)",
+    r"(?:auto\s*-?\s*fix|apply\s+fix)",
+    r"run\s+(?:the\s+)?recovery",
+    r"execute\s+(?:the\s+)?recovery",
+    r"(?:start|trigger)\s+(?:auto\s*)?recovery",
+]
+
+
+def recover_error_impl(
+    action: str = None,
+    job_id: str = None,
+    error_log: str = None,
+    confirm: bool = False,
+) -> ToolResult:
+    """
+    Execute recovery actions for diagnosed errors.
+    
+    Wraps RecoveryManager to execute recovery actions:
+    - restart_server: Restart vLLM server
+    - resubmit_job: Resubmit a failed SLURM job
+    - clear_cache: Clear disk caches
+    - install_module: Install missing Python modules
+    - scale_resources: Get suggestions for resource scaling
+    
+    Args:
+        action: Recovery action to execute (restart_server, resubmit_job, clear_cache, etc.)
+        job_id: SLURM job ID (for resubmit_job)
+        error_log: Error log content (for diagnosis)
+        confirm: Whether to execute without confirmation
+        
+    Returns:
+        ToolResult with recovery status
+    """
+    import asyncio
+    
+    try:
+        from workflow_composer.agents.autonomous.recovery import (
+            RecoveryManager,
+            RecoveryAction,
+            RecoveryResult,
+        )
+        
+        recovery = RecoveryManager(
+            require_confirmation=not confirm,
+            ai_diagnosis_enabled=False,  # We already have diagnosis
+        )
+        
+        # Map action string to RecoveryAction
+        action_map = {
+            "restart_server": RecoveryAction.RESTART_SERVER,
+            "restart_vllm": RecoveryAction.RESTART_SERVER,
+            "resubmit_job": RecoveryAction.RESUBMIT_JOB,
+            "resubmit": RecoveryAction.RESUBMIT_JOB,
+            "clear_cache": RecoveryAction.CLEAR_CACHE,
+            "install_module": RecoveryAction.APPLY_PATCH,
+            "scale_resources": RecoveryAction.SCALE_RESOURCES,
+        }
+        
+        # If no specific action, try to diagnose and recover
+        if not action and (job_id or error_log):
+            # Run async recovery
+            async def do_recovery():
+                return await recovery.handle_job_failure(
+                    job_id=job_id or "unknown",
+                    error_log=error_log,
+                )
+            
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as pool:
+                        future = pool.submit(asyncio.run, do_recovery())
+                        result = future.result(timeout=120)
+                else:
+                    result = loop.run_until_complete(do_recovery())
+            except RuntimeError:
+                result = asyncio.run(do_recovery())
+            
+            if result.success:
+                message = f"""✅ **Recovery Successful**
+
+**Action:** {result.action.value.replace('_', ' ').title()}
+**Message:** {result.message}
+"""
+                if result.new_job_id:
+                    message += f"\n**New Job ID:** {result.new_job_id}"
+                if result.details:
+                    message += f"\n**Details:** {result.details}"
+            else:
+                message = f"""❌ **Recovery Failed**
+
+**Action:** {result.action.value.replace('_', ' ').title()}
+**Message:** {result.message}
+**Error:** {result.error or 'Unknown error'}
+
+💡 Try specifying a recovery action:
+- `recover restart_server` - Restart vLLM
+- `recover resubmit_job job_id=12345` - Resubmit SLURM job
+- `recover clear_cache` - Clear disk caches
+"""
+            
+            return ToolResult(
+                success=result.success,
+                tool_name="recover_error",
+                data=result.to_dict(),
+                message=message
+            )
+        
+        # Execute specific action
+        if action:
+            action_lower = action.lower().replace("-", "_").replace(" ", "_")
+            recovery_action = action_map.get(action_lower)
+            
+            if not recovery_action:
+                return ToolResult(
+                    success=False,
+                    tool_name="recover_error",
+                    error=f"Unknown action: {action}",
+                    message=f"""❌ **Unknown Recovery Action:** {action}
+
+**Available Actions:**
+- `restart_server` / `restart_vllm` - Restart the vLLM server
+- `resubmit_job` - Resubmit a failed SLURM job (requires job_id)
+- `clear_cache` - Clear disk caches to free space
+- `install_module` - Install missing Python modules
+- `scale_resources` - Get suggestions for resource scaling
+"""
+                )
+            
+            # Execute the recovery action
+            async def execute_action():
+                if recovery_action == RecoveryAction.RESTART_SERVER:
+                    return await recovery._restart_vllm(error_log)
+                elif recovery_action == RecoveryAction.RESUBMIT_JOB:
+                    if not job_id:
+                        return RecoveryResult(
+                            success=False,
+                            action=recovery_action,
+                            message="job_id is required for resubmit_job",
+                        )
+                    from workflow_composer.agents.autonomous.job_monitor import JobMonitor
+                    monitor = JobMonitor()
+                    job_info = monitor.get_job_info(job_id)
+                    return await recovery._resubmit_job(job_info)
+                elif recovery_action == RecoveryAction.CLEAR_CACHE:
+                    return await recovery._clear_cache()
+                else:
+                    return RecoveryResult(
+                        success=False,
+                        action=recovery_action,
+                        message=f"Action {recovery_action.value} requires manual intervention",
+                    )
+            
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as pool:
+                        future = pool.submit(asyncio.run, execute_action())
+                        result = future.result(timeout=120)
+                else:
+                    result = loop.run_until_complete(execute_action())
+            except RuntimeError:
+                result = asyncio.run(execute_action())
+            
+            if result.success:
+                message = f"""✅ **Recovery Action Completed**
+
+**Action:** {result.action.value.replace('_', ' ').title()}
+**Status:** Success
+**Message:** {result.message}
+"""
+                if result.new_job_id:
+                    message += f"\n**New Job ID:** {result.new_job_id}"
+            else:
+                message = f"""❌ **Recovery Action Failed**
+
+**Action:** {result.action.value.replace('_', ' ').title()}
+**Message:** {result.message}
+**Error:** {result.error or 'See details'}
+"""
+            
+            return ToolResult(
+                success=result.success,
+                tool_name="recover_error",
+                data=result.to_dict(),
+                message=message
+            )
+        
+        # No action specified
+        return ToolResult(
+            success=False,
+            tool_name="recover_error",
+            error="No action specified",
+            message="""❓ **What would you like to recover?**
+
+**Usage:**
+- `recover error` + provide error log or job_id
+- `recover restart_server` - Restart vLLM
+- `recover resubmit_job job_id=12345` - Resubmit failed job
+- `recover clear_cache` - Free disk space
+
+💡 First run `diagnose error` to identify the issue, then use the suggested recovery action.
+"""
+        )
+        
+    except ImportError as e:
+        logger.warning(f"Recovery module not available: {e}")
+        return ToolResult(
+            success=False,
+            tool_name="recover_error",
+            error=f"Recovery module not available: {e}",
+            message=f"""❌ **Recovery Module Not Available**
+
+The autonomous recovery system couldn't be loaded.
+Error: {e}
+
+**Manual Recovery Options:**
+- Restart vLLM: `pkill -f vllm && ./scripts/start_server.sh`
+- Resubmit job: `sbatch <script.sh>`
+- Clear cache: `rm -rf ~/.cache/huggingface/hub/*`
+"""
+        )
+    except Exception as e:
+        logger.error(f"Recovery failed: {e}")
+        return ToolResult(
+            success=False,
+            tool_name="recover_error",
+            error=str(e),
+            message=f"""❌ **Recovery Failed**
+
+Error: {e}
+
+Please try manual recovery or provide more details.
+"""
+        )

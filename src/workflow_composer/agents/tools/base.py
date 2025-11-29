@@ -40,6 +40,8 @@ class ToolName(Enum):
     GET_LOGS = "get_logs"
     CANCEL_JOB = "cancel_job"
     CHECK_SYSTEM_HEALTH = "check_system_health"
+    RESTART_VLLM = "restart_vllm"
+    RESUBMIT_JOB = "resubmit_job"
     
     # Monitoring
     MONITOR_JOBS = "monitor_jobs"
@@ -48,6 +50,7 @@ class ToolName(Enum):
     # Diagnostics
     DIAGNOSE_ERROR = "diagnose_error"
     ANALYZE_RESULTS = "analyze_results"
+    RECOVER_ERROR = "recover_error"
     
     # Visualization
     VISUALIZE_WORKFLOW = "visualize_workflow"

@@ -591,3 +591,417 @@ _Checked at: {health.checked_at.strftime('%Y-%m-%d %H:%M:%S')}_
             error=str(e),
             message=f"❌ Health check error: {e}"
         )
+
+
+# =============================================================================
+# RESTART_VLLM
+# =============================================================================
+
+RESTART_VLLM_PATTERNS = [
+    r"(?:restart|reboot|reload)\s+(?:the\s+)?(?:vllm|llm|model)\s*(?:server)?",
+    r"(?:vllm|llm)\s+(?:is\s+)?(?:down|not\s+working|crashed)",
+    r"(?:start|stop|kill)\s+(?:the\s+)?(?:vllm|llm)\s*(?:server)?",
+]
+
+
+def restart_vllm_impl(
+    force: bool = False,
+    wait_healthy: bool = True,
+    timeout: int = 60,
+) -> ToolResult:
+    """
+    Restart the vLLM server.
+    
+    Args:
+        force: Force kill existing processes
+        wait_healthy: Wait for server to become healthy
+        timeout: Timeout in seconds to wait for healthy status
+        
+    Returns:
+        ToolResult with restart status
+    """
+    import asyncio
+    import time
+    
+    try:
+        from workflow_composer.agents.autonomous.recovery import RecoveryManager
+        from workflow_composer.agents.autonomous.health_checker import HealthChecker
+        
+        recovery = RecoveryManager(require_confirmation=False)
+        
+        # Execute restart
+        async def do_restart():
+            return await recovery._restart_vllm(None)
+        
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    future = pool.submit(asyncio.run, do_restart())
+                    result = future.result(timeout=timeout + 30)
+            else:
+                result = loop.run_until_complete(do_restart())
+        except RuntimeError:
+            result = asyncio.run(do_restart())
+        
+        if result.success:
+            message = f"""✅ **vLLM Server Restarted**
+
+**Status:** Running
+**Message:** {result.message}
+
+The vLLM server has been restarted and is ready for requests.
+"""
+        else:
+            message = f"""❌ **vLLM Restart Failed**
+
+**Message:** {result.message}
+**Error:** {result.error or 'Unknown error'}
+
+**Manual restart steps:**
+1. `pkill -f "vllm.entrypoints"` - Kill existing processes
+2. `cd scripts && ./start_server.sh` - Start the server
+3. Wait 30-60 seconds for model loading
+"""
+        
+        return ToolResult(
+            success=result.success,
+            tool_name="restart_vllm",
+            data=result.to_dict(),
+            message=message
+        )
+        
+    except ImportError as e:
+        # Fallback: manual restart
+        logger.warning(f"Recovery module not available: {e}")
+        
+        try:
+            # Kill existing vLLM processes
+            kill_result = subprocess.run(
+                ["pkill", "-f", "vllm.entrypoints"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            
+            # Wait a moment
+            import time
+            time.sleep(3)
+            
+            # Start server using script
+            start_script = Path.cwd() / "scripts" / "start_server.sh"
+            if start_script.exists():
+                subprocess.Popen(
+                    ["bash", str(start_script)],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    cwd=str(Path.cwd()),
+                )
+                
+                return ToolResult(
+                    success=True,
+                    tool_name="restart_vllm",
+                    data={"method": "fallback"},
+                    message="""✅ **vLLM Server Restart Initiated**
+
+The server restart has been initiated. Please wait 30-60 seconds for the model to load.
+
+Run `check system health` to verify the server is healthy.
+"""
+                )
+            else:
+                return ToolResult(
+                    success=False,
+                    tool_name="restart_vllm",
+                    error="Start script not found",
+                    message=f"""❌ **Start Script Not Found**
+
+Expected: {start_script}
+
+Please start the server manually or ensure the script exists.
+"""
+                )
+                
+        except Exception as e2:
+            return ToolResult(
+                success=False,
+                tool_name="restart_vllm",
+                error=str(e2),
+                message=f"""❌ **Restart Failed**
+
+Error: {e2}
+
+Manual restart: `cd scripts && ./start_server.sh`
+"""
+            )
+    
+    except Exception as e:
+        logger.error(f"vLLM restart failed: {e}")
+        return ToolResult(
+            success=False,
+            tool_name="restart_vllm",
+            error=str(e),
+            message=f"""❌ **vLLM Restart Failed**
+
+Error: {e}
+
+Try manual restart:
+1. `pkill -f "vllm.entrypoints"`
+2. `cd scripts && ./start_server.sh`
+"""
+        )
+
+
+# =============================================================================
+# RESUBMIT_JOB
+# =============================================================================
+
+RESUBMIT_JOB_PATTERNS = [
+    r"resubmit\s+(?:the\s+)?(?:job|slurm)",
+    r"resubmit\s+(?:job\s+)?(?:id\s*)?(\d+)",
+    r"retry\s+(?:the\s+)?(?:failed\s+)?job",
+    r"rerun\s+(?:the\s+)?(?:failed\s+)?job",
+    r"(?:job\s+)?(\d+)\s+(?:failed|crashed).+(?:resubmit|retry)",
+]
+
+
+def resubmit_job_impl(
+    job_id: str = None,
+    script_path: str = None,
+    modify_resources: Dict[str, Any] = None,
+) -> ToolResult:
+    """
+    Resubmit a failed SLURM job.
+    
+    Args:
+        job_id: The original job ID to resubmit
+        script_path: Path to submission script (auto-detected if job_id provided)
+        modify_resources: Dict of resource modifications (e.g., {"mem": "32G", "time": "4:00:00"})
+        
+    Returns:
+        ToolResult with new job ID
+    """
+    import asyncio
+    
+    try:
+        from workflow_composer.agents.autonomous.recovery import RecoveryManager
+        from workflow_composer.agents.autonomous.job_monitor import JobMonitor, JobInfo
+        
+        # Get job info if job_id provided
+        job_info = None
+        if job_id:
+            monitor = JobMonitor()
+            job_info = monitor.get_job_info(job_id)
+            
+            if job_info is None:
+                return ToolResult(
+                    success=False,
+                    tool_name="resubmit_job",
+                    error=f"Could not find job {job_id}",
+                    message=f"""❌ **Job Not Found**
+
+Could not retrieve information for job ID: {job_id}
+
+This might happen if:
+- The job is too old and not in SLURM's history
+- The job ID is incorrect
+- SLURM accounting is not enabled
+
+**Alternative:** Provide the script path directly:
+`resubmit job script=/path/to/script.sh`
+"""
+                )
+        
+        # Find script if not provided
+        if not script_path and job_info and job_info.working_dir:
+            for pattern in ["*.sh", "*.slurm", "submit_*.sh", "run_*.sh"]:
+                scripts = list(job_info.working_dir.glob(pattern))
+                if scripts:
+                    script_path = str(scripts[0])
+                    break
+        
+        if not script_path:
+            return ToolResult(
+                success=False,
+                tool_name="resubmit_job",
+                error="No submission script found",
+                message="""❌ **No Submission Script Found**
+
+Could not locate the job submission script.
+
+Please provide the script path:
+`resubmit job script=/path/to/your_job.sh`
+"""
+            )
+        
+        script_file = Path(script_path)
+        if not script_file.exists():
+            return ToolResult(
+                success=False,
+                tool_name="resubmit_job",
+                error=f"Script not found: {script_path}",
+                message=f"❌ Script not found: {script_path}"
+            )
+        
+        # Modify resources if requested
+        if modify_resources:
+            # Read the script
+            with open(script_file, 'r') as f:
+                script_content = f.read()
+            
+            # Apply modifications
+            import re
+            for key, value in modify_resources.items():
+                if key == "mem":
+                    script_content = re.sub(
+                        r'#SBATCH\s+--mem=\S+',
+                        f'#SBATCH --mem={value}',
+                        script_content
+                    )
+                elif key == "time":
+                    script_content = re.sub(
+                        r'#SBATCH\s+--time=\S+',
+                        f'#SBATCH --time={value}',
+                        script_content
+                    )
+                elif key == "cpus":
+                    script_content = re.sub(
+                        r'#SBATCH\s+--cpus-per-task=\d+',
+                        f'#SBATCH --cpus-per-task={value}',
+                        script_content
+                    )
+            
+            # Write modified script
+            modified_script = script_file.parent / f"{script_file.stem}_retry{script_file.suffix}"
+            with open(modified_script, 'w') as f:
+                f.write(script_content)
+            script_path = str(modified_script)
+        
+        # Submit the job
+        working_dir = job_info.working_dir if job_info else script_file.parent
+        
+        result = subprocess.run(
+            ["sbatch", script_path],
+            capture_output=True,
+            text=True,
+            cwd=str(working_dir),
+            timeout=30,
+        )
+        
+        if result.returncode == 0:
+            # Parse new job ID
+            import re
+            match = re.search(r"Submitted batch job (\d+)", result.stdout)
+            new_job_id = match.group(1) if match else None
+            
+            message = f"""✅ **Job Resubmitted Successfully**
+
+**New Job ID:** {new_job_id}
+**Script:** {script_path}
+**Working Directory:** {working_dir}
+"""
+            if job_id:
+                message += f"\n**Original Job ID:** {job_id}"
+            if modify_resources:
+                message += f"\n**Modified Resources:** {modify_resources}"
+            
+            message += f"""
+
+**Monitor the job:**
+- `get job status {new_job_id}`
+- `squeue -j {new_job_id}`
+"""
+            
+            return ToolResult(
+                success=True,
+                tool_name="resubmit_job",
+                data={
+                    "new_job_id": new_job_id,
+                    "original_job_id": job_id,
+                    "script": script_path,
+                    "working_dir": str(working_dir),
+                    "modified_resources": modify_resources,
+                },
+                message=message
+            )
+        else:
+            return ToolResult(
+                success=False,
+                tool_name="resubmit_job",
+                error=result.stderr,
+                message=f"""❌ **Job Submission Failed**
+
+**Error:** {result.stderr}
+
+**Script:** {script_path}
+
+Check that:
+1. The script is valid
+2. You have access to the partition
+3. Resources are available
+"""
+            )
+        
+    except ImportError as e:
+        # Fallback: direct sbatch
+        logger.warning(f"Job monitor not available: {e}")
+        
+        if not script_path:
+            return ToolResult(
+                success=False,
+                tool_name="resubmit_job",
+                error="script_path required when job_monitor unavailable",
+                message="""❌ **Script Path Required**
+
+Please provide the script path:
+`resubmit job script=/path/to/script.sh`
+"""
+            )
+        
+        try:
+            result = subprocess.run(
+                ["sbatch", script_path],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            
+            if result.returncode == 0:
+                import re
+                match = re.search(r"Submitted batch job (\d+)", result.stdout)
+                new_job_id = match.group(1) if match else "unknown"
+                
+                return ToolResult(
+                    success=True,
+                    tool_name="resubmit_job",
+                    data={"new_job_id": new_job_id, "script": script_path},
+                    message=f"""✅ **Job Submitted**
+
+**New Job ID:** {new_job_id}
+**Script:** {script_path}
+"""
+                )
+            else:
+                return ToolResult(
+                    success=False,
+                    tool_name="resubmit_job",
+                    error=result.stderr,
+                    message=f"❌ Submission failed: {result.stderr}"
+                )
+        except Exception as e2:
+            return ToolResult(
+                success=False,
+                tool_name="resubmit_job",
+                error=str(e2),
+                message=f"❌ Submission error: {e2}"
+            )
+    
+    except Exception as e:
+        logger.error(f"resubmit_job failed: {e}")
+        return ToolResult(
+            success=False,
+            tool_name="resubmit_job",
+            error=str(e),
+            message=f"❌ Resubmit failed: {e}"
+        )

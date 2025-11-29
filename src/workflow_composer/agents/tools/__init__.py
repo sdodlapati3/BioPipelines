@@ -68,18 +68,24 @@ from .execution import (
     GET_LOGS_PATTERNS,
     CANCEL_JOB_PATTERNS,
     CHECK_SYSTEM_HEALTH_PATTERNS,
+    RESTART_VLLM_PATTERNS,
+    RESUBMIT_JOB_PATTERNS,
     submit_job_impl,
     get_job_status_impl,
     get_logs_impl,
     cancel_job_impl,
     check_system_health_impl,
+    restart_vllm_impl,
+    resubmit_job_impl,
 )
 
 from .diagnostics import (
     DIAGNOSE_ERROR_PATTERNS,
     ANALYZE_RESULTS_PATTERNS,
+    RECOVER_ERROR_PATTERNS,
     diagnose_error_impl,
     analyze_results_impl,
+    recover_error_impl,
 )
 
 from .education import (
@@ -120,14 +126,17 @@ ALL_TOOL_PATTERNS = [
     (ToolName.CHECK_REFERENCES, CHECK_REFERENCES_PATTERNS),
     (ToolName.VISUALIZE_WORKFLOW, VISUALIZE_WORKFLOW_PATTERNS),
     
-    # Execution
+    # Execution - more specific patterns first
+    (ToolName.RESTART_VLLM, RESTART_VLLM_PATTERNS),
+    (ToolName.RESUBMIT_JOB, RESUBMIT_JOB_PATTERNS),
     (ToolName.SUBMIT_JOB, SUBMIT_JOB_PATTERNS),
     (ToolName.GET_JOB_STATUS, GET_JOB_STATUS_PATTERNS),
     (ToolName.GET_LOGS, GET_LOGS_PATTERNS),
     (ToolName.CANCEL_JOB, CANCEL_JOB_PATTERNS),
     (ToolName.CHECK_SYSTEM_HEALTH, CHECK_SYSTEM_HEALTH_PATTERNS),
     
-    # Diagnostics
+    # Diagnostics - recover_error before diagnose_error
+    (ToolName.RECOVER_ERROR, RECOVER_ERROR_PATTERNS),
     (ToolName.DIAGNOSE_ERROR, DIAGNOSE_ERROR_PATTERNS),
     (ToolName.ANALYZE_RESULTS, ANALYZE_RESULTS_PATTERNS),
     
@@ -202,10 +211,13 @@ class AgentTools:
             "get_logs": lambda **kw: get_logs_impl(**kw),
             "cancel_job": lambda **kw: cancel_job_impl(**kw),
             "check_system_health": lambda **kw: check_system_health_impl(**kw),
+            "restart_vllm": lambda **kw: restart_vllm_impl(**kw),
+            "resubmit_job": lambda **kw: resubmit_job_impl(**kw),
             
             # Diagnostics
             "diagnose_error": lambda **kw: diagnose_error_impl(**kw),
             "analyze_results": lambda **kw: analyze_results_impl(**kw),
+            "recover_error": lambda **kw: recover_error_impl(**kw),
             
             # Education
             "explain_concept": lambda **kw: explain_concept_impl(**kw),
@@ -422,6 +434,46 @@ class AgentTools:
                 "parameters": {
                     "type": "object",
                     "properties": {},
+                    "required": []
+                }
+            },
+            {
+                "name": "restart_vllm",
+                "description": "Restart the vLLM LLM server. Use when the server is unresponsive or crashed.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "force": {"type": "boolean", "description": "Force kill existing processes"},
+                        "wait_healthy": {"type": "boolean", "description": "Wait for server to become healthy"},
+                        "timeout": {"type": "integer", "description": "Timeout in seconds (default: 60)"},
+                    },
+                    "required": []
+                }
+            },
+            {
+                "name": "resubmit_job",
+                "description": "Resubmit a failed SLURM job, optionally with modified resources.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "job_id": {"type": "string", "description": "Original SLURM job ID to resubmit"},
+                        "script_path": {"type": "string", "description": "Path to submission script (auto-detected if job_id provided)"},
+                        "modify_resources": {"type": "object", "description": "Resource modifications (e.g., {\"mem\": \"32G\", \"time\": \"4:00:00\"})"},
+                    },
+                    "required": []
+                }
+            },
+            {
+                "name": "recover_error",
+                "description": "Execute recovery actions for diagnosed errors. Supports restart_server, resubmit_job, clear_cache, install_module.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "action": {"type": "string", "description": "Recovery action: restart_server, resubmit_job, clear_cache, install_module"},
+                        "job_id": {"type": "string", "description": "SLURM job ID (for resubmit_job)"},
+                        "error_log": {"type": "string", "description": "Error log content for diagnosis"},
+                        "confirm": {"type": "boolean", "description": "Execute without confirmation prompt"},
+                    },
                     "required": []
                 }
             },
