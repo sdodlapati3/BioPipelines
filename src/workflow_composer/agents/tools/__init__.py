@@ -350,11 +350,52 @@ class AgentTools:
             },
             {
                 "name": "check_references",
-                "description": "Check availability of reference data",
+                "description": "Check availability of reference genomes, annotations, and aligner indexes. Uses ReferenceManager for comprehensive status.",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "organism": {"type": "string", "description": "Organism (human, mouse)"},
+                        "organism": {"type": "string", "description": "Organism (human, mouse, rat, zebrafish)"},
+                        "assembly": {"type": "string", "description": "Genome assembly (GRCh38, GRCm39, etc.)"},
+                    },
+                    "required": []
+                }
+            },
+            {
+                "name": "download_reference",
+                "description": "Download reference genome, GTF annotation, or transcriptome from Ensembl. Supports human, mouse, rat, zebrafish.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "organism": {"type": "string", "description": "Organism: human, mouse, rat, zebrafish"},
+                        "assembly": {"type": "string", "description": "Assembly: GRCh38, GRCh37, GRCm39, GRCm38, mRatBN7.2, GRCz11"},
+                        "resource": {"type": "string", "description": "Resource type: genome, gtf, transcriptome"},
+                    },
+                    "required": ["organism", "assembly", "resource"]
+                }
+            },
+            {
+                "name": "build_index",
+                "description": "Build an aligner index (STAR, Salmon, BWA, HISAT2, Kallisto) for a genome.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "aligner": {"type": "string", "description": "Aligner: star, salmon, bwa, hisat2, kallisto"},
+                        "organism": {"type": "string", "description": "Organism (used if genome_path not provided)"},
+                        "assembly": {"type": "string", "description": "Assembly (used if genome_path not provided)"},
+                        "genome_path": {"type": "string", "description": "Path to genome FASTA (optional)"},
+                        "gtf_path": {"type": "string", "description": "Path to GTF annotation (optional, recommended for STAR)"},
+                    },
+                    "required": ["aligner"]
+                }
+            },
+            {
+                "name": "visualize_workflow",
+                "description": "Generate a DAG diagram visualization of a Nextflow workflow.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "workflow_dir": {"type": "string", "description": "Path to workflow directory"},
+                        "output_format": {"type": "string", "description": "Output format: png, svg, pdf, txt"},
                     },
                     "required": []
                 }
@@ -373,22 +414,27 @@ class AgentTools:
             },
             {
                 "name": "get_job_status",
-                "description": "Get status of SLURM job(s)",
+                "description": "Get status of SLURM jobs and/or Nextflow workflow execution. Shows progress bars and process counts for Nextflow.",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "job_id": {"type": "string", "description": "Job ID to check"},
+                        "job_id": {"type": "string", "description": "SLURM job ID to check"},
+                        "workflow_dir": {"type": "string", "description": "Nextflow workflow directory to monitor"},
                     },
                     "required": []
                 }
             },
             {
                 "name": "diagnose_error",
-                "description": "Diagnose an error from logs or provided text",
+                "description": "Diagnose pipeline errors using 50+ patterns with AI-powered analysis. Supports OutOfMemory, Permission, DiskSpace, Network, SLURM, and more.",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "error_text": {"type": "string", "description": "Error text"},
+                        "error_text": {"type": "string", "description": "Error text to diagnose"},
+                        "log_file": {"type": "string", "description": "Path to log file to analyze"},
+                        "job_id": {"type": "string", "description": "SLURM job ID to collect logs from"},
+                        "work_dir": {"type": "string", "description": "Nextflow work directory to scan"},
+                        "auto_fix": {"type": "boolean", "description": "Attempt automatic fixes for safe operations"},
                     },
                     "required": []
                 }
