@@ -127,8 +127,9 @@ Example: "diagnose this error: OutOfMemoryError in STAR process"
 """
             )
         
-        # Run diagnosis using the full agent
-        diagnosis = agent.diagnose_sync(collected_error_text)
+        # Run diagnosis using pattern matching on log text
+        # Use diagnose_from_logs() for text-based diagnosis
+        diagnosis = agent.diagnose_from_logs(collected_error_text)
         
         # Attempt auto-fix for safe fixes if requested
         fix_results = []

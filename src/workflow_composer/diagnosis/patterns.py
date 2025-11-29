@@ -672,6 +672,59 @@ ERROR_PATTERNS: Dict[ErrorCategory, ErrorPattern] = {
             ),
         ],
     ),
+    
+    # -------------------------------------------------------------------------
+    # RESOURCE LIMIT ERRORS (disk, quota, etc.)
+    # -------------------------------------------------------------------------
+    ErrorCategory.RESOURCE_LIMIT: ErrorPattern(
+        category=ErrorCategory.RESOURCE_LIMIT,
+        patterns=[
+            r"No space left on device",
+            r"Disk quota exceeded",
+            r"ENOSPC",
+            r"cannot create.*No space",
+            r"write error: No space",
+            r"output file is too large",
+            r"Quota exceeded",
+            r"disk full",
+            r"not enough space",
+            r"insufficient disk",
+        ],
+        description="Disk space or quota limit exceeded",
+        common_causes=[
+            "Work directory full",
+            "Output partition full",
+            "User quota exceeded",
+            "Too many intermediate files",
+        ],
+        keywords=["disk", "space", "quota", "full", "limit"],
+        suggested_fixes=[
+            FixSuggestion(
+                description="Check disk usage",
+                command="df -h .",
+                risk_level=FixRiskLevel.SAFE,
+                auto_executable=True,
+            ),
+            FixSuggestion(
+                description="Check user quota",
+                command="quota -s 2>/dev/null || echo 'quota command not available'",
+                risk_level=FixRiskLevel.SAFE,
+                auto_executable=True,
+            ),
+            FixSuggestion(
+                description="Clean Nextflow work directory",
+                command="nextflow clean -f",
+                risk_level=FixRiskLevel.LOW,
+                auto_executable=True,
+            ),
+            FixSuggestion(
+                description="Find large files in work directory",
+                command="find work/ -type f -size +1G -exec ls -lh {} \\;",
+                risk_level=FixRiskLevel.SAFE,
+                auto_executable=True,
+            ),
+        ],
+    ),
 }
 
 
