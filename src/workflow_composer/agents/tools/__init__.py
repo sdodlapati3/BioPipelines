@@ -40,9 +40,13 @@ from .data_discovery import (
 
 from .data_management import (
     DOWNLOAD_DATASET_PATTERNS,
+    DOWNLOAD_REFERENCE_PATTERNS,
+    BUILD_INDEX_PATTERNS,
     CLEANUP_DATA_PATTERNS,
     CONFIRM_CLEANUP_PATTERNS,
     download_dataset_impl,
+    download_reference_impl,
+    build_index_impl,
     cleanup_data_impl,
     confirm_cleanup_impl,
 )
@@ -51,9 +55,11 @@ from .workflow import (
     GENERATE_WORKFLOW_PATTERNS,
     LIST_WORKFLOWS_PATTERNS,
     CHECK_REFERENCES_PATTERNS,
+    VISUALIZE_WORKFLOW_PATTERNS,
     generate_workflow_impl,
     list_workflows_impl,
     check_references_impl,
+    visualize_workflow_impl,
 )
 
 from .execution import (
@@ -101,6 +107,8 @@ ALL_TOOL_PATTERNS = [
     
     # Data Management
     (ToolName.DOWNLOAD_DATASET, DOWNLOAD_DATASET_PATTERNS),
+    (ToolName.DOWNLOAD_REFERENCE, DOWNLOAD_REFERENCE_PATTERNS),
+    (ToolName.BUILD_INDEX, BUILD_INDEX_PATTERNS),
     (ToolName.CLEANUP_DATA, CLEANUP_DATA_PATTERNS),
     (ToolName.CONFIRM_CLEANUP, CONFIRM_CLEANUP_PATTERNS),
     
@@ -108,6 +116,7 @@ ALL_TOOL_PATTERNS = [
     (ToolName.GENERATE_WORKFLOW, GENERATE_WORKFLOW_PATTERNS),
     (ToolName.LIST_WORKFLOWS, LIST_WORKFLOWS_PATTERNS),
     (ToolName.CHECK_REFERENCES, CHECK_REFERENCES_PATTERNS),
+    (ToolName.VISUALIZE_WORKFLOW, VISUALIZE_WORKFLOW_PATTERNS),
     
     # Execution
     (ToolName.SUBMIT_JOB, SUBMIT_JOB_PATTERNS),
@@ -173,6 +182,8 @@ class AgentTools:
             
             # Data Management
             "download_dataset": lambda **kw: download_dataset_impl(**kw),
+            "download_reference": lambda **kw: download_reference_impl(**kw),
+            "build_index": lambda **kw: build_index_impl(**kw),
             "cleanup_data": lambda **kw: cleanup_data_impl(**kw),
             "confirm_cleanup": lambda **kw: confirm_cleanup_impl(**kw),
             
@@ -180,6 +191,7 @@ class AgentTools:
             "generate_workflow": lambda **kw: generate_workflow_impl(**kw),
             "list_workflows": lambda **kw: list_workflows_impl(**kw),
             "check_references": lambda **kw: check_references_impl(**kw),
+            "visualize_workflow": lambda **kw: visualize_workflow_impl(**kw),
             
             # Execution
             "submit_job": lambda **kw: submit_job_impl(**kw),

@@ -24,6 +24,8 @@ class ToolName(Enum):
     
     # Data Management
     DOWNLOAD_DATASET = "download_dataset"
+    DOWNLOAD_REFERENCE = "download_reference"
+    BUILD_INDEX = "build_index"
     CLEANUP_DATA = "cleanup_data"
     CONFIRM_CLEANUP = "confirm_cleanup"
     
@@ -45,6 +47,9 @@ class ToolName(Enum):
     # Diagnostics
     DIAGNOSE_ERROR = "diagnose_error"
     ANALYZE_RESULTS = "analyze_results"
+    
+    # Visualization
+    VISUALIZE_WORKFLOW = "visualize_workflow"
     
     # Education
     EXPLAIN_CONCEPT = "explain_concept"

@@ -461,3 +461,366 @@ def confirm_cleanup_impl() -> ToolResult:
         data={"deleted": deleted, "failed": failed},
         message=message
     )
+
+
+# =============================================================================
+# DOWNLOAD_REFERENCE
+# =============================================================================
+
+DOWNLOAD_REFERENCE_PATTERNS = [
+    r"download\s+(?:the\s+)?(?:reference|genome|annotation|gtf|transcriptome)(?:\s+for)?\s+(\w+)",
+    r"(?:get|fetch|download)\s+(?:human|mouse|rat|zebrafish)\s+(?:GRCh38|GRCh37|GRCm39|GRCm38|mRatBN7\.2|GRCz11)",
+    r"download\s+(?:GRCh38|GRCh37|GRCm39|GRCm38)\s+(?:reference|genome|gtf)",
+    r"(?:need|get|download)\s+(?:star|salmon|bwa|hisat2)\s+index",
+    r"build\s+(?:star|salmon|bwa|hisat2)\s+index\s+for\s+(\w+)",
+]
+
+
+def download_reference_impl(
+    organism: str = "human",
+    assembly: str = "GRCh38",
+    resource: str = "genome",  # genome, gtf, transcriptome
+    output_dir: str = None,
+) -> ToolResult:
+    """
+    Download reference genome, annotation, or transcriptome from Ensembl.
+    
+    Uses ReferenceManager for robust downloads with progress tracking.
+    
+    Args:
+        organism: Organism name (human, mouse, rat, zebrafish)
+        assembly: Genome assembly (GRCh38, GRCh37, GRCm39, etc.)
+        resource: What to download (genome, gtf, transcriptome)
+        output_dir: Optional output directory
+        
+    Returns:
+        ToolResult with download status and file path
+    """
+    try:
+        # Import ReferenceManager
+        try:
+            from workflow_composer.data.reference_manager import ReferenceManager, REFERENCE_SOURCES
+        except ImportError as e:
+            return ToolResult(
+                success=False,
+                tool_name="download_reference",
+                error=str(e),
+                message=f"❌ Could not import ReferenceManager: {e}"
+            )
+        
+        # Normalize inputs
+        organism = organism.lower().strip()
+        assembly = assembly.strip()
+        resource = resource.lower().strip()
+        
+        # Validate organism
+        if organism not in REFERENCE_SOURCES:
+            available = ", ".join(REFERENCE_SOURCES.keys())
+            return ToolResult(
+                success=False,
+                tool_name="download_reference",
+                error=f"Unknown organism: {organism}",
+                message=f"❌ Unknown organism: **{organism}**\n\nAvailable: {available}"
+            )
+        
+        # Validate assembly
+        if assembly not in REFERENCE_SOURCES[organism]:
+            available = ", ".join(REFERENCE_SOURCES[organism].keys())
+            return ToolResult(
+                success=False,
+                tool_name="download_reference",
+                error=f"Unknown assembly: {assembly}",
+                message=f"❌ Unknown assembly: **{assembly}** for {organism}\n\nAvailable: {available}"
+            )
+        
+        # Validate resource
+        if resource not in REFERENCE_SOURCES[organism][assembly]:
+            available = ", ".join(REFERENCE_SOURCES[organism][assembly].keys())
+            return ToolResult(
+                success=False,
+                tool_name="download_reference",
+                error=f"Unknown resource: {resource}",
+                message=f"❌ Unknown resource: **{resource}**\n\nAvailable: {available}"
+            )
+        
+        # Setup reference manager
+        if output_dir:
+            base_dir = Path(output_dir)
+        else:
+            # Try standard locations
+            possible_dirs = [
+                Path("/scratch/sdodl001/BioPipelines/data/references"),
+                Path.home() / "BioPipelines" / "data" / "references",
+                Path.cwd() / "data" / "references",
+            ]
+            base_dir = None
+            for d in possible_dirs:
+                if d.exists() or d.parent.exists():
+                    base_dir = d
+                    break
+            if base_dir is None:
+                base_dir = Path.cwd() / "data" / "references"
+        
+        manager = ReferenceManager(base_dir=base_dir)
+        
+        # Get download info
+        info = REFERENCE_SOURCES[organism][assembly][resource]
+        url = info["url"]
+        expected_path = base_dir / organism / info.get("decompressed", info["filename"].replace(".gz", ""))
+        
+        # Check if already exists
+        if expected_path.exists():
+            size_mb = expected_path.stat().st_size / (1024 * 1024)
+            return ToolResult(
+                success=True,
+                tool_name="download_reference",
+                data={
+                    "path": str(expected_path),
+                    "already_exists": True,
+                    "size_mb": round(size_mb, 1),
+                },
+                message=f"✅ Reference already exists:\n\n`{expected_path}`\n\n**Size:** {size_mb:.1f} MB"
+            )
+        
+        # Download
+        logger.info(f"Downloading {organism}/{assembly}/{resource} from {url}")
+        
+        result_path = manager.download_reference(
+            organism=organism,
+            assembly=assembly,
+            resource=resource,
+        )
+        
+        if result_path and result_path.exists():
+            size_mb = result_path.stat().st_size / (1024 * 1024)
+            return ToolResult(
+                success=True,
+                tool_name="download_reference",
+                data={
+                    "path": str(result_path),
+                    "organism": organism,
+                    "assembly": assembly,
+                    "resource": resource,
+                    "size_mb": round(size_mb, 1),
+                },
+                message=f"""✅ **Download Complete**
+
+**File:** `{result_path}`
+**Size:** {size_mb:.1f} MB
+**Organism:** {organism}
+**Assembly:** {assembly}
+**Resource:** {resource}
+
+You can now build an index with:
+- `build star index for {assembly}`
+- `build salmon index for {assembly}`
+"""
+            )
+        else:
+            return ToolResult(
+                success=False,
+                tool_name="download_reference",
+                error="Download failed",
+                message=f"❌ Failed to download {resource} for {organism}/{assembly}"
+            )
+            
+    except Exception as e:
+        logger.exception("download_reference failed")
+        return ToolResult(
+            success=False,
+            tool_name="download_reference",
+            error=str(e),
+            message=f"❌ Download error: {e}"
+        )
+
+
+# =============================================================================
+# BUILD_INDEX
+# =============================================================================
+
+BUILD_INDEX_PATTERNS = [
+    r"build\s+(star|salmon|bwa|hisat2|kallisto)\s+index",
+    r"(?:create|generate|make)\s+(star|salmon|bwa|hisat2|kallisto)\s+index",
+    r"index\s+(?:the\s+)?genome\s+(?:with|for|using)\s+(star|salmon|bwa|hisat2|kallisto)",
+]
+
+
+def build_index_impl(
+    aligner: str,
+    genome_path: str = None,
+    gtf_path: str = None,
+    organism: str = "human",
+    assembly: str = "GRCh38",
+    output_dir: str = None,
+    threads: int = 8,
+    memory_gb: int = 32,
+) -> ToolResult:
+    """
+    Build an aligner index for a genome.
+    
+    Uses ReferenceManager to build STAR, Salmon, BWA, HISAT2, or Kallisto indexes.
+    
+    Args:
+        aligner: Aligner to build index for (star, salmon, bwa, hisat2, kallisto)
+        genome_path: Path to genome FASTA (if not provided, uses organism/assembly)
+        gtf_path: Path to GTF annotation (optional, but recommended for STAR)
+        organism: Organism name (used if genome_path not provided)
+        assembly: Genome assembly (used if genome_path not provided)
+        output_dir: Output directory for index
+        threads: Number of threads
+        memory_gb: Memory limit in GB
+        
+    Returns:
+        ToolResult with build status and index path
+    """
+    try:
+        # Import ReferenceManager
+        try:
+            from workflow_composer.data.reference_manager import ReferenceManager
+        except ImportError as e:
+            return ToolResult(
+                success=False,
+                tool_name="build_index",
+                error=str(e),
+                message=f"❌ Could not import ReferenceManager: {e}"
+            )
+        
+        aligner = aligner.lower().strip()
+        valid_aligners = ["star", "salmon", "bwa", "hisat2", "kallisto"]
+        
+        if aligner not in valid_aligners:
+            return ToolResult(
+                success=False,
+                tool_name="build_index",
+                error=f"Unknown aligner: {aligner}",
+                message=f"❌ Unknown aligner: **{aligner}**\n\nSupported: {', '.join(valid_aligners)}"
+            )
+        
+        # Find genome if not provided
+        if genome_path:
+            genome = Path(genome_path)
+        else:
+            # Try to find genome using ReferenceManager
+            base_dir = None
+            possible_dirs = [
+                Path("/scratch/sdodl001/BioPipelines/data/references"),
+                Path.home() / "BioPipelines" / "data" / "references",
+                Path.cwd() / "data" / "references",
+            ]
+            for d in possible_dirs:
+                if d.exists():
+                    base_dir = d
+                    break
+            
+            if base_dir is None:
+                return ToolResult(
+                    success=False,
+                    tool_name="build_index",
+                    error="No reference directory found",
+                    message="❌ Could not find reference directory. Please specify `genome_path`."
+                )
+            
+            manager = ReferenceManager(base_dir=base_dir)
+            ref_info = manager.check_references(organism, assembly)
+            
+            if not ref_info.genome_fasta:
+                return ToolResult(
+                    success=False,
+                    tool_name="build_index",
+                    error="Genome not found",
+                    message=f"""❌ Genome not found for {organism}/{assembly}
+
+**Download first with:**
+```
+download reference genome for {organism} {assembly}
+```
+"""
+                )
+            
+            genome = ref_info.genome_fasta
+            
+            # Use discovered GTF if not provided
+            if not gtf_path and ref_info.annotation_gtf:
+                gtf_path = str(ref_info.annotation_gtf)
+        
+        if not genome.exists():
+            return ToolResult(
+                success=False,
+                tool_name="build_index",
+                error=f"Genome not found: {genome}",
+                message=f"❌ Genome file not found: `{genome}`"
+            )
+        
+        gtf = Path(gtf_path) if gtf_path else None
+        
+        # Warn if STAR without GTF
+        if aligner == "star" and (gtf is None or not gtf.exists()):
+            logger.warning("Building STAR index without GTF - splice junctions won't be annotated")
+        
+        # Setup output directory
+        if output_dir:
+            out_dir = Path(output_dir)
+        else:
+            out_dir = genome.parent / "indexes" / f"{aligner}_{assembly}"
+        
+        out_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Check if index already exists
+        manager = ReferenceManager(base_dir=genome.parent.parent)
+        if manager._validate_index(aligner, out_dir):
+            return ToolResult(
+                success=True,
+                tool_name="build_index",
+                data={
+                    "path": str(out_dir),
+                    "aligner": aligner,
+                    "already_exists": True,
+                },
+                message=f"✅ Index already exists:\n\n`{out_dir}`"
+            )
+        
+        # Build index
+        logger.info(f"Building {aligner} index: {genome} -> {out_dir}")
+        
+        result_path = manager.build_index(
+            aligner=aligner,
+            genome_path=genome,
+            gtf_path=gtf,
+            output_dir=out_dir,
+            threads=threads,
+            memory_gb=memory_gb,
+        )
+        
+        if result_path and result_path.exists():
+            return ToolResult(
+                success=True,
+                tool_name="build_index",
+                data={
+                    "path": str(result_path),
+                    "aligner": aligner,
+                    "genome": str(genome),
+                    "gtf": str(gtf) if gtf else None,
+                },
+                message=f"""✅ **Index Build Complete**
+
+**Aligner:** {aligner}
+**Index Path:** `{result_path}`
+**Genome:** `{genome.name}`
+"""
+            )
+        else:
+            return ToolResult(
+                success=False,
+                tool_name="build_index",
+                error="Index build failed",
+                message=f"❌ Failed to build {aligner} index\n\nCheck logs for details."
+            )
+            
+    except Exception as e:
+        logger.exception("build_index failed")
+        return ToolResult(
+            success=False,
+            tool_name="build_index",
+            error=str(e),
+            message=f"❌ Index build error: {e}"
+        )

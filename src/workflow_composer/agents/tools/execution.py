@@ -104,21 +104,129 @@ Would you like me to submit this job?
 # =============================================================================
 
 GET_JOB_STATUS_PATTERNS = [
-    r"(?:what(?:'s| is)|show|check)\s+(?:the\s+)?(?:status|progress)\s*(?:of)?\s*(?:job\s*)?(\d+)?",
+    r"(?:what(?:'s| is)|show|check)\s+(?:the\s+)?(?:job\s+)?(?:status|progress)",
     r"(?:how(?:'s| is))\s+(?:the\s+)?(?:job|workflow|pipeline)\s*(?:doing|going|running)?",
+    r"(?:check|show)\s+(?:nextflow|workflow)\s+(?:status|progress)",
+    r"(?:job|slurm)\s+status",
 ]
 
 
-def get_job_status_impl(job_id: str = None) -> ToolResult:
+def get_job_status_impl(
+    job_id: str = None,
+    workflow_dir: str = None,
+) -> ToolResult:
     """
-    Get status of SLURM job(s).
+    Get status of SLURM job(s) and/or Nextflow workflow.
+    
+    Uses WorkflowMonitor for rich Nextflow status when available,
+    falls back to SLURM squeue for HPC job monitoring.
     
     Args:
-        job_id: Specific job ID to check
+        job_id: Specific SLURM job ID to check
+        workflow_dir: Path to workflow directory (for Nextflow status)
         
     Returns:
         ToolResult with job status
     """
+    results = {}
+    messages = []
+    
+    # Try to use WorkflowMonitor for Nextflow status
+    if workflow_dir or not job_id:
+        try:
+            from workflow_composer.monitor.workflow_monitor import WorkflowMonitor
+            use_monitor = True
+        except ImportError:
+            use_monitor = False
+            logger.debug("WorkflowMonitor not available")
+        
+        if use_monitor:
+            # Find workflow directory
+            if workflow_dir:
+                wf_dir = Path(workflow_dir)
+            else:
+                # Try to find most recent workflow
+                possible_dirs = [
+                    Path.cwd() / "work",
+                    Path.cwd() / "generated_workflows",
+                    Path.home() / "BioPipelines" / "generated_workflows",
+                ]
+                
+                wf_dir = None
+                for parent in possible_dirs:
+                    if parent.exists():
+                        # Look for .nextflow.log
+                        if (parent / ".nextflow.log").exists():
+                            wf_dir = parent
+                            break
+                        # Or search subdirectories
+                        for d in parent.iterdir():
+                            if d.is_dir() and (d / ".nextflow.log").exists():
+                                wf_dir = d
+                                break
+                        if wf_dir:
+                            break
+            
+            if wf_dir and wf_dir.exists():
+                try:
+                    monitor = WorkflowMonitor()
+                    execution = monitor.scan_workflow(str(wf_dir))
+                    
+                    if execution:
+                        # Build progress bar
+                        progress = execution.progress
+                        bar_len = 20
+                        filled = int(bar_len * progress / 100)
+                        bar = "█" * filled + "░" * (bar_len - filled)
+                        
+                        # Count processes by status
+                        counts = execution.process_counts
+                        
+                        status_emoji = {
+                            "pending": "⏳",
+                            "running": "🔄",
+                            "completed": "✅", 
+                            "failed": "❌",
+                            "cached": "📦",
+                        }
+                        
+                        status_lines = []
+                        for status, count in counts.items():
+                            if count > 0:
+                                emoji = status_emoji.get(status, "•")
+                                status_lines.append(f"  {emoji} {status.title()}: {count}")
+                        
+                        duration = ""
+                        if execution.duration:
+                            mins = int(execution.duration // 60)
+                            secs = int(execution.duration % 60)
+                            duration = f"\n**Duration:** {mins}m {secs}s"
+                        
+                        workflow_msg = f"""📊 **Nextflow Workflow Status**
+
+**Workflow:** {execution.name}
+**Status:** {execution.status.value.upper()}
+**Progress:** [{bar}] {progress:.1f}%{duration}
+
+**Process Summary:**
+{chr(10).join(status_lines)}
+"""
+                        
+                        if execution.error_message:
+                            workflow_msg += f"\n**Error:**\n```\n{execution.error_message[:300]}...\n```"
+                        
+                        messages.append(workflow_msg)
+                        results["nextflow"] = {
+                            "workflow": execution.name,
+                            "status": execution.status.value,
+                            "progress": progress,
+                            "processes": counts,
+                        }
+                        
+                except Exception as e:
+                    logger.debug(f"WorkflowMonitor scan failed: {e}")
+    
+    # Also check SLURM if available
     try:
         if job_id:
             cmd = ["squeue", "-j", str(job_id), "-o", "%.18i %.9P %.30j %.8u %.8T %.10M %.9l %.6D %R"]
@@ -127,62 +235,50 @@ def get_job_status_impl(job_id: str = None) -> ToolResult:
         
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         
-        if result.returncode != 0:
-            return ToolResult(
-                success=False,
-                tool_name="get_job_status",
-                error=result.stderr,
-                message=f"❌ Failed to get job status: {result.stderr}"
-            )
-        
-        lines = result.stdout.strip().split('\n')
-        
-        if len(lines) <= 1:
-            message = "✅ No running jobs found."
-            if job_id:
-                message = f"✅ Job {job_id} has completed or doesn't exist."
-        else:
-            job_table = "\n".join(lines)
-            message = f"""📊 **Job Status**
+        if result.returncode == 0:
+            lines = result.stdout.strip().split('\n')
+            
+            if len(lines) <= 1:
+                if job_id:
+                    messages.append(f"✅ SLURM job {job_id} has completed or doesn't exist.")
+                else:
+                    messages.append("✅ No running SLURM jobs.")
+            else:
+                job_table = "\n".join(lines)
+                messages.append(f"""📋 **SLURM Jobs**
 
 ```
 {job_table}
 ```
 
-**Legend:**
-- **PD**: Pending
-- **R**: Running
-- **CG**: Completing
-"""
-        
-        return ToolResult(
-            success=True,
-            tool_name="get_job_status",
-            data={"output": result.stdout},
-            message=message
-        )
-        
+**Legend:** PD=Pending, R=Running, CG=Completing
+""")
+            
+            results["slurm"] = {"output": result.stdout}
+            
     except FileNotFoundError:
-        return ToolResult(
-            success=False,
-            tool_name="get_job_status",
-            error="SLURM not available",
-            message="❌ SLURM is not available on this system."
-        )
+        # SLURM not available - only show if no other results
+        if not results:
+            messages.append("ℹ️ SLURM is not available on this system.")
     except subprocess.TimeoutExpired:
-        return ToolResult(
-            success=False,
-            tool_name="get_job_status",
-            error="Command timed out",
-            message="❌ Job status check timed out."
-        )
+        messages.append("⚠️ SLURM status check timed out.")
     except Exception as e:
+        logger.debug(f"SLURM check failed: {e}")
+    
+    if not messages:
         return ToolResult(
             success=False,
             tool_name="get_job_status",
-            error=str(e),
-            message=f"❌ Error checking job status: {e}"
+            error="No status information available",
+            message="❌ Could not get job status. Specify a workflow directory or job ID."
         )
+    
+    return ToolResult(
+        success=True,
+        tool_name="get_job_status",
+        data=results,
+        message="\n\n".join(messages)
+    )
 
 
 # =============================================================================
