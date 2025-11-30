@@ -100,11 +100,11 @@ class ExperimentRunner:
     
     def _get_parser(self):
         """Lazy load the parser."""
-        if self._parser is not None:
-            return self._parser
-            
         if self._parser_func is not None:
             return self._parser_func
+        
+        if self._parser is not None:
+            return lambda q: self._parse_with_ensemble(q)
         
         try:
             from workflow_composer.agents.intent.unified_ensemble import UnifiedEnsembleParser
@@ -129,8 +129,8 @@ class ExperimentRunner:
                 # Ensure uppercase for consistency with expected format
                 entity_type = entity_type.upper()
                 
-                # Get the value - prefer text (original) over canonical
-                entity_value = entity.text if hasattr(entity, 'text') else str(entity)
+                # Get the canonical value (preferred) or original text
+                entity_value = getattr(entity, 'canonical', None) or (entity.text if hasattr(entity, 'text') else str(entity))
                 
                 # Store as single value, not list (expected format uses single values)
                 # If we already have this type, keep first occurrence
