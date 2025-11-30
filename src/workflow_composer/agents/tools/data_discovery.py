@@ -487,6 +487,10 @@ def get_dataset_details_impl(dataset_id: str = None) -> ToolResult:
     
     dataset_id = dataset_id.strip()
     
+    # Normalize case for known ID formats
+    if dataset_id.upper().startswith(("GSE", "ENCSR", "TCGA")):
+        dataset_id = dataset_id.upper()
+    
     # Determine source from ID format
     if dataset_id.startswith("GSE"):
         source = "geo"

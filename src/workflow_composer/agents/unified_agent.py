@@ -1049,6 +1049,7 @@ class UnifiedAgent:
             ToolName.SCAN_DATA: ["path"],
             ToolName.SEARCH_DATABASES: ["query"],
             ToolName.SEARCH_TCGA: ["query", "cancer_type"],
+            ToolName.GET_DATASET_DETAILS: ["dataset_id"],
             ToolName.DESCRIBE_FILES: ["path"],
             ToolName.VALIDATE_DATASET: ["path"],
             ToolName.DOWNLOAD_DATASET: ["dataset_id", "destination"],
