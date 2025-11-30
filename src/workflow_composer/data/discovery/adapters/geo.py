@@ -8,6 +8,8 @@ Search and download data from NCBI GEO and SRA.
 - SRA (Sequence Read Archive): Raw sequencing data
 
 Uses NCBI Entrez E-utilities API.
+
+Includes circuit breaker protection for API resilience.
 """
 
 import logging
@@ -23,7 +25,25 @@ from ..models import (
     FileType, DownloadMethod
 )
 
+# Import circuit breaker for resilience
+from workflow_composer.infrastructure.resilience import (
+    CircuitBreaker,
+    CircuitBreakerConfig,
+    CircuitState,
+    get_circuit_breaker,
+)
+
 logger = logging.getLogger(__name__)
+
+# Circuit breaker configuration for GEO/NCBI API
+GEO_CIRCUIT_NAME = "geo_ncbi_api"
+GEO_CIRCUIT_CONFIG = CircuitBreakerConfig(
+    failure_threshold=5,
+    success_threshold=2,
+    timeout=30.0,
+    failure_window=60.0,
+    half_open_max_calls=1,
+)
 
 # Try to import Biopython for Entrez
 try:
@@ -92,6 +112,12 @@ class GEOAdapter(BaseAdapter):
         Returns:
             List of matching datasets (GSE series)
         """
+        # Check circuit breaker
+        circuit = get_circuit_breaker(GEO_CIRCUIT_NAME, GEO_CIRCUIT_CONFIG)
+        if not circuit.can_execute():
+            logger.warning(f"GEO circuit breaker is OPEN - returning empty results")
+            return []
+        
         # Check cache
         cache_key = self._build_cache_key(query)
         cached = self._get_cached(cache_key)
@@ -108,11 +134,16 @@ class GEOAdapter(BaseAdapter):
             else:
                 datasets = self._search_with_rest(search_term, query.max_results)
             
+            # Record success
+            circuit.record_success()
+            
             self._set_cached(cache_key, datasets)
             logger.info(f"Found {len(datasets)} datasets from GEO")
             return datasets
             
         except Exception as e:
+            # Record failure
+            circuit.record_failure()
             logger.error(f"GEO search failed: {e}")
             return []
     
@@ -126,6 +157,12 @@ class GEOAdapter(BaseAdapter):
         Returns:
             Dataset info or None
         """
+        # Check circuit breaker
+        circuit = get_circuit_breaker(GEO_CIRCUIT_NAME, GEO_CIRCUIT_CONFIG)
+        if not circuit.can_execute():
+            logger.warning(f"GEO circuit breaker is OPEN - cannot fetch dataset {dataset_id}")
+            return None
+        
         cache_key = f"dataset:{dataset_id}"
         cached = self._get_cached(cache_key)
         if cached:
@@ -143,12 +180,17 @@ class GEOAdapter(BaseAdapter):
                 logger.warning(f"Unknown GEO/SRA ID format: {dataset_id}")
                 return None
             
+            # Record success
+            circuit.record_success()
+            
             if dataset:
                 self._set_cached(cache_key, dataset)
             
             return dataset
             
         except Exception as e:
+            # Record failure
+            circuit.record_failure()
             logger.error(f"Failed to get GEO dataset {dataset_id}: {e}")
             return None
     
@@ -524,3 +566,20 @@ def search_geo(
     )
     adapter = GEOAdapter()
     return adapter.search(query)
+
+
+def get_geo_circuit_status() -> Dict[str, Any]:
+    """Get the current status of the GEO circuit breaker.
+    
+    Returns:
+        Dictionary with circuit breaker state and statistics
+    """
+    circuit = get_circuit_breaker(GEO_CIRCUIT_NAME, GEO_CIRCUIT_CONFIG)
+    return {
+        "name": GEO_CIRCUIT_NAME,
+        "state": circuit.state.value,
+        "is_open": circuit.state == CircuitState.OPEN,
+        "failure_count": circuit.failure_count,
+        "success_count": circuit.success_count,
+        "can_execute": circuit.can_execute(),
+    }

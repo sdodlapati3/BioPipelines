@@ -31,11 +31,13 @@ from .data_discovery import (
     SEARCH_TCGA_PATTERNS,
     DESCRIBE_FILES_PATTERNS,
     VALIDATE_DATASET_PATTERNS,
+    GET_DATASET_DETAILS_PATTERNS,
     scan_data_impl,
     search_databases_impl,
     search_tcga_impl,
     describe_files_impl,
     validate_dataset_impl,
+    get_dataset_details_impl,
 )
 
 from .data_management import (
@@ -114,6 +116,7 @@ ALL_TOOL_PATTERNS = [
     (ToolName.SCAN_DATA, SCAN_DATA_PATTERNS),
     (ToolName.SEARCH_DATABASES, SEARCH_DATABASES_PATTERNS),
     (ToolName.SEARCH_TCGA, SEARCH_TCGA_PATTERNS),
+    (ToolName.GET_DATASET_DETAILS, GET_DATASET_DETAILS_PATTERNS),
     (ToolName.DESCRIBE_FILES, DESCRIBE_FILES_PATTERNS),
     (ToolName.VALIDATE_DATASET, VALIDATE_DATASET_PATTERNS),
     
@@ -212,6 +215,7 @@ class AgentTools:
             "scan_data": lambda **kw: scan_data_impl(scanner=self._scanner, manifest=self._manifest, **kw),
             "search_databases": lambda **kw: search_databases_impl(**kw),
             "search_tcga": lambda **kw: search_tcga_impl(**kw),
+            "get_dataset_details": lambda **kw: get_dataset_details_impl(**kw),
             "describe_files": lambda **kw: describe_files_impl(**kw),
             "validate_dataset": lambda **kw: validate_dataset_impl(**kw),
             
@@ -289,6 +293,7 @@ class AgentTools:
         ToolName.SCAN_DATA: ["path"],
         ToolName.SEARCH_DATABASES: ["query"],
         ToolName.SEARCH_TCGA: ["query", "cancer_type"],
+        ToolName.GET_DATASET_DETAILS: ["dataset_id"],
         ToolName.DESCRIBE_FILES: ["path"],
         ToolName.VALIDATE_DATASET: ["path"],
         ToolName.DOWNLOAD_DATASET: ["dataset_id", "destination"],
@@ -844,6 +849,16 @@ def process_tool_request(tool_name_or_message: str, args_or_state=None) -> Optio
 # CONVENIENCE EXPORTS
 # =============================================================================
 
+# Proactive Prefetching (Phase 5)
+from .prefetch import (
+    PrefetchManager,
+    PrefetchTask,
+    PrefetchConfig,
+    PrefetchStrategy,
+    BackgroundExecutor,
+    get_prefetch_manager,
+)
+
 __all__ = [
     # Base types
     "ToolResult",
@@ -864,4 +879,12 @@ __all__ = [
     
     # Knowledge base
     "CONCEPT_KNOWLEDGE",
+    
+    # Proactive Prefetching (Phase 5)
+    "PrefetchManager",
+    "PrefetchTask",
+    "PrefetchConfig",
+    "PrefetchStrategy",
+    "BackgroundExecutor",
+    "get_prefetch_manager",
 ]

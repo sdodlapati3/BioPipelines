@@ -21,6 +21,7 @@ class ToolName(Enum):
     SEARCH_TCGA = "search_tcga"
     DESCRIBE_FILES = "describe_files"
     VALIDATE_DATASET = "validate_dataset"
+    GET_DATASET_DETAILS = "get_dataset_details"
     
     # Data Management
     DOWNLOAD_DATASET = "download_dataset"

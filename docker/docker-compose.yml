@@ -1,0 +1,153 @@
+# BioPipelines Docker Compose Configuration
+# Full stack with API, Celery worker, Redis, and PostgreSQL
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: biopipelines-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-biopipelines}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-biopipelines_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-biopipelines}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-biopipelines}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - biopipelines-net
+
+  # Redis for caching and Celery broker
+  redis:
+    image: redis:7-alpine
+    container_name: biopipelines-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - biopipelines-net
+
+  # API Server
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+    container_name: biopipelines-api
+    ports:
+      - "${API_PORT:-8000}:8000"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-biopipelines}:${POSTGRES_PASSWORD:-biopipelines_dev}@postgres:5432/${POSTGRES_DB:-biopipelines}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - APP_ENV=${APP_ENV:-production}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - API_KEY_PREFIX=bpa_
+      - RATE_LIMIT_REQUESTS=${RATE_LIMIT_REQUESTS:-100}
+      - RATE_LIMIT_WINDOW=${RATE_LIMIT_WINDOW:-60}
+      # LLM API Keys (optional)
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 10s
+      retries: 3
+    networks:
+      - biopipelines-net
+    volumes:
+      - workflow_outputs:/app/generated_workflows
+      - logs:/app/logs
+
+  # Celery Worker
+  worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.worker
+    container_name: biopipelines-worker
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-biopipelines}:${POSTGRES_PASSWORD:-biopipelines_dev}@postgres:5432/${POSTGRES_DB:-biopipelines}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - APP_ENV=${APP_ENV:-production}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      # LLM API Keys
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - biopipelines-net
+    volumes:
+      - workflow_outputs:/app/generated_workflows
+      - logs:/app/logs
+    deploy:
+      replicas: ${WORKER_REPLICAS:-2}
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+
+  # Celery Beat (Scheduler)
+  beat:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.worker
+    container_name: biopipelines-beat
+    command: celery -A workflow_composer.jobs.celery_app beat --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-biopipelines}:${POSTGRES_PASSWORD:-biopipelines_dev}@postgres:5432/${POSTGRES_DB:-biopipelines}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - APP_ENV=${APP_ENV:-production}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - biopipelines-net
+
+  # Flower - Celery monitoring (optional)
+  flower:
+    image: mher/flower:2.0
+    container_name: biopipelines-flower
+    command: celery --broker=redis://redis:6379/1 flower --port=5555
+    ports:
+      - "${FLOWER_PORT:-5555}:5555"
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/1
+    depends_on:
+      - redis
+    networks:
+      - biopipelines-net
+    profiles:
+      - monitoring
+
+
+volumes:
+  postgres_data:
+  redis_data:
+  workflow_outputs:
+  logs:
+
+
+networks:
+  biopipelines-net:
+    driver: bridge

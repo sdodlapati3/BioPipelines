@@ -1,0 +1,71 @@
+"""RAG-Enhanced Tool System for BioPipelines.
+
+This module provides a layered RAG (Retrieval-Augmented Generation) system
+for improving tool selection and argument optimization based on past
+successful executions.
+
+Architecture:
+    Layer 1 (memory.py):       ToolMemory - Records all executions
+    Layer 2 (arg_memory.py):   ArgumentMemory - Learns optimal arguments
+    Layer 3 (tool_selector.py): RAGToolSelector - Selects best tool
+    Orchestrator:              RAGOrchestrator - Coordinates all layers
+
+Example:
+    >>> from workflow_composer.agents.rag import RAGOrchestrator
+    >>> rag = RAGOrchestrator()
+    >>> 
+    >>> # Enhance tool execution
+    >>> best_tool, optimized_args = rag.enhance(
+    ...     query="find H3K4me3 ChIP-seq data",
+    ...     candidate_tools=["search_databases", "search_encode"],
+    ...     base_args={"limit": 50}
+    ... )
+"""
+
+from .memory import (
+    ToolMemory,
+    ToolMemoryConfig,
+    ToolExecutionRecord,
+    ToolStats,
+    get_tool_memory,
+)
+from .arg_memory import (
+    ArgumentMemory,
+    ArgumentMemoryConfig,
+    ArgumentSuggestion,
+    get_argument_memory,
+)
+from .tool_selector import (
+    RAGToolSelector,
+    RAGSelectorConfig,
+    ToolBoost,
+    get_rag_selector,
+)
+from .orchestrator import (
+    RAGOrchestrator,
+    RAGConfig,
+    get_rag_orchestrator,
+)
+
+__all__ = [
+    # Layer 1: Memory
+    "ToolMemory",
+    "ToolMemoryConfig",
+    "ToolExecutionRecord",
+    "ToolStats",
+    "get_tool_memory",
+    # Layer 2: Argument Optimization
+    "ArgumentMemory",
+    "ArgumentMemoryConfig",
+    "ArgumentSuggestion",
+    "get_argument_memory",
+    # Layer 3: Tool Selection
+    "RAGToolSelector",
+    "RAGSelectorConfig",
+    "ToolBoost",
+    "get_rag_selector",
+    # Orchestrator
+    "RAGOrchestrator",
+    "RAGConfig",
+    "get_rag_orchestrator",
+]

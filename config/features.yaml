@@ -1,0 +1,78 @@
+# BioPipelines Feature Flags Configuration
+# Controls gradual rollout of new features
+
+features:
+  # RAG Layers - Build in order L1 → L2 → L3
+  rag:
+    layer_1_memory: true          # Tool execution recording (analytics) - Always on
+    layer_2_arguments: true       # Argument optimization - Enabled
+    layer_3_selection: false      # Tool selection boost - Enable after specialized tools added
+  
+  # Infrastructure Features
+  infrastructure:
+    redis_cache: true             # Redis for semantic cache
+    redis_fallback: true          # Fall back to in-memory if Redis unavailable
+    prefetch: false               # Speculative prefetching - Disabled until metrics prove value
+    distributed_tracing: false    # OpenTelemetry export - Enable for production debugging
+  
+  # API Features  
+  api:
+    rest_api: true                # FastAPI REST endpoints
+    rate_limiting: true           # Per-user rate limits
+    api_key_auth: true            # API key authentication
+    websocket_status: false       # WebSocket for real-time job status - Future
+  
+  # Job Queue Features
+  jobs:
+    celery_tasks: true            # Async task processing
+    celery_beat: true             # Scheduled tasks
+    job_cleanup: true             # Automatic cleanup of old jobs
+    workflow_caching: false       # Cache generated workflows - Enable after validation
+  
+  # Observability
+  observability:
+    structured_logging: true      # JSON logging format
+    request_tracing: true         # Trace ID in all requests
+    metrics_endpoint: true        # /metrics endpoint
+    health_detailed: true         # Detailed health check info
+
+
+# Feature-specific configuration
+feature_config:
+  rate_limiting:
+    default_requests_per_minute: 100
+    burst_limit: 150
+    window_seconds: 60
+  
+  job_cleanup:
+    retention_days: 30
+    completed_retention_days: 7
+  
+  rag_layer_2:
+    min_confidence_threshold: 0.5
+    max_suggestions: 5
+    similarity_threshold: 0.7
+  
+  rag_layer_3:
+    min_history_entries: 10       # Need at least 10 similar queries before boosting
+    max_boost: 0.3                # Maximum confidence boost
+    decay_days: 30                # Older entries count less
+
+
+# Environment-specific overrides
+environments:
+  development:
+    features:
+      api.rate_limiting: false    # Disable rate limiting in dev
+      infrastructure.redis_cache: false  # Use in-memory in dev
+      observability.metrics_endpoint: false
+  
+  testing:
+    features:
+      jobs.celery_tasks: false    # Use sync executor in tests
+      infrastructure.redis_cache: false
+  
+  production:
+    features:
+      infrastructure.distributed_tracing: true
+      observability.metrics_endpoint: true

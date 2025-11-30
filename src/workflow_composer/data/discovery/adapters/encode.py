@@ -25,6 +25,13 @@ from ..models import (
     FileType, DownloadMethod
 )
 
+# Import resilience patterns
+from workflow_composer.infrastructure.resilience import (
+    get_circuit_breaker,
+    CircuitBreakerConfig,
+    CircuitBreakerError,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -57,6 +64,8 @@ class ENCODEAdapter(BaseAdapter):
     """
     Adapter for the ENCODE Project portal.
     
+    Features circuit breaker protection for resilience against API failures.
+    
     Usage:
         adapter = ENCODEAdapter()
         results = adapter.search(SearchQuery(
@@ -73,6 +82,15 @@ class ENCODEAdapter(BaseAdapter):
     BASE_URL = "https://www.encodeproject.org"
     SEARCH_URL = f"{BASE_URL}/search/"
     
+    # Circuit breaker configuration
+    CIRCUIT_NAME = "encode_api"
+    CIRCUIT_CONFIG = CircuitBreakerConfig(
+        failure_threshold=5,      # Open after 5 failures
+        success_threshold=2,      # Close after 2 successes
+        timeout=30.0,             # 30 seconds before trying again
+        failure_window=60.0,      # Track failures over 1 minute
+    )
+    
     def __init__(self, cache_enabled: bool = True, timeout: int = 30):
         """Initialize the ENCODE adapter."""
         super().__init__(cache_enabled, timeout)
@@ -81,10 +99,18 @@ class ENCODEAdapter(BaseAdapter):
             "Accept": "application/json",
             "User-Agent": "BioPipelines/1.0"
         })
+        # Get or create circuit breaker for this adapter
+        self._circuit_breaker = get_circuit_breaker(
+            self.CIRCUIT_NAME,
+            self.CIRCUIT_CONFIG
+        )
     
     def search(self, query: SearchQuery) -> List[DatasetInfo]:
         """
         Search ENCODE for datasets matching the query.
+        
+        Uses circuit breaker protection - if ENCODE is repeatedly failing,
+        returns empty results without making network calls.
         
         Args:
             query: Structured search query
@@ -92,6 +118,14 @@ class ENCODEAdapter(BaseAdapter):
         Returns:
             List of matching datasets
         """
+        # Check circuit breaker first - fail fast if ENCODE is known to be down
+        if not self._circuit_breaker.can_execute():
+            logger.warning(
+                f"ENCODE circuit breaker is OPEN - skipping search "
+                f"(next retry at {self._circuit_breaker.next_retry_at})"
+            )
+            return []
+        
         # Check cache
         cache_key = self._build_cache_key(query)
         cached = self._get_cached(cache_key)
@@ -124,10 +158,15 @@ class ENCODEAdapter(BaseAdapter):
             # Cache results
             self._set_cached(cache_key, datasets)
             
+            # Record success with circuit breaker
+            self._circuit_breaker.record_success()
+            
             logger.info(f"Found {len(datasets)} datasets from ENCODE")
             return datasets
             
         except requests.RequestException as e:
+            # Record failure with circuit breaker
+            self._circuit_breaker.record_failure()
             logger.error(f"ENCODE search failed: {e}")
             # Try alternative search approach
             return self._fallback_search(query)
@@ -442,6 +481,20 @@ class ENCODEAdapter(BaseAdapter):
         except Exception as e:
             logger.warning(f"Failed to parse ENCODE file: {e}")
             return None
+    
+    def get_circuit_status(self) -> Dict[str, Any]:
+        """
+        Get the current circuit breaker status.
+        
+        Returns:
+            Dict with state, failure_count, success_count, etc.
+        """
+        return self._circuit_breaker.get_metrics()
+    
+    def reset_circuit(self) -> None:
+        """Reset the circuit breaker to closed state."""
+        self._circuit_breaker.reset()
+        logger.info("ENCODE circuit breaker reset to CLOSED state")
 
 
 # Convenience function

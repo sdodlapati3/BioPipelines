@@ -5,6 +5,8 @@ GDC/TCGA Adapter
 Adapter for NCI Genomic Data Commons (GDC) including TCGA, TARGET, and other projects.
 
 API Documentation: https://docs.gdc.cancer.gov/API/Users_Guide/
+
+Includes circuit breaker protection for API resilience.
 """
 
 import logging
@@ -16,7 +18,25 @@ import httpx
 from .base import BaseAdapter
 from ..models import SearchQuery, DatasetInfo, DataSource, DownloadURL
 
+# Import circuit breaker for resilience
+from workflow_composer.infrastructure.resilience import (
+    CircuitBreaker,
+    CircuitBreakerConfig,
+    CircuitState,
+    get_circuit_breaker,
+)
+
 logger = logging.getLogger(__name__)
+
+# Circuit breaker configuration for GDC API
+GDC_CIRCUIT_NAME = "gdc_api"
+GDC_CIRCUIT_CONFIG = CircuitBreakerConfig(
+    failure_threshold=5,
+    success_threshold=2,
+    timeout=30.0,
+    failure_window=60.0,
+    half_open_max_calls=1,
+)
 
 
 class GDCAdapter(BaseAdapter):
@@ -129,22 +149,38 @@ class GDCAdapter(BaseAdapter):
         Returns:
             List of search results
         """
+        # Check circuit breaker
+        circuit = get_circuit_breaker(GDC_CIRCUIT_NAME, GDC_CIRCUIT_CONFIG)
+        if not circuit.can_execute():
+            logger.warning(f"GDC circuit breaker is OPEN - returning empty results")
+            return []
+        
         results = []
         
-        # Detect project from keywords
-        project_ids = self._detect_projects(query)
-        data_type = self._detect_data_type(query)
-        
-        if project_ids:
-            # Search for specific projects
-            for project_id in project_ids[:3]:  # Limit to 3 projects
-                project_results = self._search_project_files(
-                    project_id, data_type, max_results // len(project_ids)
-                )
-                results.extend(project_results)
-        else:
-            # General search
-            results = self._general_search(query, data_type, max_results)
+        try:
+            # Detect project from keywords
+            project_ids = self._detect_projects(query)
+            data_type = self._detect_data_type(query)
+            
+            if project_ids:
+                # Search for specific projects
+                for project_id in project_ids[:3]:  # Limit to 3 projects
+                    project_results = self._search_project_files(
+                        project_id, data_type, max_results // len(project_ids)
+                    )
+                    results.extend(project_results)
+            else:
+                # General search
+                results = self._general_search(query, data_type, max_results)
+            
+            # Record success
+            circuit.record_success()
+            
+        except Exception as e:
+            # Record failure
+            circuit.record_failure()
+            logger.error(f"GDC search failed: {e}")
+            return []
         
         return results[:max_results]
     
@@ -445,6 +481,12 @@ class GDCAdapter(BaseAdapter):
     
     def get_dataset(self, dataset_id: str) -> Optional[DatasetInfo]:
         """Get detailed information about a specific GDC file or project."""
+        # Check circuit breaker
+        circuit = get_circuit_breaker(GDC_CIRCUIT_NAME, GDC_CIRCUIT_CONFIG)
+        if not circuit.can_execute():
+            logger.warning(f"GDC circuit breaker is OPEN - cannot fetch dataset {dataset_id}")
+            return None
+        
         # Try as file first
         try:
             import json
@@ -463,6 +505,7 @@ class GDCAdapter(BaseAdapter):
             
             hits = data.get("data", {}).get("hits", [])
             if hits:
+                circuit.record_success()
                 return self._parse_file_hit(hits[0], dataset_id.split("-")[0] if "-" in dataset_id else "TCGA")
         except Exception as e:
             logger.debug(f"File lookup failed: {e}")
@@ -476,10 +519,13 @@ class GDCAdapter(BaseAdapter):
                 data = response.json()
             
             if data.get("data"):
+                circuit.record_success()
                 return self._parse_project_hit(data["data"], None)
         except Exception as e:
             logger.debug(f"Project lookup failed: {e}")
         
+        # Record failure if both attempts failed
+        circuit.record_failure()
         return None
     
     def get_download_urls(self, dataset_id: str) -> List[DownloadURL]:
@@ -561,3 +607,20 @@ def search_gdc(
     
     adapter = GDCAdapter()
     return adapter.search(query, max_results=max_results)
+
+
+def get_gdc_circuit_status() -> Dict[str, Any]:
+    """Get the current status of the GDC circuit breaker.
+    
+    Returns:
+        Dictionary with circuit breaker state and statistics
+    """
+    circuit = get_circuit_breaker(GDC_CIRCUIT_NAME, GDC_CIRCUIT_CONFIG)
+    return {
+        "name": GDC_CIRCUIT_NAME,
+        "state": circuit.state.value,
+        "is_open": circuit.state == CircuitState.OPEN,
+        "failure_count": circuit.failure_count,
+        "success_count": circuit.success_count,
+        "can_execute": circuit.can_execute(),
+    }

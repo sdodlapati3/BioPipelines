@@ -183,6 +183,16 @@ from .classification import (
     TaskType,
 )
 
+# RAG-Enhanced Tool Selection (Phase 6)
+from .tool_memory import (
+    ToolMemory,
+    ToolExecutionRecord,
+    RAGToolSelector,
+    ToolBoost,
+    get_tool_memory,
+    get_rag_selector,
+)
+
 __all__ = [
     # === PRIMARY: Unified Agent (Recommended Entry Point) ===
     "UnifiedAgent",
@@ -296,4 +306,11 @@ __all__ = [
     "FileReadTool",
     "FileWriteTool",
     "SystemHealthTool",
+    # RAG-Enhanced Tool Selection (Phase 6)
+    "ToolMemory",
+    "ToolExecutionRecord",
+    "RAGToolSelector",
+    "ToolBoost",
+    "get_tool_memory",
+    "get_rag_selector",
 ]

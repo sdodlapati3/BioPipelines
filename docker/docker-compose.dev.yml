@@ -1,0 +1,46 @@
+# BioPipelines Development Docker Compose
+# Lightweight setup for local development
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: biopipelines-db-dev
+    environment:
+      POSTGRES_USER: biopipelines
+      POSTGRES_PASSWORD: dev_password
+      POSTGRES_DB: biopipelines_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U biopipelines"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - biopipelines-dev-net
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: biopipelines-redis-dev
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - biopipelines-dev-net
+
+
+volumes:
+  postgres_dev_data:
+
+
+networks:
+  biopipelines-dev-net:
+    driver: bridge

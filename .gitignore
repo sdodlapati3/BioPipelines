@@ -97,6 +97,10 @@ pipelines/**/*.fastq.gz
 SURVIVOR/
 cache/
 
+# Environment files
+.env
+docker/.env
+
 # Temporary files
 *.tmp
 *.swp

@@ -75,6 +75,12 @@ from .classification import TaskType, classify_task as _classify_task_impl
 # Intent parsing (hybrid parser integration)
 from .intent import HybridQueryParser, QueryParseResult, ConversationContext, DialogueManager
 
+# Observability - distributed tracing
+from workflow_composer.infrastructure.observability import get_tracer, traced, get_metrics
+
+# RAG system for tool selection and argument optimization
+from .rag import RAGOrchestrator
+
 logger = logging.getLogger(__name__)
 
 
@@ -295,6 +301,7 @@ TOOL_PERMISSION_MAPPING = {
     ToolName.VISUALIZE_WORKFLOW: "read",
     ToolName.MONITOR_JOBS: "read",
     ToolName.RUN_COMMAND: "execute",
+    ToolName.GET_DATASET_DETAILS: "read",  # New: dataset details is read-only
     
     # Write/execute tools (may need approval)
     ToolName.DOWNLOAD_DATASET: "write",
@@ -391,6 +398,9 @@ class UnifiedAgent:
         self._job_monitor: Optional[JobMonitor] = None
         self._orchestrator = None
         
+        # RAG orchestrator for tool selection and argument optimization
+        self._rag_orchestrator: Optional[RAGOrchestrator] = None
+        
         # Hybrid intent parser (lazy loaded)
         self._query_parser: Optional[HybridQueryParser] = None
         
@@ -412,6 +422,27 @@ class UnifiedAgent:
         if self._tools is None:
             self._tools = get_agent_tools()
         return self._tools
+    
+    @property
+    def rag(self) -> RAGOrchestrator:
+        """
+        Get or initialize the RAG orchestrator.
+        
+        Provides:
+        - Tool selection boosting based on past successes
+        - Argument optimization from similar queries
+        - Execution recording for learning
+        """
+        if self._rag_orchestrator is None:
+            try:
+                self._rag_orchestrator = RAGOrchestrator()
+                # Warm up RAG cache in background
+                self._rag_orchestrator.warm_up()
+                logger.info("RAGOrchestrator initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize RAGOrchestrator: {e}")
+                self._rag_orchestrator = None
+        return self._rag_orchestrator
         
     @property
     def query_parser(self) -> HybridQueryParser:
@@ -620,6 +651,20 @@ class UnifiedAgent:
             # Store search results for "download all" support
             if tool_name == ToolName.SEARCH_DATABASES and result.success:
                 self._store_search_results(result)
+            
+            # Record successful execution in RAG system for learning
+            if result.success and self.rag:
+                try:
+                    self.rag.record_execution(
+                        query=str(kwargs.get('query', '')),
+                        tool_name=tool_name.value,
+                        tool_args=kwargs,
+                        success=True,
+                        duration_ms=(datetime.now() - start_time).total_seconds() * 1000,
+                        result_count=len(result.data) if isinstance(result.data, (list, dict)) else 1,
+                    )
+                except Exception as e:
+                    logger.debug(f"RAG recording failed: {e}")
                 
         except Exception as e:
             logger.error(f"Tool execution failed: {e}")
@@ -629,6 +674,20 @@ class UnifiedAgent:
                 data={},
                 suggestions=["Check the error message", "Try with different parameters"],
             )
+            
+            # Record failure in RAG system for learning
+            if self.rag:
+                try:
+                    self.rag.record_execution(
+                        query=str(kwargs.get('query', '')),
+                        tool_name=tool_name.value,
+                        tool_args=kwargs,
+                        success=False,
+                        duration_ms=(datetime.now() - start_time).total_seconds() * 1000,
+                        error_message=str(e),
+                    )
+                except Exception as mem_e:
+                    logger.debug(f"RAG recording failed: {mem_e}")
             
         # Calculate duration
         duration_ms = (datetime.now() - start_time).total_seconds() * 1000
@@ -655,6 +714,7 @@ class UnifiedAgent:
         This is the main entry point for the agent.
         Uses hybrid intent parsing (semantic + pattern + NER) for robust detection.
         Maintains conversation context across turns.
+        Fully instrumented with distributed tracing.
         
         Args:
             query: User's natural language query
@@ -662,42 +722,63 @@ class UnifiedAgent:
         Returns:
             AgentResponse with results
         """
-        logger.info(f"Processing query: {query[:100]}...")
+        # Create tracing span for the entire query processing
+        tracer = get_tracer()
+        metrics = get_metrics()
         
-        # Classify the task
-        task_type = classify_task(query)
-        logger.info(f"Task classified as: {task_type.value}")
-        
-        # Try hybrid intent parsing first (semantic + pattern + NER)
-        detected_tool = None
-        detected_args = []
-        hybrid_params = None  # Params from hybrid parser (preferred)
-        parse_result: Optional[QueryParseResult] = None
-        extracted_entities = []  # For context tracking
-        
-        if self.query_parser:
-            try:
-                parse_result = self.query_parser.parse(query)
-                logger.info(f"HybridParser: intent={parse_result.intent}, confidence={parse_result.intent_confidence:.2f}")
-                
-                # Extract entities for context
-                extracted_entities = parse_result.entities if parse_result.entities else []
-                
-                # Map intent to tool if confidence is reasonable (0.35 threshold allows semantic matching)
-                if parse_result.intent_confidence >= 0.35 and parse_result.intent in INTENT_TO_TOOL:
-                    detected_tool = INTENT_TO_TOOL[parse_result.intent]
+        with tracer.start_span(
+            "process_query",
+            tags={
+                "query_length": len(query),
+                "autonomy_level": self.autonomy_level.value,
+            }
+        ) as span:
+            span.add_event("query_received", {"query_preview": query[:100]})
+            metrics.counter("agent.queries.total")
+            
+            logger.info(f"Processing query: {query[:100]}...")
+            
+            # Classify the task
+            with tracer.start_span("classify_task") as classify_span:
+                task_type = classify_task(query)
+                classify_span.add_tag("task_type", task_type.value)
+            span.add_event("task_classified", {"task_type": task_type.value})
+            logger.info(f"Task classified as: {task_type.value}")
+            
+            # Try hybrid intent parsing first (semantic + pattern + NER)
+            detected_tool = None
+            detected_args = []
+            hybrid_params = None  # Params from hybrid parser (preferred)
+            parse_result: Optional[QueryParseResult] = None
+            extracted_entities = []  # For context tracking
+            
+            if self.query_parser:
+                try:
+                    with tracer.start_span("hybrid_parse") as parse_span:
+                        parse_result = self.query_parser.parse(query)
+                        parse_span.add_tag("intent", parse_result.intent)
+                        parse_span.add_tag("confidence", parse_result.intent_confidence)
+                    logger.info(f"HybridParser: intent={parse_result.intent}, confidence={parse_result.intent_confidence:.2f}")
                     
-                    # Build clean params from slots and entities
-                    hybrid_params = self._build_params_from_parse_result(parse_result, query)
-                    detected_args = list(hybrid_params.values()) if hybrid_params else []
-                    logger.info(f"Mapped intent '{parse_result.intent}' to tool: {detected_tool}, params: {hybrid_params}")
-                
-                # Handle context-aware intents specially
-                if parse_result.intent in ("CONTEXT_RECALL", "CONTEXT_METADATA"):
-                    return await self._handle_context_query(parse_result.intent, query, task_type)
+                    # Extract entities for context
+                    extracted_entities = parse_result.entities if parse_result.entities else []
                     
-            except Exception as e:
-                logger.warning(f"HybridParser failed, falling back to regex: {e}")
+                    # Map intent to tool if confidence is reasonable (0.35 threshold allows semantic matching)
+                    if parse_result.intent_confidence >= 0.35 and parse_result.intent in INTENT_TO_TOOL:
+                        detected_tool = INTENT_TO_TOOL[parse_result.intent]
+                        
+                        # Build clean params from slots and entities
+                        hybrid_params = self._build_params_from_parse_result(parse_result, query)
+                        detected_args = list(hybrid_params.values()) if hybrid_params else []
+                        logger.info(f"Mapped intent '{parse_result.intent}' to tool: {detected_tool}, params: {hybrid_params}")
+                    
+                    # Handle context-aware intents specially
+                    if parse_result.intent in ("CONTEXT_RECALL", "CONTEXT_METADATA"):
+                        return await self._handle_context_query(parse_result.intent, query, task_type)
+                        
+                except Exception as e:
+                    span.add_event("parser_fallback", {"error": str(e)})
+                    logger.warning(f"HybridParser failed, falling back to regex: {e}")
         
         # Add user turn to conversation context
         # Note: We pass entities=[] because BioEntity and Entity have different structures
@@ -763,7 +844,40 @@ class UnifiedAgent:
                 params = self._build_params_from_args(detected_tool, detected_args)
                 if not params:
                     params = self._extract_parameters(query, detected_tool)
-            execution = self.execute_tool(detected_tool, **params)
+            
+            # RAG Enhancement: Optimize arguments based on past successful queries
+            rag_enhanced = False
+            if self.rag:
+                try:
+                    with tracer.start_span("rag_enhance") as rag_span:
+                        enhancement = self.rag.enhance(
+                            query=query,
+                            candidate_tools=[detected_tool.value],
+                            base_args=params
+                        )
+                        # Use RAG-suggested arguments (merged with user-provided)
+                        if enhancement.suggested_args:
+                            # User params override RAG suggestions
+                            params = {**enhancement.suggested_args, **params}
+                            rag_enhanced = True
+                            rag_span.add_tag("args_enhanced", True)
+                            logger.info(f"RAG enhanced params: {list(enhancement.suggested_args.keys())}")
+                except Exception as e:
+                    logger.debug(f"RAG enhancement failed (continuing without): {e}")
+            
+            # Execute the tool with tracing
+            with tracer.start_span(
+                "execute_tool",
+                tags={"tool": detected_tool.value, "rag_enhanced": rag_enhanced}
+            ) as tool_span:
+                execution = self.execute_tool(detected_tool, **params)
+                tool_span.add_tag("success", execution.result.success)
+                if not execution.result.success:
+                    tool_span.set_error(Exception(execution.result.message))
+                metrics.counter(
+                    "agent.tools.executed",
+                    tags={"tool": detected_tool.value, "success": str(execution.result.success)}
+                )
             
             # Build response
             response = self._build_response(
@@ -771,10 +885,16 @@ class UnifiedAgent:
                 executions=[execution],
                 query=query,
             )
+            span.add_tag("response_success", response.success)
             
         else:
             # No specific tool detected - handle as general query
+            span.add_event("general_query", {"reason": "no_tool_detected"})
             response = await self._handle_general_query(query, task_type)
+        
+        # Record final metrics
+        if span.end_time:
+            metrics.histogram("agent.query.duration_ms", span.duration_ms)
         
         # Add assistant response to conversation context
         self.context.add_turn(

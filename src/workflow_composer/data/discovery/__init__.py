@@ -116,6 +116,12 @@ from .adapters import (
     get_mouse_gtf_url,
 )
 
+from .parallel import (
+    ParallelSearchOrchestrator,
+    FederatedSearchResult,
+    parallel_search,
+)
+
 __all__ = [
     # Main orchestrator
     "DataDiscovery",
@@ -145,6 +151,11 @@ __all__ = [
     "EnsemblAdapter",
     "get_adapter",
     "list_available_sources",
+    
+    # Parallel search
+    "ParallelSearchOrchestrator",
+    "FederatedSearchResult",
+    "parallel_search",
     
     # Convenience functions
     "quick_search",
