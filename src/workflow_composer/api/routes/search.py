@@ -10,11 +10,12 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Header, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from workflow_composer.auth.dependencies import check_rate_limit, optional_api_key
 from workflow_composer.auth.models import AuthResult
-from workflow_composer.auth.dependencies import optional_api_key, check_rate_limit
+
 from ..config import get_api_config
 
 logger = logging.getLogger(__name__)
@@ -132,7 +133,7 @@ async def search_databases(
                 rag = get_rag_orchestrator()
                 
                 # Enhance search with RAG
-                enhanced = rag.enhance(
+                enhanced = rag.enhance(  # noqa: F841 (TODO: use in search)
                     query=request.query,
                     candidate_tools=request.databases or ["ENCODE", "GEO"],
                     base_args={

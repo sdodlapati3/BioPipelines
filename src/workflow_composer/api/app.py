@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
-from typing import Any, Dict
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -39,7 +38,7 @@ async def lifespan(app: FastAPI):
     # Initialize database connection if configured
     if config.database_url:
         try:
-            from workflow_composer.db import init_db, DatabaseConfig
+            from workflow_composer.db import DatabaseConfig, init_db
             db_config = DatabaseConfig(url=config.database_url)
             init_db(db_config)
             logger.info("Database initialized")
@@ -166,9 +165,9 @@ def add_routes(app: FastAPI, config: APIConfig) -> None:
     # Import routers
     from .routes import (
         health,
-        workflows,
-        search,
         jobs,
+        search,
+        workflows,
     )
     
     # Include routers

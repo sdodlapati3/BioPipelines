@@ -9,23 +9,22 @@ from __future__ import annotations
 import hashlib
 import secrets
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID
 
+from sqlalchemy import Integer, and_, desc, func
 from sqlalchemy.orm import Session
-from sqlalchemy import func, desc, and_
 
 from .models import (
-    User, 
-    APIKey, 
-    Job, 
-    WorkflowGeneration, 
-    ToolExecution,
-    UserTier,
+    APIKey,
+    Job,
     JobStatus,
+    ToolExecution,
+    User,
+    UserTier,
+    WorkflowGeneration,
     WorkflowType,
 )
-
 
 # =============================================================================
 # User Repository
@@ -84,7 +83,7 @@ class UserRepository:
         """List all users with pagination."""
         query = self.session.query(User)
         if active_only:
-            query = query.filter(User.is_active == True)
+            query = query.filter(User.is_active == True)  # noqa: E712 (SQLAlchemy)
         return query.offset(offset).limit(limit).all()
     
     def update(self, user: User, **kwargs) -> User:
@@ -433,7 +432,7 @@ class ToolExecutionRepository:
             query = query.filter(ToolExecution.created_at >= since)
         
         total = query.count()
-        successful = query.filter(ToolExecution.success == True).count()
+        successful = query.filter(ToolExecution.success == True).count()  # noqa: E712
         
         avg_duration = self.session.query(
             func.avg(ToolExecution.duration_ms)
@@ -490,7 +489,7 @@ class ToolExecutionRepository:
             return []
         
         db_query = self.session.query(ToolExecution).filter(
-            ToolExecution.success == True
+            ToolExecution.success == True  # noqa: E712 (SQLAlchemy)
         )
         
         if tool_name:
@@ -518,7 +517,7 @@ class ToolExecutionRepository:
             .filter(
                 and_(
                     ToolExecution.tool_name == tool_name,
-                    ToolExecution.success == True,
+                    ToolExecution.success == True,  # noqa: E712 (SQLAlchemy)
                 )
             )
             .order_by(desc(ToolExecution.created_at))
@@ -535,7 +534,7 @@ class ToolExecutionRepository:
     ) -> List[ToolExecution]:
         """Get recent error executions for debugging."""
         query = self.session.query(ToolExecution).filter(
-            ToolExecution.success == False
+            ToolExecution.success == False  # noqa: E712 (SQLAlchemy)
         )
         if tool_name:
             query = query.filter(ToolExecution.tool_name == tool_name)
@@ -548,7 +547,3 @@ class ToolExecutionRepository:
             ToolExecution.created_at < cutoff
         ).delete()
         return deleted
-
-
-# Import Integer for the cast
-from sqlalchemy import Integer

@@ -26,7 +26,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from .memory import ToolMemory, ToolExecutionRecord, get_tool_memory
+from .memory import ToolExecutionRecord, ToolMemory, get_tool_memory
 
 logger = logging.getLogger(__name__)
 

@@ -9,13 +9,12 @@ from __future__ import annotations
 
 import logging
 from typing import Any, Dict, List, Optional
-from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Header, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from workflow_composer.auth.dependencies import optional_api_key, require_api_key
 from workflow_composer.auth.models import AuthResult
-from workflow_composer.auth.dependencies import require_api_key, optional_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -87,16 +86,19 @@ async def generate_workflow(
         raise HTTPException(status_code=401, detail=auth.error)
     
     # Store query in request state for RAG middleware
-    from starlette.requests import Request
     
     try:
         # Try to use existing composer components
-        from workflow_composer.core.query_parser import IntentParser, ParsedIntent
+        import uuid
+        from pathlib import Path
+
+        from workflow_composer.core.module_mapper import ModuleMapper
+        from workflow_composer.core.query_parser import (
+            IntentParser,  # noqa: F401
+            ParsedIntent,  # noqa: F401
+        )
         from workflow_composer.core.tool_selector import ToolSelector
         from workflow_composer.core.workflow_generator import WorkflowGenerator
-        from workflow_composer.core.module_mapper import ModuleMapper
-        from pathlib import Path
-        import uuid
         
         # Get paths
         project_root = Path(__file__).parent.parent.parent.parent.parent
@@ -169,7 +171,7 @@ async def generate_workflow(
 
 def _create_intent_from_request(request: WorkflowGenerateRequest):
     """Create a ParsedIntent from the API request using rule-based matching."""
-    from workflow_composer.core.query_parser import ParsedIntent, AnalysisType
+    from workflow_composer.core.query_parser import AnalysisType, ParsedIntent
     
     query_lower = request.query.lower()
     

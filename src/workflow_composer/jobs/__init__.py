@@ -9,10 +9,10 @@ Provides:
 
 from .celery_app import celery_app, get_celery_app
 from .tasks import (
+    execute_workflow_task,
     generate_workflow_task,
     search_tools_task,
     validate_workflow_task,
-    execute_workflow_task,
 )
 
 __all__ = [

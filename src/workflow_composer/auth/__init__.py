@@ -25,22 +25,20 @@ Usage:
     user = auth.validate_api_key("bpa_xxxxx...")
 """
 
+from .dependencies import (
+    get_current_user,
+    optional_api_key,
+    require_api_key,
+)
+from .models import (
+    APIKey,
+    AuthResult,
+    AuthUser,
+    RateLimitInfo,
+)
 from .service import (
     AuthService,
     get_auth_service,
-)
-
-from .models import (
-    AuthUser,
-    APIKey,
-    AuthResult,
-    RateLimitInfo,
-)
-
-from .dependencies import (
-    get_current_user,
-    require_api_key,
-    optional_api_key,
 )
 
 __all__ = [

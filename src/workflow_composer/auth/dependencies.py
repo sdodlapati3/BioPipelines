@@ -10,8 +10,8 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from .models import AuthUser, APIKey, AuthResult, KeyScope
-from .service import AuthService, get_auth_service
+from .models import AuthResult, AuthUser, KeyScope
+from .service import get_auth_service
 
 logger = logging.getLogger(__name__)
 

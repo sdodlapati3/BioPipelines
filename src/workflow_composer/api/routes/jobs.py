@@ -21,11 +21,11 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Header, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from workflow_composer.auth.models import AuthResult, KeyScope
 from workflow_composer.auth.dependencies import require_api_key, require_scope
+from workflow_composer.auth.models import AuthResult, KeyScope
 
 logger = logging.getLogger(__name__)
 

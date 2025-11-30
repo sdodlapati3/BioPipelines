@@ -16,12 +16,12 @@ from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from .models import (
-    AuthUser,
     APIKey,
     AuthResult,
+    AuthUser,
+    KeyScope,
     RateLimitInfo,
     UserRole,
-    KeyScope,
 )
 
 logger = logging.getLogger(__name__)

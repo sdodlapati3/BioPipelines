@@ -33,11 +33,11 @@ from __future__ import annotations
 
 import logging
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from .memory import ToolMemory, ToolExecutionRecord, get_tool_memory
 from .arg_memory import ArgumentMemory, ArgumentSuggestion, get_argument_memory
+from .memory import ToolExecutionRecord, ToolMemory, get_tool_memory
 from .tool_selector import RAGToolSelector, ToolBoost, get_rag_selector
 
 logger = logging.getLogger(__name__)

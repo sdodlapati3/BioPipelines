@@ -7,6 +7,7 @@ Supports graceful fallback for development without Redis.
 
 import os
 from typing import Optional
+
 from celery import Celery
 from kombu import Queue
 
@@ -161,9 +162,8 @@ class SyncTaskExecutor:
     
     def apply_async(self, task_func, args=None, kwargs=None, task_id=None):
         """Execute task synchronously and return a mock result."""
-        from dataclasses import dataclass
-        from datetime import datetime
         import uuid
+        from dataclasses import dataclass
         
         @dataclass
         class MockAsyncResult:

@@ -11,8 +11,11 @@ With beat scheduler:
     celery -A src.workflow_composer.jobs.worker beat --loglevel=info
 """
 
-import os
 import logging
+
+from src.workflow_composer.jobs import (
+    tasks,  # noqa: F401,E402 (intentional: after celery_app)
+)
 from src.workflow_composer.jobs.celery_app import celery_app
 
 # Configure logging
@@ -22,9 +25,6 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
-
-# Import tasks to ensure they're registered
-from src.workflow_composer.jobs import tasks  # noqa: F401
 
 
 def start_worker(

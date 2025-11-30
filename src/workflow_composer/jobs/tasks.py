@@ -9,10 +9,10 @@ Defines async tasks for workflow operations:
 """
 
 import logging
-from typing import Dict, Any, Optional, List
 from datetime import datetime
-from celery import shared_task, Task
-from celery.exceptions import MaxRetriesExceededError
+from typing import Any, Dict, Optional
+
+from celery import Task, shared_task
 
 logger = logging.getLogger(__name__)
 
@@ -85,10 +85,11 @@ def generate_workflow_task(
         - tools: List of selected tools
         - metadata: Additional workflow metadata
     """
-    from src.workflow_composer.agents.rag import get_rag_orchestrator
     from src.workflow_composer.agents.query_parser import get_intent_parser
     from src.workflow_composer.agents.tool_selector import get_tool_selector
     from src.workflow_composer.agents.workflow_generator import get_workflow_generator
+
+    from src.workflow_composer.agents.rag import get_rag_orchestrator
     
     options = options or {}
     start_time = datetime.utcnow()
@@ -231,7 +232,9 @@ def validate_workflow_task(
     try:
         # Try to use preflight validator if available
         try:
-            from src.workflow_composer.agents.preflight_validator import PreflightValidator
+            from src.workflow_composer.agents.preflight_validator import (
+                PreflightValidator,
+            )
             validator = PreflightValidator()
             result = validator.validate(workflow_code, workflow_type)
             return {
@@ -350,7 +353,7 @@ def cleanup_expired_jobs() -> Dict[str, Any]:
     
     try:
         # Get backend
-        backend = celery_app.backend
+        _backend = celery_app.backend  # noqa: F841 (for future cleanup logic)
         
         # In a real implementation, this would:
         # 1. Clean up expired results from Redis
@@ -378,6 +381,7 @@ def cleanup_expired_jobs() -> Dict[str, Any]:
 def get_task_status(task_id: str) -> Dict[str, Any]:
     """Get the status of a task by ID."""
     from celery.result import AsyncResult
+
     from src.workflow_composer.jobs.celery_app import celery_app
     
     result = AsyncResult(task_id, app=celery_app)

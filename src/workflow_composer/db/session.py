@@ -9,16 +9,16 @@ Provides database connection and session management with support for:
 
 from __future__ import annotations
 
-import os
 import logging
+import os
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Optional, Generator
 from threading import Lock
+from typing import Generator, Optional
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import sessionmaker, Session, scoped_session
+from sqlalchemy.orm import Session, scoped_session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from .models import Base

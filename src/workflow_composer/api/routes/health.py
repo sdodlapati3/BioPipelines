@@ -64,7 +64,7 @@ async def readiness_check():
     if config.enable_rag:
         try:
             from workflow_composer.agents.rag import get_rag_orchestrator
-            rag = get_rag_orchestrator()
+            _rag = get_rag_orchestrator()  # noqa: F841 (testing availability)
             checks["rag"] = True
         except Exception:
             pass

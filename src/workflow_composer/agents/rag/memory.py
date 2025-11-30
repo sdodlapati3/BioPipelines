@@ -30,12 +30,11 @@ Example:
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import threading
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -234,7 +233,7 @@ class ToolMemory:
     def _init_database(self) -> None:
         """Initialize database backend."""
         try:
-            from workflow_composer.db import get_db, ToolExecutionRepository
+            from workflow_composer.db import ToolExecutionRepository, get_db
             # Database will be initialized on first use
             logger.info("ToolMemory configured with database backend")
         except ImportError:
@@ -326,8 +325,9 @@ class ToolMemory:
     def _record_to_database(self, record: ToolExecutionRecord, user_id: Optional[str]) -> None:
         """Store record in database."""
         try:
-            from workflow_composer.db import get_db, ToolExecutionRepository
             from uuid import UUID
+
+            from workflow_composer.db import ToolExecutionRepository, get_db
             
             with get_db() as session:
                 repo = ToolExecutionRepository(session)
@@ -402,7 +402,7 @@ class ToolMemory:
         
         if self.config.use_database:
             try:
-                from workflow_composer.db import get_db, ToolExecutionRepository
+                from workflow_composer.db import ToolExecutionRepository, get_db
                 with get_db() as session:
                     repo = ToolExecutionRepository(session)
                     return repo.add_feedback(record_id, feedback)
@@ -487,7 +487,7 @@ class ToolMemory:
         """Get statistics for a specific tool."""
         if self.config.use_database:
             try:
-                from workflow_composer.db import get_db, ToolExecutionRepository
+                from workflow_composer.db import ToolExecutionRepository, get_db
                 with get_db() as session:
                     repo = ToolExecutionRepository(session)
                     stats_dict = repo.get_tool_stats(tool_name)
@@ -507,7 +507,7 @@ class ToolMemory:
         """Get statistics for all tools."""
         if self.config.use_database:
             try:
-                from workflow_composer.db import get_db, ToolExecutionRepository
+                from workflow_composer.db import ToolExecutionRepository, get_db
                 with get_db() as session:
                     repo = ToolExecutionRepository(session)
                     stats_dict = repo.get_all_tool_stats()

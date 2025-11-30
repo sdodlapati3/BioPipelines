@@ -13,19 +13,21 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from enum import Enum
-from typing import Optional, List
+from typing import Optional
 
 from sqlalchemy import (
-    Column,
-    String,
-    Integer,
-    Float,
+    JSON,
     Boolean,
+    Column,
     DateTime,
-    Text,
+    Float,
     ForeignKey,
     Index,
-    JSON,
+    Integer,
+    String,
+    Text,
+)
+from sqlalchemy import (
     Enum as SQLEnum,
 )
 from sqlalchemy.dialects.postgresql import UUID
