@@ -6,6 +6,7 @@ Tools for downloading, cleaning, and managing datasets.
 """
 
 import logging
+import re
 import shutil
 import subprocess
 from datetime import datetime
@@ -165,7 +166,6 @@ bash {script_path}
 
 def _is_uuid(s: str) -> bool:
     """Check if string is a valid UUID (for TCGA file IDs)."""
-    import re
     uuid_pattern = r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
     return bool(re.match(uuid_pattern, s.lower()))
 
