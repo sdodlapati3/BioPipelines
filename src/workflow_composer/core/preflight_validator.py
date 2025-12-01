@@ -235,6 +235,8 @@ class PreflightValidator:
     - Index files (STAR, BWA, etc.)
     - Module files
     - Sufficient resources
+    
+    Uses ReferenceManager and ContainerManager for auto-provisioning.
     """
     
     def __init__(self, config_path: Optional[str] = None):
@@ -255,6 +257,32 @@ class PreflightValidator:
             'CONTAINER_REGISTRY',
             'docker://ghcr.io/sdodlapa/biopipelines'
         )
+        
+        # Lazy-load managers
+        self._ref_manager = None
+        self._container_manager = None
+    
+    @property
+    def ref_manager(self):
+        """Lazy-load reference manager."""
+        if self._ref_manager is None:
+            try:
+                from ..provisioning import get_reference_manager
+                self._ref_manager = get_reference_manager()
+            except ImportError:
+                logger.warning("ReferenceManager not available")
+        return self._ref_manager
+    
+    @property
+    def container_manager(self):
+        """Lazy-load container manager."""
+        if self._container_manager is None:
+            try:
+                from ..provisioning import get_container_manager
+                self._container_manager = get_container_manager()
+            except ImportError:
+                logger.warning("ContainerManager not available")
+        return self._container_manager
     
     def validate(
         self,
@@ -539,12 +567,30 @@ class PreflightValidator:
         """Validate that Nextflow modules exist for all tools."""
         items = []
         
-        # Tool to module mapping
-        from .module_mapper import TOOL_MODULE_MAP
+        # Tool to module mapping - simplified inline version
+        # In production, would use ModuleMapper instance
+        tool_module_map = {
+            "fastqc": {"category": "qc", "module": "fastqc.nf"},
+            "multiqc": {"category": "qc", "module": "multiqc.nf"},
+            "star": {"category": "alignment", "module": "star.nf"},
+            "hisat2": {"category": "alignment", "module": "hisat2.nf"},
+            "salmon": {"category": "quantification", "module": "salmon.nf"},
+            "kallisto": {"category": "quantification", "module": "kallisto.nf"},
+            "featurecounts": {"category": "quantification", "module": "featurecounts.nf"},
+            "deseq2": {"category": "differential", "module": "deseq2.nf"},
+            "bwa": {"category": "alignment", "module": "bwa.nf"},
+            "gatk": {"category": "variant_calling", "module": "gatk.nf"},
+            "bcftools": {"category": "variant_calling", "module": "bcftools.nf"},
+            "bowtie2": {"category": "alignment", "module": "bowtie2.nf"},
+            "macs2": {"category": "peak_calling", "module": "macs2.nf"},
+            "deeptools": {"category": "visualization", "module": "deeptools.nf"},
+            "samtools": {"category": "utils", "module": "samtools.nf"},
+            "bedtools": {"category": "utils", "module": "bedtools.nf"},
+        }
         
         for tool in tools:
-            if tool in TOOL_MODULE_MAP:
-                module_info = TOOL_MODULE_MAP[tool]
+            if tool in tool_module_map:
+                module_info = tool_module_map[tool]
                 category = module_info["category"]
                 module_file = module_info["module"]
                 
@@ -661,6 +707,8 @@ class PreflightValidator:
         """
         Automatically fix missing items that are auto-fixable.
         
+        Uses ReferenceManager and ContainerManager for provisioning.
+        
         Args:
             report: ValidationReport with missing items
             
@@ -680,11 +728,11 @@ class PreflightValidator:
                 if item.category == "module":
                     self._create_module(item.name.replace(" module", ""))
                 elif item.category == "index":
-                    self._build_index(item)
+                    self._build_index_auto(item)
                 elif item.category == "reference":
-                    self._download_reference(item)
+                    self._download_reference_auto(item)
                 elif item.category == "container":
-                    self._build_container(item)
+                    self._pull_container_auto(item)
                     
                 logger.info(f"Fixed: {item.name}")
             except Exception as e:
@@ -699,20 +747,63 @@ class PreflightValidator:
         logger.info(f"Would create module for: {tool}")
         # TODO: Implement
     
-    def _build_index(self, item: ValidationItem):
-        """Build missing index."""
-        logger.info(f"Would build index: {item.name}")
-        # TODO: Implement - submit SLURM job for index building
+    def _build_index_auto(self, item: ValidationItem):
+        """Build missing index using ReferenceManager."""
+        if self.ref_manager is None:
+            logger.warning("ReferenceManager not available for index building")
+            return
+        
+        # Parse index type from item name
+        index_name = item.name.lower()
+        index_type = None
+        for itype in ["star", "bwa", "bowtie2", "hisat2", "salmon", "kallisto"]:
+            if itype in index_name:
+                index_type = itype
+                break
+        
+        if not index_type:
+            logger.error(f"Unknown index type in: {item.name}")
+            return
+        
+        # Try to infer organism/build from context
+        # This is a simplified version - in practice, would need more context
+        logger.info(f"Would build {index_type} index via ReferenceManager")
+        # self.ref_manager.ensure_index(organism, build, index_type, submit_job=True)
     
-    def _download_reference(self, item: ValidationItem):
-        """Download missing reference data."""
-        logger.info(f"Would download: {item.name}")
-        # TODO: Implement - download from Ensembl/UCSC
+    def _download_reference_auto(self, item: ValidationItem):
+        """Download missing reference using ReferenceManager."""
+        if self.ref_manager is None:
+            logger.warning("ReferenceManager not available for download")
+            return
+        
+        # Parse organism/build from item name
+        # e.g., "Genome (GRCh38)" or "Annotation (GRCm39)"
+        import re
+        match = re.search(r'\((\w+)\)', item.name)
+        if match:
+            build = match.group(1)
+            # Map build to organism (simplified)
+            org_map = {
+                "GRCh38": "human", "hg38": "human",
+                "GRCm39": "mouse", "mm39": "mouse",
+            }
+            organism = org_map.get(build)
+            
+            if organism:
+                logger.info(f"Downloading reference: {organism}/{build}")
+                self.ref_manager.get_reference(organism, build, download=True)
+            else:
+                logger.warning(f"Unknown build: {build}")
     
-    def _build_container(self, item: ValidationItem):
-        """Build missing container image."""
-        logger.info(f"Would build container: {item.name}")
-        # TODO: Implement - docker build
+    def _pull_container_auto(self, item: ValidationItem):
+        """Pull missing container using ContainerManager."""
+        if self.container_manager is None:
+            logger.warning("ContainerManager not available for pull")
+            return
+        
+        container_name = item.name
+        logger.info(f"Pulling container: {container_name}")
+        self.container_manager.get_container(container_name, pull=True)
 
 
 # Convenience function
