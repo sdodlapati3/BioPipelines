@@ -1,6 +1,24 @@
 """
-Unified Ensemble Query Parser
-=============================
+Unified Ensemble Query Parser (DEPRECATED)
+==========================================
+
+⚠️ DEPRECATED: Use UnifiedIntentParser instead.
+
+This module is kept for backward compatibility only.
+For new code, use:
+
+    from workflow_composer.agents.intent import UnifiedIntentParser
+    parser = UnifiedIntentParser()
+    result = parser.parse("your query")
+
+UnifiedIntentParser provides:
+- Better accuracy (87%+ vs 80%)
+- Hierarchical parsing with LLM arbiter
+- Decision caching for performance
+- Rate-limit resistant provider cascade
+
+---
+Original Description:
 
 A robust query parsing system that combines multiple methods with
 confidence-weighted voting for the most accurate intent detection.
@@ -143,12 +161,24 @@ class UnifiedEnsembleParser:
     """
     Production-grade ensemble parser combining multiple NLU methods.
     
+    ⚠️ DEPRECATED: Use UnifiedIntentParser instead for better accuracy.
+    
     Features:
     - Weighted voting across 5 parsing methods
     - Agreement boosting when methods concur
     - Graceful degradation if methods fail
     - Confidence calibration based on query complexity
     - Learning from RAG history
+    
+    Migration:
+        # Old:
+        parser = UnifiedEnsembleParser()
+        result = parser.parse(query)
+        
+        # New (RECOMMENDED):
+        from workflow_composer.agents.intent import UnifiedIntentParser
+        parser = UnifiedIntentParser()
+        result = parser.parse(query)
     """
     
     # Default weights for each method (must sum to 1.0)
@@ -203,7 +233,13 @@ class UnifiedEnsembleParser:
         self._rag_orchestrator = None
         self._negation_handler = None
         
-        logger.info("UnifiedEnsembleParser initialized")
+        import warnings
+        warnings.warn(
+            "UnifiedEnsembleParser is deprecated. Use UnifiedIntentParser instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        logger.info("UnifiedEnsembleParser initialized (DEPRECATED - use UnifiedIntentParser)")
         logger.info(f"  Weights: {self.weights}")
         logger.info(f"  Negation handling: {enable_negation_handling and NEGATION_AVAILABLE}")
     

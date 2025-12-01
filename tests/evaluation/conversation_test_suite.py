@@ -1121,11 +1121,11 @@ class ConversationEvaluator:
         Initialize evaluator.
         
         Args:
-            use_ensemble: Use the new UnifiedEnsembleParser
+            use_ensemble: Use UnifiedIntentParser (recommended)
         """
         self.use_ensemble = use_ensemble
         self._agent = None
-        self._ensemble_parser = None
+        self._parser = None
     
     @property
     def agent(self):
@@ -1136,12 +1136,18 @@ class ConversationEvaluator:
         return self._agent
     
     @property
+    def parser(self):
+        """Lazy load intent parser."""
+        if self._parser is None:
+            from workflow_composer.agents.intent import UnifiedIntentParser
+            self._parser = UnifiedIntentParser()
+        return self._parser
+    
+    # Keep ensemble_parser as alias for backward compatibility
+    @property
     def ensemble_parser(self):
-        """Lazy load ensemble parser."""
-        if self._ensemble_parser is None:
-            from workflow_composer.agents.intent import UnifiedEnsembleParser
-            self._ensemble_parser = UnifiedEnsembleParser()
-        return self._ensemble_parser
+        """Alias for parser (backward compatibility)."""
+        return self.parser
     
     def evaluate_turn(
         self, 
@@ -1154,12 +1160,15 @@ class ConversationEvaluator:
         start_time = time.time()
         
         try:
-            # Parse with ensemble parser
-            parse_result = self.ensemble_parser.parse(query)
+            # Parse with intent parser
+            parse_result = self.parser.parse(query)
             latency_ms = (time.time() - start_time) * 1000
             
-            # Extract actual values
-            actual_intent = parse_result.intent
+            # Extract actual values - handle both result types
+            if hasattr(parse_result, 'primary_intent'):
+                actual_intent = parse_result.primary_intent.name if hasattr(parse_result.primary_intent, 'name') else str(parse_result.primary_intent)
+            else:
+                actual_intent = parse_result.intent
             actual_entities = {}
             
             # Convert entities to dict

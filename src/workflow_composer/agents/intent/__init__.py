@@ -113,16 +113,16 @@ __all__ = [
     "ArbiterResult",          # Result from arbiter
     "ArbiterStrategy",        # Strategy for LLM invocation
     "ParserVote",             # Individual parser vote
-    "UnifiedEnsembleParser",  # Multi-method ensemble parser (legacy)
     "HybridQueryParser",      # Production-grade hybrid parser
     "LearningHybridParser",   # With active learning & feedback
     "ChatIntegration",        # Chat handler integration
     
-    # Ensemble components
-    "EnsembleParseResult",
-    "MethodVote",
-    "ParsingMethod",
-    "create_ensemble_parser",
+    # Deprecated (legacy)
+    "UnifiedEnsembleParser",  # DEPRECATED: Use UnifiedIntentParser instead
+    "EnsembleParseResult",    # DEPRECATED: Legacy ensemble result
+    "MethodVote",             # DEPRECATED: Legacy vote type
+    "ParsingMethod",          # DEPRECATED: Legacy parsing method enum
+    "create_ensemble_parser", # DEPRECATED: Use create_unified_parser instead
     
     # Learning components
     "QueryLogger",

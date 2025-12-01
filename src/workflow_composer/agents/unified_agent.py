@@ -130,13 +130,6 @@ INTENT_TO_TOOL: Dict[str, ToolName] = {
     "CONTEXT_RECALL": None,  # Handled specially - recalls previous search results
     "CONTEXT_METADATA": None,  # Handled specially - gets metadata from context
     
-    # Data Description
-    "DATA_DESCRIBE": ToolName.DESCRIBE_FILES,
-    
-    # Context-Aware (use previous results)
-    "CONTEXT_RECALL": None,  # Handled specially - recalls previous search results
-    "CONTEXT_METADATA": None,  # Handled specially - gets metadata from context
-    
     # Meta/Composite (handled specially)
     "META_CONFIRM": "_handle_confirm",  # Special handler for confirmations
     "META_CANCEL": None,

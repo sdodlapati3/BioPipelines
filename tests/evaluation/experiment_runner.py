@@ -107,18 +107,21 @@ class ExperimentRunner:
             return lambda q: self._parse_with_ensemble(q)
         
         try:
-            from workflow_composer.agents.intent.unified_ensemble import UnifiedEnsembleParser
-            self._parser = UnifiedEnsembleParser()
+            from workflow_composer.agents.intent.unified_parser import UnifiedIntentParser
+            self._parser = UnifiedIntentParser()
             return lambda q: self._parse_with_ensemble(q)
         except ImportError:
-            logger.warning("Could not import UnifiedEnsembleParser, using mock")
+            logger.warning("Could not import UnifiedIntentParser, using mock")
             return self._mock_parser
     
     def _parse_with_ensemble(self, query: str) -> Dict[str, Any]:
-        """Parse using the ensemble parser."""
+        """Parse using the unified intent parser."""
         result = self._parser.parse(query)
-        # result.intent is already a string, not an Enum
-        intent = result.intent if isinstance(result.intent, str) else (result.intent.name if result.intent else 'UNKNOWN')
+        # Handle both old ensemble result (string intent) and new unified result (IntentType)
+        if hasattr(result, 'primary_intent'):
+            intent = result.primary_intent.name if hasattr(result.primary_intent, 'name') else str(result.primary_intent)
+        else:
+            intent = result.intent if isinstance(result.intent, str) else (result.intent.name if result.intent else 'UNKNOWN')
         
         # Convert entities from list of BioEntity to dict for metrics compatibility
         # Use ONLY BioEntity list (canonical uppercase types) - slots duplicate these
