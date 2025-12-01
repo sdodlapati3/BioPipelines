@@ -8,12 +8,20 @@ Provides IntentResult-compatible output for integration with DialogueManager.
 This bridges the gap between:
 - IntentArbiter (returns ArbiterResult)
 - DialogueManager (expects IntentResult)
+
+Architecture:
+- Parallel execution of Pattern + Semantic + Entity extraction (CPU-bound)
+- Normalized confidence scores for fair comparison
+- Weighted ensemble voting before LLM escalation
+- Entity-aware intent boosting
 """
 
 import logging
 import time
+import numpy as np
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from .parser import IntentParser, IntentResult, IntentType, Entity, EntityType
 from .arbiter import IntentArbiter, ArbiterResult, ParserVote
@@ -325,6 +333,306 @@ class UnifiedIntentParser:
             "by_method": {},
         }
     
+    # =========================================================================
+    # Ensemble Methods: Parallel Execution, Normalization, Entity-Aware Voting
+    # =========================================================================
+    
+    def _run_parsers_parallel(
+        self, 
+        query: str, 
+        context: Optional[Dict[str, Any]] = None
+    ) -> Tuple[Optional[IntentResult], Optional[List[Tuple[str, float]]], List[Entity]]:
+        """
+        Run pattern parser, semantic classifier, and entity extraction in parallel.
+        
+        Returns:
+            Tuple of (pattern_result, semantic_results, entities)
+        """
+        pattern_result = None
+        semantic_results = None
+        entities = []
+        
+        def run_pattern():
+            return self.pattern_parser.parse(query, context)
+        
+        def run_semantic():
+            if self.semantic_classifier:
+                try:
+                    return self.semantic_classifier.classify(query, top_k=5, threshold=0.3)
+                except Exception as e:
+                    logger.debug(f"Semantic classification failed: {e}")
+            return None
+        
+        def run_entity():
+            try:
+                return self.pattern_parser._entity_extractor.extract(query)
+            except Exception as e:
+                logger.debug(f"Entity extraction failed: {e}")
+                return []
+        
+        # Run all three in parallel using ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures = {
+                executor.submit(run_pattern): "pattern",
+                executor.submit(run_semantic): "semantic",
+                executor.submit(run_entity): "entity",
+            }
+            
+            for future in as_completed(futures):
+                task_name = futures[future]
+                try:
+                    result = future.result(timeout=2.0)  # 2 second timeout
+                    if task_name == "pattern":
+                        pattern_result = result
+                    elif task_name == "semantic":
+                        semantic_results = result
+                    elif task_name == "entity":
+                        entities = result or []
+                except Exception as e:
+                    logger.warning(f"Parallel task {task_name} failed: {e}")
+        
+        return pattern_result, semantic_results, entities
+    
+    def _normalize_confidence(
+        self, 
+        confidence: float, 
+        source: str,
+        score_distribution: Optional[List[float]] = None
+    ) -> float:
+        """
+        Normalize confidence scores to a comparable scale [0, 1].
+        
+        Different sources use different scales:
+        - Pattern: Linear coverage-based (0.5 to 0.95)
+        - Semantic: Cosine similarity (typically 0.3 to 0.9)
+        - Arbiter: LLM confidence (0.0 to 1.0)
+        
+        We use min-max normalization with source-specific bounds.
+        """
+        if source == "pattern":
+            # Pattern uses 0.5 + coverage * 0.5, so range is [0.5, 0.95]
+            # Normalize to [0, 1]
+            min_conf, max_conf = 0.5, 0.95
+            normalized = (confidence - min_conf) / (max_conf - min_conf)
+            return max(0.0, min(1.0, normalized))
+        
+        elif source == "semantic":
+            # Semantic uses cosine similarity, typically in [0.3, 0.9]
+            # Apply softmax if we have multiple scores for proper probability
+            if score_distribution and len(score_distribution) > 1:
+                scores = np.array(score_distribution)
+                # Temperature-scaled softmax
+                temp = 0.3  # Lower = sharper distribution
+                exp_scores = np.exp(scores / temp)
+                softmax = exp_scores / np.sum(exp_scores)
+                # Return the first score (top intent) as probability
+                return float(softmax[0])
+            else:
+                # Fallback: simple min-max normalization
+                min_conf, max_conf = 0.3, 0.9
+                normalized = (confidence - min_conf) / (max_conf - min_conf)
+                return max(0.0, min(1.0, normalized))
+        
+        else:
+            # Arbiter or other sources: assume already [0, 1]
+            return max(0.0, min(1.0, confidence))
+    
+    def _run_parsers_parallel(
+        self,
+        query: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[IntentResult, Optional[List[Tuple[str, float]]], List[Entity]]:
+        """
+        Run all local parsers in parallel for efficiency.
+        
+        Executes Pattern + Semantic + Entity extraction concurrently,
+        reducing total latency compared to sequential execution.
+        
+        Returns:
+            Tuple of (pattern_result, semantic_results, entities)
+        """
+        pattern_result = None
+        semantic_results = None
+        entities = []
+        
+        def run_pattern():
+            return self.pattern_parser.parse(query, context)
+        
+        def run_semantic():
+            if self.semantic_classifier:
+                try:
+                    return self.semantic_classifier.classify(query, top_k=5)
+                except Exception as e:
+                    logger.debug(f"Semantic classification failed: {e}")
+                    return None
+            return None
+        
+        def run_entity_extraction():
+            # Entity extraction is done by the pattern parser as part of parsing
+            # We'll get entities from the pattern result
+            return []
+        
+        # For short queries, parallel overhead may not be worth it
+        # Only parallelize if semantic classifier is available
+        if self.semantic_classifier:
+            try:
+                with ThreadPoolExecutor(max_workers=2) as executor:
+                    pattern_future = executor.submit(run_pattern)
+                    semantic_future = executor.submit(run_semantic)
+                    
+                    # Wait for both to complete
+                    pattern_result = pattern_future.result(timeout=5.0)
+                    semantic_results = semantic_future.result(timeout=5.0)
+            except Exception as e:
+                logger.warning(f"Parallel parsing failed, falling back to sequential: {e}")
+                pattern_result = run_pattern()
+                semantic_results = run_semantic()
+        else:
+            # Sequential fallback if no semantic classifier
+            pattern_result = run_pattern()
+        
+        # Entities come from pattern parser
+        if pattern_result:
+            entities = pattern_result.entities
+        
+        return pattern_result, semantic_results, entities
+    
+    def _entity_intent_boost(
+        self, 
+        entities: List[Entity], 
+        query: str
+    ) -> Dict[str, float]:
+        """
+        Calculate intent boost scores based on extracted entities.
+        
+        If entities suggest a particular intent, we boost its score.
+        This provides a third signal beyond pattern and semantic matching.
+        
+        Returns:
+            Dict mapping intent names to boost values (can be negative for penalties)
+        """
+        boosts = {}
+        entity_types = {e.type for e in entities}
+        query_lower = query.lower()
+        
+        # Path entities → DATA_SCAN
+        if EntityType.DIRECTORY_PATH in entity_types or EntityType.FILE_PATH in entity_types:
+            boosts["DATA_SCAN"] = 0.15
+            boosts["DATA_DESCRIBE"] = 0.10
+            # Penalize EDUCATION if path is present (user has local context)
+            boosts["EDUCATION_EXPLAIN"] = -0.10
+        
+        # Dataset ID → DATA_DOWNLOAD
+        if EntityType.DATASET_ID in entity_types:
+            if any(w in query_lower for w in ["download", "get", "fetch"]):
+                boosts["DATA_DOWNLOAD"] = 0.20
+            else:
+                boosts["DATA_SEARCH"] = 0.10
+        
+        # Disease/Tissue → DATA_SEARCH (looking for datasets)
+        if EntityType.DISEASE in entity_types or EntityType.TISSUE in entity_types:
+            boosts["DATA_SEARCH"] = 0.15
+            # Unless "explain" is in query
+            if "explain" in query_lower or "what is" in query_lower:
+                boosts["EDUCATION_EXPLAIN"] = 0.10
+        
+        # Workflow-related entities → WORKFLOW_*
+        if EntityType.WORKFLOW_TYPE in entity_types:
+            boosts["WORKFLOW_CREATE"] = 0.15
+        
+        # Assay type or Data type → different intents based on context
+        if EntityType.ASSAY_TYPE in entity_types or EntityType.DATA_TYPE in entity_types:
+            if any(w in query_lower for w in ["run", "execute", "start", "perform"]):
+                boosts["JOB_SUBMIT"] = 0.15
+            elif any(w in query_lower for w in ["explain", "what is", "how does"]):
+                boosts["EDUCATION_EXPLAIN"] = 0.10
+            else:
+                boosts["WORKFLOW_CREATE"] = 0.10
+        
+        # "Local" or "folder" or "directory" keywords without entities still suggest DATA_SCAN
+        local_keywords = ["local", "folder", "directory", "my data", "our data", "we have"]
+        if any(kw in query_lower for kw in local_keywords):
+            boosts["DATA_SCAN"] = boosts.get("DATA_SCAN", 0) + 0.10
+        
+        return boosts
+    
+    def _weighted_ensemble_vote(
+        self,
+        pattern_result: IntentResult,
+        semantic_results: Optional[List[Tuple[str, float]]],
+        entities: List[Entity],
+        query: str,
+    ) -> Tuple[str, float, str, Dict[str, float]]:
+        """
+        Combine all signals using weighted voting.
+        
+        Weights:
+        - Pattern: 0.35 (fast, good for exact matches)
+        - Semantic: 0.40 (better semantic understanding)
+        - Entity boost: 0.25 (domain knowledge)
+        
+        Returns:
+            Tuple of (winning_intent, confidence, method, all_scores)
+        """
+        WEIGHT_PATTERN = 0.35
+        WEIGHT_SEMANTIC = 0.40
+        WEIGHT_ENTITY = 0.25
+        
+        # Initialize scores for all possible intents
+        intent_scores: Dict[str, float] = {}
+        
+        # 1. Add pattern contribution
+        if pattern_result:
+            pattern_intent = pattern_result.primary_intent.name
+            pattern_conf = self._normalize_confidence(pattern_result.confidence, "pattern")
+            intent_scores[pattern_intent] = intent_scores.get(pattern_intent, 0) + WEIGHT_PATTERN * pattern_conf
+            
+            # Add alternatives with lower weight
+            for alt_intent, alt_conf in pattern_result.alternatives[:3]:
+                alt_name = alt_intent.name if hasattr(alt_intent, 'name') else str(alt_intent)
+                alt_norm = self._normalize_confidence(alt_conf, "pattern")
+                intent_scores[alt_name] = intent_scores.get(alt_name, 0) + WEIGHT_PATTERN * alt_norm * 0.5
+        
+        # 2. Add semantic contribution
+        if semantic_results:
+            # Get score distribution for softmax normalization
+            score_dist = [score for _, score in semantic_results]
+            
+            for intent_name, conf in semantic_results[:5]:
+                semantic_conf = self._normalize_confidence(conf, "semantic", score_dist)
+                # Weight decreases for lower-ranked results
+                rank_weight = 1.0 if intent_name == semantic_results[0][0] else 0.5
+                intent_scores[intent_name] = intent_scores.get(intent_name, 0) + WEIGHT_SEMANTIC * semantic_conf * rank_weight
+        
+        # 3. Add entity boost contribution
+        entity_boosts = self._entity_intent_boost(entities, query)
+        for intent_name, boost in entity_boosts.items():
+            intent_scores[intent_name] = intent_scores.get(intent_name, 0) + WEIGHT_ENTITY * boost
+        
+        # Find winner
+        if not intent_scores:
+            return "META_UNKNOWN", 0.0, "no_votes", {}
+        
+        # Sort by score
+        sorted_intents = sorted(intent_scores.items(), key=lambda x: -x[1])
+        winner, winner_score = sorted_intents[0]
+        
+        # Determine if unanimous (top score is much higher than second)
+        if len(sorted_intents) > 1:
+            second_score = sorted_intents[1][1]
+            margin = winner_score - second_score
+            method = "unanimous" if margin > 0.15 else "ensemble"
+        else:
+            method = "unanimous"
+        
+        # Log the voting
+        logger.debug(
+            f"Ensemble vote: winner={winner}({winner_score:.3f}), "
+            f"scores={[(k, f'{v:.3f}') for k, v in sorted_intents[:3]]}"
+        )
+        
+        return winner, winner_score, method, dict(sorted_intents)
+
     def parse(
         self, 
         query: str, 
@@ -333,7 +641,13 @@ class UnifiedIntentParser:
         """
         Parse a query and return unified result.
         
-        Uses cache lookup first, then arbiter when available, with fallback to pattern parser.
+        Architecture:
+        1. Check cache for previously processed queries
+        2. Run Pattern + Semantic + Entity extraction in PARALLEL (CPU-bound)
+        3. Use weighted ensemble voting to combine all signals
+        4. Only invoke LLM arbiter if ensemble confidence is low or disagreement exists
+        
+        This ensures efficient use of all local CPU methods before cloud escalation.
         
         Args:
             query: User query
@@ -353,7 +667,7 @@ class UnifiedIntentParser:
             )
         
         try:
-            # Step 0: Check cache (only for queries that would trigger LLM)
+            # Step 0: Check cache
             cached = self._cache_get(query)
             if cached is not None:
                 self._metrics["cache_hits"] += 1
@@ -361,51 +675,66 @@ class UnifiedIntentParser:
                 self._record_metrics(cached, latency_ms)
                 return cached
             
-            # Step 1: Pattern parsing (fast, always available)
-            pattern_result = self.pattern_parser.parse(query, context)
+            # Step 1: Run all local parsers in PARALLEL
+            pattern_result, semantic_results, entities = self._run_parsers_parallel(query, context)
             
-            # Step 2: Semantic classification if available
+            # Step 2: Weighted ensemble voting
+            winner_intent, ensemble_conf, vote_method, all_scores = self._weighted_ensemble_vote(
+                pattern_result, semantic_results, entities, query
+            )
+            
+            # Extract top semantic result for arbiter decision
             semantic_result = None
-            if self.semantic_classifier:
-                try:
-                    results = self.semantic_classifier.classify(query, top_k=1)
-                    if results:
-                        intent_name, conf = results[0]
-                        semantic_result = (intent_name, conf)
-                except Exception as e:
-                    logger.debug(f"Semantic classification failed: {e}")
+            if semantic_results:
+                semantic_result = semantic_results[0]  # (intent_name, confidence)
             
-            # Step 3: Determine if arbiter is needed
-            if self._should_use_arbiter(pattern_result, semantic_result, query):
-                arbiter_result = self._invoke_arbiter(
-                    query, pattern_result, semantic_result
-                )
+            # Step 3: Determine if we need LLM arbiter
+            # Use arbiter if:
+            # - Ensemble confidence is low (<0.5)
+            # - Ensemble method is not "unanimous" (close race)
+            # - Cross-category disagreement between pattern and semantic
+            needs_arbiter = False
+            
+            if ensemble_conf < 0.5:
+                logger.debug(f"Low ensemble confidence: {ensemble_conf:.3f}")
+                needs_arbiter = True
+            elif vote_method != "unanimous":
+                # Check if top 2 are from different categories
+                sorted_scores = sorted(all_scores.items(), key=lambda x: -x[1])
+                if len(sorted_scores) >= 2:
+                    first_cat = self._get_intent_category(sorted_scores[0][0])
+                    second_cat = self._get_intent_category(sorted_scores[1][0])
+                    if first_cat != second_cat and sorted_scores[1][1] > 0.3:
+                        logger.debug(
+                            f"Close cross-category race: {sorted_scores[0]} vs {sorted_scores[1]}"
+                        )
+                        needs_arbiter = True
+            
+            # Also check for complexity indicators
+            if not needs_arbiter:
+                needs_arbiter = self._has_complexity_indicators(query)
+            
+            # Step 4: Invoke arbiter if needed
+            if needs_arbiter and self.arbiter:
+                arbiter_result = self._invoke_arbiter(query, pattern_result, semantic_result)
                 if arbiter_result:
-                    # If arbiter changed the intent to a different category,
-                    # clear slots from the original pattern (they may not be valid)
-                    slots_to_use = pattern_result.slots
-                    original_intent = pattern_result.primary_intent.name
+                    # Determine appropriate slots
+                    slots_to_use = pattern_result.slots if pattern_result else {}
+                    original_intent = pattern_result.primary_intent.name if pattern_result else "META_UNKNOWN"
                     final_intent = arbiter_result.final_intent
                     
                     if original_intent != final_intent:
                         original_category = self._get_intent_category(original_intent)
                         final_category = self._get_intent_category(final_intent)
-                        
                         if original_category != final_category:
-                            # Different category - slots from original pattern likely invalid
-                            # Clear them to prevent type mismatches (e.g., 'concept' for DATA_SCAN)
-                            logger.debug(
-                                f"Clearing slots due to category change: "
-                                f"{original_category} -> {final_category}"
-                            )
+                            logger.debug(f"Clearing slots: {original_category} -> {final_category}")
                             slots_to_use = {}
                     
                     result = UnifiedParseResult.from_arbiter_result(
                         arbiter_result,
-                        entities=pattern_result.entities,
+                        entities=entities,
                         slots=slots_to_use,
                     )
-                    # Cache LLM results for future lookups
                     if result.llm_invoked:
                         self._cache_put(query, result)
                     
@@ -413,8 +742,29 @@ class UnifiedIntentParser:
                     self._record_metrics(result, latency_ms)
                     return result
             
-            # Step 4: Fallback to pattern result
-            result = UnifiedParseResult.from_intent_result(pattern_result)
+            # Step 5: Return ensemble result (no LLM needed)
+            try:
+                final_intent = IntentType[winner_intent]
+            except KeyError:
+                logger.warning(f"Unknown intent: {winner_intent}")
+                final_intent = IntentType.META_UNKNOWN
+            
+            # Use slots from pattern if intent matches, else empty
+            slots_to_use = {}
+            if pattern_result and pattern_result.primary_intent.name == winner_intent:
+                slots_to_use = pattern_result.slots
+            
+            result = UnifiedParseResult(
+                primary_intent=final_intent,
+                confidence=ensemble_conf,
+                entities=entities,
+                slots=slots_to_use,
+                alternatives=[(IntentType[k], v) for k, v in list(all_scores.items())[:3] 
+                             if k != winner_intent and k in IntentType.__members__],
+                method=vote_method,
+                matched_pattern=pattern_result.matched_pattern if pattern_result else None,
+            )
+            
             latency_ms = (time.time() - start_time) * 1000
             self._record_metrics(result, latency_ms)
             return result
@@ -423,6 +773,24 @@ class UnifiedIntentParser:
             self._metrics["errors"] += 1
             logger.error(f"Parse error: {e}")
             raise
+    
+    def _has_complexity_indicators(self, query: str) -> bool:
+        """Check for complexity indicators that warrant LLM involvement."""
+        query_lower = query.lower()
+        
+        complexity_indicators = {
+            "negation": ["not", "don't", "doesn't", "instead", "rather", "but not", "forget", "ignore"],
+            "conditional": ["if ", "when ", "unless", "otherwise"],
+            "comparative": ["better", "rather than", "prefer", "instead of"],
+            "change": ["actually", "wait", "no,", "change", "switch to"],
+        }
+        
+        for indicator_type, words in complexity_indicators.items():
+            if any(word in query_lower for word in words):
+                logger.debug(f"Complexity indicator ({indicator_type}) detected")
+                return True
+        
+        return False
     
     def _should_use_arbiter(
         self,
