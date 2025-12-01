@@ -203,9 +203,16 @@ if [ "$MODE" = "cloud" ]; then
     echo "🧬 BioPipelines - Cloud Mode"
     echo ""
     
-    # Priority: GitHub Models (free) > Google Gemini (free) > OpenAI (paid)
-    [ -f ".secrets/github_token" ] && export GITHUB_TOKEN=$(cat .secrets/github_token)
+    # Load API keys - Priority: Free tiers first, then paid
+    # Tier 1: Best free tiers
     [ -f ".secrets/google_api_key" ] && export GOOGLE_API_KEY=$(cat .secrets/google_api_key)
+    [ -f ".secrets/cerebras_key" ] && export CEREBRAS_API_KEY=$(cat .secrets/cerebras_key)
+    [ -f ".secrets/groq_key" ] && export GROQ_API_KEY=$(cat .secrets/groq_key)
+    [ -f ".secrets/openrouter_key" ] && export OPENROUTER_API_KEY=$(cat .secrets/openrouter_key)
+    # Tier 2: Additional free providers
+    [ -f ".secrets/lightning_key" ] && export LIGHTNING_API_KEY=$(cat .secrets/lightning_key)
+    [ -f ".secrets/github_token" ] && export GITHUB_TOKEN=$(cat .secrets/github_token)
+    # Tier 3: Paid fallback
     [ -f ".secrets/openai_key" ] && export OPENAI_API_KEY=$(cat .secrets/openai_key)
     
     pip install -e . -q 2>/dev/null
@@ -228,12 +235,18 @@ if [ "$MODE" = "gpu" ]; then
     echo "🧬 BioPipelines - GPU Mode"
     echo ""
     
-    # Load secrets
-    # Priority: GitHub Models (free) > Google Gemini (free) > OpenAI (paid)
+    # Load secrets - Priority: Free tiers first, then paid
     [ -f ".secrets/hf_token" ] && export HF_TOKEN=$(cat .secrets/hf_token)
     [ -f ".secrets/hf_token" ] && export HUGGING_FACE_HUB_TOKEN=$(cat .secrets/hf_token)
-    [ -f ".secrets/github_token" ] && export GITHUB_TOKEN=$(cat .secrets/github_token)
+    # Tier 1: Best free tiers
     [ -f ".secrets/google_api_key" ] && export GOOGLE_API_KEY=$(cat .secrets/google_api_key)
+    [ -f ".secrets/cerebras_key" ] && export CEREBRAS_API_KEY=$(cat .secrets/cerebras_key)
+    [ -f ".secrets/groq_key" ] && export GROQ_API_KEY=$(cat .secrets/groq_key)
+    [ -f ".secrets/openrouter_key" ] && export OPENROUTER_API_KEY=$(cat .secrets/openrouter_key)
+    # Tier 2: Additional free providers
+    [ -f ".secrets/lightning_key" ] && export LIGHTNING_API_KEY=$(cat .secrets/lightning_key)
+    [ -f ".secrets/github_token" ] && export GITHUB_TOKEN=$(cat .secrets/github_token)
+    # Tier 3: Paid fallback
     [ -f ".secrets/openai_key" ] && export OPENAI_API_KEY=$(cat .secrets/openai_key)
     
     # Check if vLLM already running
@@ -420,9 +433,13 @@ echo "🧬 BioPipelines"
 echo ""
 
 # Load API keys for cloud fallback
-# Priority: GitHub Models (free) > Google Gemini (free) > OpenAI (paid)
-[ -f ".secrets/github_token" ] && export GITHUB_TOKEN=$(cat .secrets/github_token)
+# Priority: Free tiers first (Gemini, Cerebras, Groq), then paid (OpenAI)
 [ -f ".secrets/google_api_key" ] && export GOOGLE_API_KEY=$(cat .secrets/google_api_key)
+[ -f ".secrets/cerebras_key" ] && export CEREBRAS_API_KEY=$(cat .secrets/cerebras_key)
+[ -f ".secrets/groq_key" ] && export GROQ_API_KEY=$(cat .secrets/groq_key)
+[ -f ".secrets/openrouter_key" ] && export OPENROUTER_API_KEY=$(cat .secrets/openrouter_key)
+[ -f ".secrets/lightning_key" ] && export LIGHTNING_API_KEY=$(cat .secrets/lightning_key)
+[ -f ".secrets/github_token" ] && export GITHUB_TOKEN=$(cat .secrets/github_token)
 [ -f ".secrets/openai_key" ] && export OPENAI_API_KEY=$(cat .secrets/openai_key)
 [ -f ".secrets/hf_token" ] && export HF_TOKEN=$(cat .secrets/hf_token)
 [ -f ".secrets/hf_token" ] && export HUGGING_FACE_HUB_TOKEN=$(cat .secrets/hf_token)
