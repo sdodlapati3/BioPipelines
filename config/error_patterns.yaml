@@ -1,0 +1,249 @@
+# Error Patterns Catalog
+# ======================
+# Common bioinformatics workflow errors and their solutions.
+# These patterns are used by the ErrorPatternDB for automatic error diagnosis.
+
+patterns:
+  # Memory Errors
+  - pattern: "Out of memory|OOM|Cannot allocate memory|MemoryError|java\\.lang\\.OutOfMemoryError"
+    cause: "Process exceeded available memory"
+    solution: |
+      1. Increase memory in process directive: memory = '32 GB'
+      2. For SLURM: Use higher memory label (label 'process_high_memory')
+      3. For local runs: Limit max memory with --max_memory '64.GB'
+      4. Consider using a machine with more RAM
+    category: memory
+    confidence: 0.95
+    examples:
+      - "java.lang.OutOfMemoryError: Java heap space"
+      - "STAR alignment ran out of memory"
+      - "Cannot allocate memory for process"
+
+  - pattern: "SLURM.*exceeded.*memory|memory limit.*exceeded|Killed.*SIGKILL"
+    cause: "SLURM killed job due to memory limit violation"
+    solution: |
+      1. Increase --max_memory parameter
+      2. Add higher memory label to the process:
+         label 'process_high_memory'
+      3. Profile memory usage to optimize
+    category: memory
+    confidence: 0.9
+    analysis_types:
+      - all
+
+  # Disk/Space Errors
+  - pattern: "No space left on device|disk quota exceeded|ENOSPC"
+    cause: "Disk full or quota exceeded"
+    solution: |
+      1. Clear work directory: nextflow clean -f
+      2. Use different work directory: -work-dir /scratch/work
+      3. Increase disk quota
+      4. Delete intermediate files earlier in the pipeline
+    category: disk
+    confidence: 0.95
+
+  - pattern: "Permission denied|EACCES|access denied"
+    cause: "Insufficient file permissions"
+    solution: |
+      1. Check file/directory permissions: ls -la
+      2. Ensure write access to output directory
+      3. Check mount permissions for shared storage
+      4. Verify container has correct user mapping
+    category: permissions
+    confidence: 0.85
+
+  # Input File Errors
+  - pattern: "No such file or directory|ENOENT|file not found|Path does not exist"
+    cause: "Input file or reference not found"
+    solution: |
+      1. Verify input file paths exist: ls /path/to/file
+      2. Check for typos in --input parameter
+      3. Ensure paths are accessible from compute nodes
+      4. For relative paths, check working directory
+    category: input
+    confidence: 0.9
+
+  - pattern: "Empty input|No reads|No sequences found|Input file is empty"
+    cause: "Input files are empty or have no valid sequences"
+    solution: |
+      1. Check input file content: zcat file.fastq.gz | head
+      2. Verify FASTQ/FASTA format is correct
+      3. Check for file corruption during transfer
+      4. Validate file integrity with checksum
+    category: input
+    confidence: 0.85
+
+  - pattern: "truncated|corrupt|Invalid.*format|Bad.*header|gzip.*unexpected end"
+    cause: "Corrupted or truncated input files"
+    solution: |
+      1. Re-download files and verify checksums
+      2. Check for incomplete file transfers
+      3. Validate files: gzip -t file.fastq.gz
+      4. Re-generate intermediate files if corrupted
+    category: input
+    confidence: 0.9
+
+  # Reference Errors
+  - pattern: "Index not found|genome index.*missing|reference.*not.*exist"
+    cause: "Reference genome index not found or incompatible"
+    solution: |
+      1. For nf-core pipelines: Use --genome parameter (e.g., --genome GRCh38)
+      2. Build custom index with --fasta and --gtf
+      3. Provide pre-built indices: --star_index, --bowtie2_index
+      4. Verify index version matches aligner version
+    category: reference
+    confidence: 0.9
+    analysis_types:
+      - rna-seq
+      - dna-seq
+      - chip-seq
+
+  - pattern: "Chromosome.*not found|contig.*not in|sequence.*missing from reference"
+    cause: "Chromosome naming inconsistency between files"
+    solution: |
+      1. Check chromosome naming: 'chr1' vs '1'
+      2. Use matching reference and annotation files
+      3. Convert naming: sed 's/^>/>chr/' reference.fa
+      4. Use UCSC to Ensembl conversion tools
+    category: reference
+    confidence: 0.85
+
+  # Container Errors
+  - pattern: "Container.*not found|docker.*pull.*failed|singularity.*error"
+    cause: "Container image not available or pull failed"
+    solution: |
+      1. Check internet connection for container pulling
+      2. Use -profile docker or -profile singularity
+      3. Pre-pull containers: singularity pull <image>
+      4. Check container registry availability
+    category: container
+    confidence: 0.9
+
+  - pattern: "Image.*does not exist|manifest.*not found|unknown blob"
+    cause: "Container image tag not found"
+    solution: |
+      1. Check container version exists in registry
+      2. Try using 'latest' tag or specific version
+      3. Update pipeline to latest version
+      4. Check for deprecated container images
+    category: container
+    confidence: 0.85
+
+  # SLURM/Scheduler Errors  
+  - pattern: "SLURM.*TIMEOUT|DUE TO TIME LIMIT|time limit.*exceeded"
+    cause: "Job exceeded allocated time limit"
+    solution: |
+      1. Increase time in process directive: time = '24.h'
+      2. Use higher time label: label 'process_long'
+      3. Split large samples into smaller batches
+      4. Check for process hanging or infinite loops
+    category: slurm
+    confidence: 0.95
+
+  - pattern: "QOSMax.*Limit|partition.*unavailable|submission.*failed"
+    cause: "SLURM resource limits or partition issue"
+    solution: |
+      1. Check available partitions: sinfo
+      2. Reduce resource requests
+      3. Use different partition: -profile slurm_<partition>
+      4. Wait for resources or use priority queue
+    category: slurm
+    confidence: 0.8
+
+  # Tool-Specific: STAR
+  - pattern: "STAR.*fatal error|STAR.*EXITING|STAR.*genome.*not compatible"
+    cause: "STAR aligner encountered a fatal error"
+    solution: |
+      1. Check genome index compatibility with STAR version
+      2. Ensure sufficient memory (32GB+ for human genome)
+      3. Verify annotation GTF format is correct
+      4. Rebuild index with current STAR version
+    category: tool
+    analysis_types:
+      - rna-seq
+    confidence: 0.9
+
+  # Tool-Specific: Salmon
+  - pattern: "salmon.*index|salmon.*quant.*error|Salmon encountered"
+    cause: "Salmon quantification or indexing error"
+    solution: |
+      1. Verify transcriptome index exists
+      2. Check read length compatibility with k-mer size
+      3. Ensure FASTA headers are properly formatted
+      4. Rebuild index: salmon index -t transcriptome.fa -i index
+    category: tool
+    analysis_types:
+      - rna-seq
+    confidence: 0.85
+
+  # Tool-Specific: BWA
+  - pattern: "BWA.*error|bwa mem.*fail|BWA index"
+    cause: "BWA alignment or indexing error"
+    solution: |
+      1. Check reference index files exist (.bwt, .pac, etc.)
+      2. Verify read format is correct
+      3. Ensure paired-end files are properly matched
+      4. Rebuild index: bwa index reference.fa
+    category: tool
+    analysis_types:
+      - dna-seq
+      - chip-seq
+    confidence: 0.85
+
+  # Tool-Specific: GATK
+  - pattern: "GATK.*error|HaplotypeCaller.*fail|Mutect2.*error"
+    cause: "GATK variant calling error"
+    solution: |
+      1. Check reference FASTA has .dict and .fai files
+      2. Verify BAM file is sorted and indexed
+      3. Check for proper read group tags in BAM
+      4. Ensure consistent chromosome naming
+    category: tool
+    analysis_types:
+      - dna-seq
+    confidence: 0.85
+
+  # Tool-Specific: MACS2/MACS3
+  - pattern: "MACS2.*error|MACS3.*error|peak.*calling.*fail"
+    cause: "MACS peak calling error"
+    solution: |
+      1. Check BAM files are properly sorted and indexed
+      2. Verify effective genome size (-g hs/mm/ce)
+      3. Ensure sufficient read depth for peak calling
+      4. Check input control file if using
+    category: tool
+    analysis_types:
+      - chip-seq
+      - atac-seq
+    confidence: 0.85
+
+  # Nextflow Errors
+  - pattern: "Missing.*param|required.*param.*not.*set|Mandatory.*parameter"
+    cause: "Required pipeline parameter not provided"
+    solution: |
+      1. Check pipeline documentation for required parameters
+      2. Run with --help to see all options
+      3. Provide required parameters in params file
+      4. Use nf-core launch for interactive parameter setup
+    category: nextflow
+    confidence: 0.9
+
+  - pattern: "Channel.*empty|No matching.*input|Zero files"
+    cause: "Input channel is empty - no files match pattern"
+    solution: |
+      1. Check input file pattern matches files
+      2. Verify files exist at specified location
+      3. Test glob pattern: ls /path/to/files/*.fastq.gz
+      4. Check samplesheet format and file paths
+    category: nextflow
+    confidence: 0.85
+
+  - pattern: "Process.*terminated|exit.*status.*[1-9]|Command error"
+    cause: "Process exited with non-zero exit code"
+    solution: |
+      1. Check .command.log in work directory for details
+      2. Check .command.err for error messages
+      3. Examine .command.sh to understand command
+      4. Run command manually to debug
+    category: nextflow
+    confidence: 0.7
