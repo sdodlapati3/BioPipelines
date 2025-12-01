@@ -282,6 +282,12 @@ INTENT_PATTERNS: List[Tuple[str, IntentType, Dict[str, int]]] = [
     # "What samples are available locally?"
     (r"what\s+(?:data|samples?|files?)\s+(?:are|is)\s+available\s+locally",
      IntentType.DATA_SCAN, {}),
+    # "What types of data do we have" / "what kinds of data are in the folder"
+    (r"what\s+(?:types?|kinds?)\s+of\s+(?:data|files?|samples?)\s+(?:do\s+we\s+have|are\s+(?:there|available|in))",
+     IntentType.DATA_SCAN, {}),
+    # "Explain/tell me what data we have" - asking about local data
+    (r"(?:can\s+you\s+)?(?:explain|tell\s+me|show\s+me)\s+(?:me\s+)?what\s+(?:types?\s+of\s+)?(?:data|files?|samples?)\s+(?:we\s+have|i\s+have|is\s+available|are\s+(?:in|available))",
+     IntentType.DATA_SCAN, {}),
     # "Inventory my data in /path"
     (r"inventory\s+(?:my\s+)?(?:data|files?)\s+(?:in|at)\s+([/~][^\s]+)",
      IntentType.DATA_SCAN, {"path": 1}),

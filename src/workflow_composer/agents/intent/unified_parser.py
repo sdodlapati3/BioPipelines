@@ -381,10 +381,29 @@ class UnifiedIntentParser:
                     query, pattern_result, semantic_result
                 )
                 if arbiter_result:
+                    # If arbiter changed the intent to a different category,
+                    # clear slots from the original pattern (they may not be valid)
+                    slots_to_use = pattern_result.slots
+                    original_intent = pattern_result.primary_intent.name
+                    final_intent = arbiter_result.final_intent
+                    
+                    if original_intent != final_intent:
+                        original_category = self._get_intent_category(original_intent)
+                        final_category = self._get_intent_category(final_intent)
+                        
+                        if original_category != final_category:
+                            # Different category - slots from original pattern likely invalid
+                            # Clear them to prevent type mismatches (e.g., 'concept' for DATA_SCAN)
+                            logger.debug(
+                                f"Clearing slots due to category change: "
+                                f"{original_category} -> {final_category}"
+                            )
+                            slots_to_use = {}
+                    
                     result = UnifiedParseResult.from_arbiter_result(
                         arbiter_result,
                         entities=pattern_result.entities,
-                        slots=pattern_result.slots,
+                        slots=slots_to_use,
                     )
                     # Cache LLM results for future lookups
                     if result.llm_invoked:
@@ -415,10 +434,12 @@ class UnifiedIntentParser:
         Determine if the arbiter should be invoked.
         
         We use a tiered approach:
-        1. High confidence pattern (>= 0.85): Trust it, no LLM needed
+        1. High confidence pattern (>= 0.85): Trust it, UNLESS there are competing alternatives
         2. Medium confidence (0.6 - 0.85): Check for complexity indicators
         3. Low confidence (< 0.6): Use LLM for disambiguation
         4. Complexity indicators: Always use LLM for negation, ambiguity
+        5. Competing alternatives: If multiple patterns matched with similar confidence
+           from different categories, use LLM to disambiguate
         """
         if not self.arbiter:
             return False
@@ -429,6 +450,23 @@ class UnifiedIntentParser:
         confidence = pattern_result.confidence
         intent = pattern_result.primary_intent.name
         query_lower = query.lower()
+        
+        # Check for competing high-confidence alternatives from different categories
+        # This catches cases like DATA_SCAN vs EDUCATION_EXPLAIN both matching
+        if pattern_result.alternatives:
+            for alt_intent, alt_conf in pattern_result.alternatives:
+                # If alternative is close in confidence (within 0.15) and from different category
+                conf_diff = abs(confidence - alt_conf)
+                if conf_diff < 0.15:
+                    primary_category = self._get_intent_category(intent)
+                    alt_category = self._get_intent_category(alt_intent.name if hasattr(alt_intent, 'name') else str(alt_intent))
+                    
+                    if primary_category != alt_category:
+                        logger.debug(
+                            f"Competing alternatives from different categories: "
+                            f"{intent}({confidence:.2f}) vs {alt_intent}({alt_conf:.2f})"
+                        )
+                        return True
         
         # Tier 1: High confidence pattern matching - trust it
         if confidence >= 0.85:
@@ -473,6 +511,41 @@ class UnifiedIntentParser:
         
         # Medium confidence (0.6-0.85) without complexity: trust pattern
         return False
+    
+    def _get_intent_category(self, intent_name: str) -> str:
+        """
+        Get the high-level category for an intent.
+        
+        This helps detect when competing matches are from fundamentally
+        different domains (e.g., DATA vs EDUCATION vs WORKFLOW).
+        """
+        intent_upper = intent_name.upper()
+        
+        # Data operations
+        if intent_upper.startswith("DATA_"):
+            return "DATA"
+        
+        # Workflow operations  
+        if intent_upper.startswith("WORKFLOW_") or "PIPELINE" in intent_upper:
+            return "WORKFLOW"
+        
+        # Education/Help
+        if intent_upper.startswith("EDUCATION_") or intent_upper.startswith("HELP_"):
+            return "EDUCATION"
+        
+        # Meta/System
+        if intent_upper.startswith("META_"):
+            return "META"
+        
+        # Tool operations
+        if intent_upper.startswith("TOOL_"):
+            return "TOOL"
+        
+        # Session management
+        if intent_upper.startswith("SESSION_"):
+            return "SESSION"
+        
+        return "OTHER"
     
     def _invoke_arbiter(
         self,

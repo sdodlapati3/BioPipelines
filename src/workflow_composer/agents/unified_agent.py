@@ -1008,6 +1008,7 @@ class UnifiedAgent:
         Process a query synchronously.
         
         Convenience method for non-async contexts.
+        Handles various event loop scenarios including AnyIO worker threads.
         
         Args:
             query: User's natural language query
@@ -1015,19 +1016,47 @@ class UnifiedAgent:
         Returns:
             AgentResponse with results
         """
+        import concurrent.futures
+        
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # We're in an async context, create a new task
-                import concurrent.futures
+            # Try to get the running loop
+            try:
+                loop = asyncio.get_running_loop()
+                # We're in an async context - use thread pool to run in new loop
                 with concurrent.futures.ThreadPoolExecutor() as pool:
                     future = pool.submit(asyncio.run, self.process_query(query))
-                    return future.result()
-            else:
+                    return future.result(timeout=120)  # 2 min timeout
+            except RuntimeError:
+                # No running loop - we can create one
+                pass
+            
+            # Try to get existing event loop (may not be running)
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_closed():
+                    raise RuntimeError("Loop is closed")
                 return loop.run_until_complete(self.process_query(query))
-        except RuntimeError:
-            # No event loop, create one
-            return asyncio.run(self.process_query(query))
+            except RuntimeError:
+                # No event loop or it's closed - create a new one
+                return asyncio.run(self.process_query(query))
+                
+        except Exception as e:
+            # Last resort fallback - create fresh event loop
+            logger.warning(f"Event loop handling failed, using fresh loop: {e}")
+            try:
+                new_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(new_loop)
+                try:
+                    return new_loop.run_until_complete(self.process_query(query))
+                finally:
+                    new_loop.close()
+            except Exception as inner_e:
+                logger.error(f"Failed to process query: {inner_e}")
+                return AgentResponse(
+                    success=False,
+                    message=f"❌ Error processing query: {inner_e}",
+                    response_type=ResponseType.ERROR,
+                )
             
     # =========================================================================
     # Internal Methods
@@ -1106,9 +1135,19 @@ class UnifiedAgent:
                 params["concept"] = slots["concept"]
             elif "topic" in slots:
                 params["concept"] = slots["topic"]
+        elif intent == "DATA_SCAN":
+            # For data scan, only pass path
+            if "path" in slots:
+                params["path"] = slots["path"]
+            elif "directory" in slots:
+                params["path"] = slots["directory"]
+            elif "folder" in slots:
+                params["path"] = slots["folder"]
+            # Don't pass other slots - scan_data only needs path
         else:
-            # Default: use slots directly
-            params = dict(slots)
+            # Default: use slots directly, but filter out common invalid params
+            invalid_params = {"concept", "topic", "question"}  # These are for explain_concept only
+            params = {k: v for k, v in slots.items() if k not in invalid_params}
         
         return params
     
@@ -1183,8 +1222,19 @@ class UnifiedAgent:
                 params["concept"] = slots["concept"]
             elif "topic" in slots:
                 params["concept"] = slots["topic"]
+        elif intent == "DATA_SCAN":
+            # For data scan, only pass path
+            if "path" in slots:
+                params["path"] = slots["path"]
+            elif "directory" in slots:
+                params["path"] = slots["directory"]
+            elif "folder" in slots:
+                params["path"] = slots["folder"]
+            # Don't pass other slots - scan_data only needs path
         else:
-            params = dict(slots)
+            # Default: filter out common invalid params
+            invalid_params = {"concept", "topic", "question"}
+            params = {k: v for k, v in slots.items() if k not in invalid_params}
         
         return params
     
