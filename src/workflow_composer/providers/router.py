@@ -153,7 +153,31 @@ class ProviderRouter:
     def _create_provider(self, config: ProviderConfig) -> BaseProvider:
         """Create a provider instance."""
         # Lazy imports to avoid circular dependencies
-        if config.id == "lightning":
+        if config.id == "gemini":
+            from .gemini import GeminiProvider
+            return GeminiProvider(
+                model=config.default_model,
+                api_key=config.get_api_key(),
+            )
+        elif config.id == "cerebras":
+            from .cerebras import CerebrasProvider
+            return CerebrasProvider(
+                model=config.default_model,
+                api_key=config.get_api_key(),
+            )
+        elif config.id == "groq":
+            from .groq import GroqProvider
+            return GroqProvider(
+                model=config.default_model,
+                api_key=config.get_api_key(),
+            )
+        elif config.id == "openrouter":
+            from .openrouter import OpenRouterProvider
+            return OpenRouterProvider(
+                model=config.default_model,
+                api_key=config.get_api_key(),
+            )
+        elif config.id == "lightning":
             from .lightning import LightningProvider
             return LightningProvider(
                 model=config.default_model,
@@ -162,12 +186,6 @@ class ProviderRouter:
         elif config.id == "github_models":
             from .github_models import GitHubModelsProvider
             return GitHubModelsProvider(
-                model=config.default_model,
-                api_key=config.get_api_key(),
-            )
-        elif config.id == "gemini":
-            from .gemini import GeminiProvider
-            return GeminiProvider(
                 model=config.default_model,
                 api_key=config.get_api_key(),
             )

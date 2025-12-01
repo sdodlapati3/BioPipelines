@@ -11,25 +11,35 @@ from typing import Optional, List, Union, AsyncIterator
 from .base import BaseProvider, Message, ProviderResponse, Role
 from .registry import ProviderType, ProviderRegistry, get_registry
 from .router import ProviderRouter
-from .lightning import LightningProvider
 from .gemini import GeminiProvider
+from .cerebras import CerebrasProvider
+from .groq import GroqProvider
+from .openrouter import OpenRouterProvider
+from .lightning import LightningProvider
+from .github_models import GitHubModelsProvider
 from .openai import OpenAIProvider
 from .anthropic import AnthropicProvider
 from .ollama import OllamaProvider
 from .vllm import VLLMProvider
-from .github_models import GitHubModelsProvider
 
 
-# Map of provider IDs to classes
+# Map of provider IDs to classes (ordered by priority)
 PROVIDER_CLASSES = {
-    "lightning": LightningProvider,
+    # Tier 1: Best free tiers
     "gemini": GeminiProvider,
-    "openai": OpenAIProvider,
-    "anthropic": AnthropicProvider,
-    "ollama": OllamaProvider,
-    "vllm": VLLMProvider,
+    "cerebras": CerebrasProvider,
+    "groq": GroqProvider,
+    "openrouter": OpenRouterProvider,
+    # Tier 2: Good free tiers
+    "lightning": LightningProvider,
     "github_models": GitHubModelsProvider,
     "github": GitHubModelsProvider,  # Alias
+    # Tier 3: Paid
+    "openai": OpenAIProvider,
+    "anthropic": AnthropicProvider,
+    # Tier 4: Local
+    "ollama": OllamaProvider,
+    "vllm": VLLMProvider,
 }
 
 

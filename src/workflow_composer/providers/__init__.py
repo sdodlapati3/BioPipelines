@@ -10,8 +10,12 @@ Architecture:
     ├── base.py           # BaseProvider abstract class
     ├── registry.py       # Central provider & model registry
     ├── router.py         # Smart routing with fallback
-    ├── lightning.py      # Lightning.ai (FREE tier)
-    ├── gemini.py         # Google Gemini (FREE tier)
+    ├── gemini.py         # Google AI Studio (FREE tier) ⭐
+    ├── cerebras.py       # Cerebras Cloud (FREE tier, generous) ⭐
+    ├── groq.py           # Groq Cloud (FREE tier, fast) ⭐
+    ├── openrouter.py     # OpenRouter gateway (FREE models) ⭐
+    ├── lightning.py      # Lightning.ai
+    ├── github_models.py  # GitHub Models (with Copilot)
     ├── openai.py         # OpenAI (paid)
     ├── anthropic.py      # Anthropic Claude (paid)
     ├── ollama.py         # Local Ollama (free)
@@ -20,13 +24,16 @@ Architecture:
         ├── health.py     # Health checking
         └── metrics.py    # Usage tracking
 
-Provider Priority (waterfall on failure):
-    1. Lightning.ai   - 30M free tokens/month
-    2. Gemini         - Free tier with rate limits
-    3. OpenAI         - Paid, most reliable
-    4. Anthropic      - Paid, high quality
-    5. Ollama         - Local, free
-    6. vLLM           - Local GPU, free
+Provider Priority (cascade on rate limit):
+    1. Gemini       - 250 req/day, 1M tokens/day FREE
+    2. Cerebras     - 14,400 req/day, 1M tokens/day FREE
+    3. Groq         - 1,000+ req/day, blazing fast FREE
+    4. OpenRouter   - 50 req/day, 20+ free models
+    5. Lightning.ai - DeepSeek V3
+    6. GitHub Models- With Copilot subscription
+    10. Anthropic   - Paid only
+    15-16. Local    - Ollama/vLLM
+    99. OpenAI      - Paid fallback (always works)
 
 Usage:
     from workflow_composer.providers import (
@@ -37,7 +44,7 @@ Usage:
         ProviderRouter,
     )
     
-    # Simple completion (auto-selects best provider)
+    # Simple completion (auto-selects best free provider)
     response = complete("Explain RNA-seq analysis")
     
     # Chat with messages
@@ -47,10 +54,10 @@ Usage:
     ])
     
     # Force specific provider
-    response = complete("Debug this error", provider="gemini")
+    response = complete("Debug this error", provider="cerebras")
     
     # Get provider instance for advanced use
-    provider = get_provider("lightning")
+    provider = get_provider("groq")
     response = provider.complete("...")
     
     # Smart routing with automatic fallback
@@ -86,13 +93,16 @@ from .router import (
 )
 
 # Individual providers
-from .lightning import LightningProvider
 from .gemini import GeminiProvider
+from .cerebras import CerebrasProvider
+from .groq import GroqProvider
+from .openrouter import OpenRouterProvider
+from .lightning import LightningProvider
+from .github_models import GitHubModelsProvider
 from .openai import OpenAIProvider
 from .anthropic import AnthropicProvider
 from .ollama import OllamaProvider
 from .vllm import VLLMProvider
-from .github_models import GitHubModelsProvider
 
 # Utilities
 from .utils import (
@@ -142,13 +152,16 @@ __all__ = [
     "get_best_provider",
     
     # Providers
-    "LightningProvider",
     "GeminiProvider",
+    "CerebrasProvider",
+    "GroqProvider",
+    "OpenRouterProvider",
+    "LightningProvider",
+    "GitHubModelsProvider",
     "OpenAIProvider",
     "AnthropicProvider",
     "OllamaProvider",
     "VLLMProvider",
-    "GitHubModelsProvider",
     
     # Factory
     "get_provider",

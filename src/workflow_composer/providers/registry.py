@@ -68,21 +68,98 @@ class ModelConfig:
 
 
 # Default provider configurations
+# Priority: Lower = higher priority (tried first)
+# Strategy: Maximize free tier usage before falling back to paid
 DEFAULT_PROVIDERS: Dict[str, ProviderConfig] = {
+    # ==========================================================================
+    # TIER 1: Best Free Tiers (High Limits)
+    # ==========================================================================
+    "gemini": ProviderConfig(
+        id="gemini",
+        name="Google AI Studio",
+        provider_type=ProviderType.API,
+        priority=1,  # Best free tier: 250+ req/day, 1M tokens
+        env_key="GOOGLE_API_KEY",
+        base_url="https://generativelanguage.googleapis.com/v1beta",
+        default_model="gemini-2.0-flash",
+        models=[
+            "gemini-2.0-flash",           # Fast, 200 req/day
+            "gemini-2.5-flash",           # 250 req/day
+            "gemini-2.5-pro",             # 50 req/day, best quality
+        ],
+        free_tier=True,
+        rate_limit="15/min, 250/day",
+    ),
+    "cerebras": ProviderConfig(
+        id="cerebras",
+        name="Cerebras Cloud",
+        provider_type=ProviderType.API,
+        priority=2,  # Very generous: 14,400 req/day, 1M tokens
+        env_key="CEREBRAS_API_KEY",
+        base_url="https://api.cerebras.ai/v1",
+        default_model="llama-3.3-70b",
+        models=[
+            "llama-3.3-70b",              # 14,400 req/day
+            "qwen3-235b-a22b",            # 235B params, FREE!
+            "qwen3-coder-480b",           # Best coding, 100 req/day
+            "gpt-oss-120b",               # 14,400 req/day
+            "llama-4-scout",              # Latest Llama
+        ],
+        free_tier=True,
+        rate_limit="60k tok/min, 14,400/day",
+    ),
+    "groq": ProviderConfig(
+        id="groq",
+        name="Groq Cloud",
+        provider_type=ProviderType.API,
+        priority=3,  # Fast inference: 1,000+ req/day
+        env_key="GROQ_API_KEY",
+        base_url="https://api.groq.com/openai/v1",
+        default_model="llama-3.3-70b-versatile",
+        models=[
+            "llama-3.3-70b-versatile",    # 1,000 req/day
+            "llama-3.1-8b-instant",       # 14,400 req/day, fastest
+            "gpt-oss-120b",               # 1,000 req/day
+            "groq/compound",              # Agentic with tools
+        ],
+        free_tier=True,
+        rate_limit="1,000/day (70B), 14,400/day (8B)",
+    ),
+    
+    # ==========================================================================
+    # TIER 2: Good Free Tiers (Lower Limits)
+    # ==========================================================================
+    "openrouter": ProviderConfig(
+        id="openrouter",
+        name="OpenRouter",
+        provider_type=ProviderType.API,
+        priority=4,  # Gateway to many free models: 50 req/day
+        env_key="OPENROUTER_API_KEY",
+        base_url="https://openrouter.ai/api/v1",
+        default_model="meta-llama/llama-3.3-70b-instruct:free",
+        models=[
+            "meta-llama/llama-3.3-70b-instruct:free",
+            "qwen/qwen3-235b-a22b:free",
+            "deepseek/deepseek-r1t-chimera:free",
+            "google/gemma-3-27b-it:free",
+            "mistralai/mistral-small-3.1-24b-instruct:free",
+        ],
+        free_tier=True,
+        rate_limit="20/min, 50/day (free models)",
+    ),
     "lightning": ProviderConfig(
         id="lightning",
         name="Lightning.ai",
         provider_type=ProviderType.API,
-        priority=1,
+        priority=5,
         env_key="LIGHTNING_API_KEY",
         base_url="https://lightning.ai/api/v1",
         default_model="lightning-ai/DeepSeek-V3.1",
         models=[
-            "lightning-ai/DeepSeek-V3.1",      # Best value - FREE via Lightning
-            "openai/gpt-4o",                    # High quality
-            "google/gemini-2.5-flash",          # Fast, cheap
-            "lightning-ai/gpt-oss-120b",        # Open source giant
-            "openai/gpt-5-mini",                # Latest mini
+            "lightning-ai/DeepSeek-V3.1",
+            "openai/gpt-4o",
+            "google/gemini-2.5-flash",
+            "lightning-ai/gpt-oss-120b",
         ],
         free_tier=True,
         rate_limit="100/min",
@@ -91,52 +168,48 @@ DEFAULT_PROVIDERS: Dict[str, ProviderConfig] = {
         id="github_models",
         name="GitHub Models",
         provider_type=ProviderType.API,
-        priority=2,  # Free tier with GitHub Pro+
+        priority=6,  # Free with GitHub Copilot subscription
         env_key="GITHUB_TOKEN",
         base_url="https://models.inference.ai.azure.com",
         default_model="gpt-4o-mini",
-        models=["gpt-4o-mini", "gpt-4o", "DeepSeek-R1", "Llama-3.1-405B-Instruct", "Phi-4"],
+        models=["gpt-4o-mini", "gpt-4o", "DeepSeek-R1", "Llama-3.3-70B-Instruct"],
         free_tier=True,
-        rate_limit="50/min",
+        rate_limit="Tier-dependent",
     ),
-    "gemini": ProviderConfig(
-        id="gemini",
-        name="Google Gemini",
-        provider_type=ProviderType.API,
-        priority=3,
-        env_key="GOOGLE_API_KEY",
-        base_url="https://generativelanguage.googleapis.com/v1beta",
-        default_model="gemini-2.0-flash",
-        models=["gemini-2.0-flash", "gemini-2.5-pro-preview-06-05"],
-        free_tier=True,
-        rate_limit="15/min",
-    ),
+    
+    # ==========================================================================
+    # TIER 3: Paid (No Free Tier)
+    # ==========================================================================
     "anthropic": ProviderConfig(
         id="anthropic",
         name="Anthropic",
         provider_type=ProviderType.API,
-        priority=4,
+        priority=10,  # Paid only - use after free tiers exhausted
         env_key="ANTHROPIC_API_KEY",
         base_url="https://api.anthropic.com",
         default_model="claude-3-5-sonnet-20241022",
         models=["claude-3-5-sonnet-20241022", "claude-3-opus-20240229", "claude-3-haiku-20240307"],
         free_tier=False,
     ),
+    
+    # ==========================================================================
+    # TIER 4: Local Models (Always Free)
+    # ==========================================================================
     "ollama": ProviderConfig(
         id="ollama",
-        name="Ollama",
+        name="Ollama (Local)",
         provider_type=ProviderType.LOCAL,
-        priority=5,
+        priority=15,  # Local fallback if cloud unavailable
         base_url="http://localhost:11434",
         default_model="llama3:8b",
-        models=["llama3:8b", "mistral:7b", "codellama:13b"],
+        models=["llama3:8b", "mistral:7b", "codellama:13b", "qwen2.5:32b"],
         free_tier=True,
     ),
     "vllm": ProviderConfig(
         id="vllm",
-        name="vLLM",
+        name="vLLM (Local)",
         provider_type=ProviderType.LOCAL,
-        priority=6,
+        priority=16,  # Local high-performance
         base_url="http://localhost:8000/v1",
         default_model="Qwen/Qwen2.5-Coder-32B-Instruct",
         models=[
@@ -146,11 +219,15 @@ DEFAULT_PROVIDERS: Dict[str, ProviderConfig] = {
         ],
         free_tier=True,
     ),
+    
+    # ==========================================================================
+    # TIER 5: Expensive Fallback (Last Resort)
+    # ==========================================================================
     "openai": ProviderConfig(
         id="openai",
         name="OpenAI",
         provider_type=ProviderType.API,
-        priority=99,  # LAST RESORT - paid but always works, no rate limits
+        priority=99,  # LAST RESORT - paid, but reliable
         env_key="OPENAI_API_KEY",
         base_url="https://api.openai.com/v1",
         default_model="gpt-4o-mini",
