@@ -86,6 +86,7 @@ def chat_response(message: str, history: List[Dict], request: gr.Request = None)
     Generate chat response using the BioPipelines facade with streaming.
     
     Supports session management for multi-turn conversations.
+    Intelligently routes to multi-agent system for workflow generation queries.
     
     Args:
         message: User's input message
@@ -115,10 +116,20 @@ def chat_response(message: str, history: List[Dict], request: gr.Request = None)
         {"role": "assistant", "content": ""}
     ]
     
-    # Try streaming if available
+    # Check if this is a workflow generation request that should use multi-agent
+    query_lower = message.lower()
+    is_workflow_generation = any(phrase in query_lower for phrase in [
+        'generate workflow', 'create workflow', 'build workflow', 'make workflow',
+        'generate pipeline', 'create pipeline', 'build pipeline',
+        'create a', 'generate a', 'build a'  # + "workflow/pipeline" context
+    ]) and any(word in query_lower for word in ['workflow', 'pipeline', 'analysis'])
+    
     try:
-        if hasattr(bp, 'chat_stream'):
-            # Use streaming chat with session support
+        if is_workflow_generation:
+            # Use multi-agent system for high-quality workflow generation
+            yield from _stream_multiagent_response(message, new_history, session_id)
+        elif hasattr(bp, 'chat_stream'):
+            # Use standard chat stream for other queries
             full_response = ""
             for chunk in bp.chat_stream(message, history=history, session_id=session_id):
                 full_response += chunk
@@ -132,6 +143,108 @@ def chat_response(message: str, history: List[Dict], request: gr.Request = None)
     except Exception as e:
         new_history[-1]["content"] = f"❌ Error: {e}"
         yield new_history
+
+
+def _stream_multiagent_response(
+    message: str, 
+    history: List[Dict], 
+    session_id: str
+) -> Generator[List[Dict], None, None]:
+    """
+    Stream multi-agent workflow generation responses into chat history.
+    
+    Args:
+        message: User's workflow generation request
+        history: Current chat history (with empty assistant message at end)
+        session_id: Session ID for tracking
+    
+    Yields:
+        Updated history with progressive multi-agent updates
+    """
+    import asyncio
+    
+    try:
+        output_parts = ["🤖 **Starting Multi-Agent Workflow Generation**\n\n"]
+        history[-1]["content"] = "".join(output_parts)
+        yield history
+        
+        async def stream_updates():
+            async for update in bp.generate_with_agents_streaming(message):
+                phase = update.get("phase", "")
+                status = update.get("status", "")
+                
+                if phase == "planning":
+                    if status == "started":
+                        output_parts.append("📋 **Planning**: Analyzing requirements...\n")
+                    elif status == "complete":
+                        plan_info = update.get("plan", {})
+                        output_parts.append(f"📋 **Planning**: Complete - {plan_info.get('steps', 0)} steps planned\n")
+                
+                elif phase == "codegen":
+                    if status == "started":
+                        output_parts.append("💻 **Generating Code**: Writing Nextflow DSL2...\n")
+                    elif status == "complete":
+                        lines = update.get("lines", 0)
+                        output_parts.append(f"💻 **Code Generation**: Complete - {lines} lines\n")
+                
+                elif phase == "validation":
+                    if status == "started":
+                        output_parts.append("🔍 **Validating**: Running static analysis + LLM review...\n")
+                    elif status == "complete":
+                        issues = update.get("issues", 0)
+                        valid = update.get("valid", False)
+                        status_text = "✓ Passed" if valid else f"⚠️ {issues} issues"
+                        output_parts.append(f"🔍 **Validation**: {status_text}\n")
+                
+                elif phase == "documentation":
+                    if status == "started":
+                        output_parts.append("📝 **Documentation**: Generating README...\n")
+                    elif status == "complete":
+                        output_parts.append("📝 **Documentation**: Complete\n")
+                
+                elif phase == "complete":
+                    result = update.get("result", {})
+                    output_parts.append("\n---\n")
+                    output_parts.append("### ✅ Workflow Generated Successfully!\n\n")
+                    output_parts.append(f"**Name:** {result.get('name', 'workflow')}\n")
+                    output_parts.append(f"**Lines of code:** {result.get('code_lines', 0)}\n")
+                    output_parts.append(f"**Validation:** {'Passed ✓' if result.get('validation_passed') else 'Has issues'}\n")
+                    output_parts.append("\n*Tip: Say \"show workflow\" or \"run workflow\" to see or execute it.*")
+                
+                elif phase == "error":
+                    output_parts.append(f"\n❌ **Error**: {update.get('error', 'Unknown error')}\n")
+                
+                yield "".join(output_parts)
+        
+        # Run async generator
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            gen = stream_updates()
+            while True:
+                try:
+                    result = loop.run_until_complete(gen.__anext__())
+                    history[-1]["content"] = result
+                    yield history
+                except StopAsyncIteration:
+                    break
+        finally:
+            loop.close()
+            
+    except ImportError:
+        # Multi-agent not available, fallback to regular chat
+        history[-1]["content"] = "⚠️ Multi-agent system not available, using standard generation...\n\n"
+        yield history
+        
+        # Use regular chat_stream as fallback
+        full_response = history[-1]["content"]
+        for chunk in bp.chat_stream(message, session_id=session_id):
+            full_response += chunk
+            history[-1]["content"] = full_response
+            yield history
+    except Exception as e:
+        history[-1]["content"] += f"\n❌ Error: {e}"
+        yield history
 
 
 # ============================================================================
@@ -341,15 +454,15 @@ def create_app() -> gr.Blocks:
                 stats_btn = gr.Button("📊 Show Stats")
                 stats_output = gr.JSON(label="Learning Statistics")
         
-        # Advanced Multi-Agent Generation
-        with gr.Accordion("🤖 Advanced Generation (Multi-Agent)", open=False):
+        # Advanced Multi-Agent Generation (now integrated into chat - this is for manual override)
+        with gr.Accordion("🤖 Manual Multi-Agent Generation", open=False):
             gr.Markdown("""
-            **Multi-Agent Workflow Generation** uses specialized AI agents for higher quality workflows:
-            - 📋 **Planner**: Designs workflow structure from your description
-            - 🔧 **CodeGen**: Generates Nextflow DSL2 code
-            - 🔍 **Validator**: Static analysis + LLM code review
-            - 📝 **DocAgent**: Creates documentation
-            - ✅ **QCAgent**: Quality control checks
+            **Note:** Multi-agent generation is now **automatically triggered** when you ask to create workflows in chat!
+            
+            This panel is for manual override when you want explicit control over the generation process.
+            
+            **Specialist Agents:**
+            - 📋 Planner → 💻 CodeGen → 🔍 Validator → 📝 DocAgent → ✅ QCAgent
             """)
             
             with gr.Row():
