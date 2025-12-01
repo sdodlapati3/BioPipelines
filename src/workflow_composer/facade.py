@@ -566,8 +566,10 @@ class BioPipelines:
         """
         Streaming chat interface for real-time responses.
         
-        Yields response chunks as they arrive from the LLM.
-        Supports session-based conversations for context persistence.
+        Routes queries through the UnifiedAgent first to detect and execute tools,
+        then yields the response. For queries that match tools (data scan, search,
+        workflow generation), the tool is executed and results are yielded.
+        For general queries, streams from the LLM.
         
         Args:
             message: User's message
@@ -602,21 +604,51 @@ class BioPipelines:
         if session:
             self.session_manager.add_user_message(session.session_id, message)
         
-        # Get chat history for context
-        chat_history = []
-        if session:
-            chat_history = self.session_manager.get_chat_history(
-                session.session_id, limit=10
-            )
-        
         try:
-            # Try to use provider router streaming
+            # IMPORTANT: First try to process through the UnifiedAgent
+            # This enables tool execution (scan data, search databases, etc.)
+            agent = self.agent
+            result = agent.process_sync(message)
+            
+            # Check if a tool was executed (has tools_used or specific response types)
+            tool_executed = (
+                hasattr(result, 'tools_used') and result.tools_used or
+                hasattr(result, 'data') and result.data or
+                (hasattr(result, 'response_type') and 
+                 str(result.response_type) not in ('ResponseType.INFO', 'ResponseType.ERROR'))
+            )
+            
+            if tool_executed or result.success:
+                # Tool was executed or we got a good response - yield the result
+                response_message = result.message or "Action completed."
+                
+                # Simulate streaming by yielding chunks
+                chunk_size = 50  # Characters per chunk for smooth streaming
+                for i in range(0, len(response_message), chunk_size):
+                    yield response_message[i:i + chunk_size]
+                
+                # Add to session
+                if session:
+                    self.session_manager.add_assistant_message(
+                        session.session_id,
+                        response_message,
+                        workflow=result.workflow if hasattr(result, "workflow") else None,
+                    )
+                return
+            
+            # No tool matched - fall back to LLM streaming for general queries
             from .providers import get_router
             router = get_router()
             
             # Build system prompt for the agent context
             system_prompt = """You are BioPipelines, an AI assistant for bioinformatics workflow generation.
 You help users create, manage, and run bioinformatics pipelines.
+
+IMPORTANT: You CAN access local files and run commands. When users ask about local data:
+- Use 'scan data in /path' to scan directories
+- Use 'search for <query>' to search databases
+- Use 'show jobs' to list running jobs
+
 Be helpful, concise, and technically accurate."""
             
             # Add session context to system prompt

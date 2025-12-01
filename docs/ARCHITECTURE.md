@@ -1,6 +1,6 @@
-# BioPipelines v2.2 Architecture
+# BioPipelines v2.3 Architecture
 
-**Version**: 2.2.0  
+**Version**: 2.3.0  
 **Date**: December 2025  
 **Status**: Production  
 **Last Validated**: Against codebase December 2025
@@ -13,31 +13,70 @@ BioPipelines is an AI-powered bioinformatics workflow automation platform that e
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                           BioPipelines v2.2                                      │
+│                           BioPipelines v2.3                                      │
 ├─────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                  │
 │                         User Interface Layer                                     │
 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────────────┐      │
 │  │     Web UI      │  │      CLI        │  │       Python API            │      │
 │  │    (Gradio)     │  │   (Terminal)    │  │    (import BioPipelines)    │      │
+│  │  + Advanced Gen │  │  + --agents     │  │  + generate_with_agents()   │      │
 │  └────────┬────────┘  └────────┬────────┘  └──────────────┬──────────────┘      │
 │           │                    │                          │                      │
 │           └────────────────────┼──────────────────────────┘                      │
 │                                ▼                                                 │
 │  ╔═══════════════════════════════════════════════════════════════════════════╗  │
 │  ║                    BioPipelines Facade (facade.py)                         ║  │
-│  ║   chat() │ generate_workflow() │ submit() │ status() │ diagnose()         ║  │
+│  ║   chat() │ generate_workflow() │ submit() │ supervisor │ sessions         ║  │
 │  ╚═══════════════════════════════════════════════════════════════════════════╝  │
+│                                │                                                 │
+│  ┌───────────────────────────────────────────────────────────────────────────┐  │
+│  │              ★ MULTI-AGENT SPECIALIST SYSTEM (Phase 2.4) ★                │  │
+│  │                                                                            │  │
+│  │  ┌──────────────────────────────────────────────────────────────────────┐ │  │
+│  │  │                      SupervisorAgent                                  │ │  │
+│  │  │         Orchestrates specialist agents for workflow generation        │ │  │
+│  │  └───────────────────────────────┬──────────────────────────────────────┘ │  │
+│  │                                  │                                         │  │
+│  │    ┌─────────────┐  ┌────────────┴───────────┐  ┌─────────────────┐       │  │
+│  │    │  Planner    │  │       CodeGen          │  │   Validator     │       │  │
+│  │    │   Agent     │─►│        Agent           │─►│     Agent       │       │  │
+│  │    │ (NL→Plan)   │  │  (Plan→Nextflow DSL2)  │  │ (Static+LLM)    │       │  │
+│  │    └─────────────┘  └────────────────────────┘  └────────┬────────┘       │  │
+│  │                                                          │                 │  │
+│  │                        ┌─────────────────────────────────┘                 │  │
+│  │                        ▼                                                   │  │
+│  │    ┌─────────────┐  ┌─────────────┐  ┌──────────────────────────────────┐ │  │
+│  │    │    Doc      │  │    QC       │  │        Validation Loop           │ │  │
+│  │    │   Agent     │  │   Agent     │  │  (up to 3 fix attempts)          │ │  │
+│  │    │ (README,DAG)│  │ (Thresholds)│  │  ValidatorAgent ↔ CodeGenAgent   │ │  │
+│  │    └─────────────┘  └─────────────┘  └──────────────────────────────────┘ │  │
+│  │                                                                            │  │
+│  │  Workflow States: IDLE→PLANNING→GENERATING→VALIDATING→FIXING→DOCUMENTING │  │
+│  │                   →COMPLETE/FAILED                                         │  │
+│  └───────────────────────────────────────────────────────────────────────────┘  │
 │                                │                                                 │
 │  ┌───────────────────────────────────────────────────────────────────────────┐  │
 │  │                 Unified Agent Layer (agents/unified_agent.py)              │  │
 │  │  ┌────────────────────────────────────────────────────────────────────┐   │  │
 │  │  │                     UnifiedAgent                                    │   │  │
-│  │  │  • UnifiedIntentParser (RECOMMENDED: pattern + semantic + arbiter) │   │  │
+│  │  │  • UnifiedIntentParser (pattern + semantic + arbiter)              │   │  │
 │  │  │  • PermissionManager (AutonomyLevel: READONLY→AUTONOMOUS)          │   │  │
-│  │  │  • ConversationContext (multi-turn memory)                         │   │  │
+│  │  │  • SessionManager (multi-turn memory, user profiles)               │   │  │
 │  │  │  • RAGOrchestrator (tool selection from history)                   │   │  │
 │  │  └────────────────────────────────────────────────────────────────────┘   │  │
+│  └───────────────────────────────────────────────────────────────────────────┘  │
+│                                │                                                 │
+│  ┌───────────────────────────────────────────────────────────────────────────┐  │
+│  │            ★ RAG ENHANCEMENT LAYER (Phase 2.6) ★                          │  │
+│  │                                                                            │  │
+│  │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────────┐   │  │
+│  │  │  KnowledgeBase  │  │  ErrorPatternDB │  │  SemanticRetriever      │   │  │
+│  │  │  (nf-core, tools│  │  (solutions)    │  │  (hybrid search)        │   │  │
+│  │  │   best practices│  │                 │  │                         │   │  │
+│  │  └─────────────────┘  └─────────────────┘  └─────────────────────────┘   │  │
+│  │                                                                            │  │
+│  │  Sources: TOOL_CATALOG | NF_CORE_MODULES | ERROR_PATTERNS | BEST_PRACTICES│  │
 │  └───────────────────────────────────────────────────────────────────────────┘  │
 │                                │                                                 │
 │  ┌───────────────────────────────────────────────────────────────────────────┐  │
@@ -45,13 +84,11 @@ BioPipelines is an AI-powered bioinformatics workflow automation platform that e
 │  │                                                                            │  │
 │  │  ┌─────────────────────────────────────────────────────────────────────┐  │  │
 │  │  │                    UnifiedIntentParser                               │  │  │
-│  │  │                  (agents/intent/unified_parser.py)                   │  │  │
 │  │  │  ┌───────────────────────────────────────────────────────────────┐  │  │  │
 │  │  │  │              Stage 1: Fast Methods (~15ms)                    │  │  │  │
 │  │  │  │  ┌────────────┐ ┌────────────┐ ┌────────────────────┐        │  │  │  │
 │  │  │  │  │  Pattern   │ │  Semantic  │ │      Entity        │        │  │  │  │
 │  │  │  │  │  Matching  │ │   FAISS    │ │    Extraction      │        │  │  │  │
-│  │  │  │  │ (parser.py)│ │(semantic.py│ │   (parser.py)      │        │  │  │  │
 │  │  │  │  └────────────┘ └────────────┘ └────────────────────┘        │  │  │  │
 │  │  │  └───────────────────────────────────────────────────────────────┘  │  │  │
 │  │  │                              │                                       │  │  │
@@ -59,129 +96,113 @@ BioPipelines is an AI-powered bioinformatics workflow automation platform that e
 │  │  │                              │                                       │  │  │
 │  │  │  ┌───────────────────────────────────────────────────────────────┐  │  │  │
 │  │  │  │    Stage 2: LLM Arbiter (20% - only complex/ambiguous)        │  │  │  │
-│  │  │  │                    (arbiter.py)                                │  │  │  │
-│  │  │  │  • Disagreement detection     • Negation handling             │  │  │  │
-│  │  │  │  • Context-aware reasoning    • Provider cascade fallback     │  │  │  │
 │  │  │  └───────────────────────────────────────────────────────────────┘  │  │  │
-│  │  │                              │                                       │  │  │
-│  │  │              Final Intent + Confidence + Reasoning                   │  │  │
 │  │  └─────────────────────────────────────────────────────────────────────┘  │  │
 │  └───────────────────────────────────────────────────────────────────────────┘  │
 │                                │                                                 │
 │  ┌───────────────────────────────────────────────────────────────────────────┐  │
 │  │                 ★ LLM PROVIDER CASCADE (Rate-Limit Resistant) ★           │  │
 │  │                                                                            │  │
-│  │       Priority 1      Priority 2       Priority 3       Priority 99       │  │
-│  │  ┌─────────────┐  ┌──────────────┐  ┌─────────────┐  ┌─────────────┐     │  │
-│  │  │ Lightning   │─►│GitHub Models │─►│   Gemini    │─►│   OpenAI    │     │  │
-│  │  │ (DeepSeek)  │  │   (GPT-4o)   │  │(gemini-pro) │  │ (Fallback)  │     │  │
-│  │  └─────────────┘  └──────────────┘  └─────────────┘  └─────────────┘     │  │
-│  │           │                                                               │  │
-│  │           ▼                                                               │  │
-│  │  ┌──────────────────────────────────────────────────────────────────┐   │  │
-│  │  │  Local Providers (if available)                                   │   │  │
-│  │  │  ┌───────────┐ ┌───────────┐                                     │   │  │
-│  │  │  │   Ollama  │ │   vLLM    │  (GPU cluster inference)            │   │  │
-│  │  │  │ Priority 5│ │Priority 6 │                                     │   │  │
-│  │  │  └───────────┘ └───────────┘                                     │   │  │
-│  │  └──────────────────────────────────────────────────────────────────┘   │  │
+│  │  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐          │  │
+│  │  │  Gemini    │─►│  Cerebras  │─►│   Groq     │─►│ OpenRouter │          │  │
+│  │  │ (Primary)  │  │  (Fast)    │  │  (Fast)    │  │ (Fallback) │          │  │
+│  │  └────────────┘  └────────────┘  └────────────┘  └────────────┘          │  │
+│  │                                                                            │  │
+│  │  + Streaming Support (Phase 2.1) │ + Fallback Chain                       │  │
 │  └───────────────────────────────────────────────────────────────────────────┘  │
 │                                │                                                 │
 │  ┌───────────────────────────────────────────────────────────────────────────┐  │
-│  │                     Tool Categories (agents/tools/)                        │  │
-│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌───────────────┐   │  │
-│  │  │   Data   │ │ Workflow │ │Execution │ │Diagnosis │ │   Education   │   │  │
-│  │  │Discovery │ │ Generator│ │ (SLURM)  │ │  Agent   │ │               │   │  │
-│  │  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └───────────────┘   │  │
+│  │              ★ OBSERVABILITY LAYER (Phase 2.5) ★                          │  │
 │  │                                                                            │  │
-│  │  + PrefetchManager (background prefetch of search results)                │  │
+│  │  ┌────────────────┐  ┌────────────────┐  ┌──────────────────────────────┐ │  │
+│  │  │ ProviderMetrics│  │ QueryAnalytics │  │      HealthEndpoints        │ │  │
+│  │  │ (latency,cost) │  │ (patterns,perf)│  │  /health, /ready, /live     │ │  │
+│  │  └────────────────┘  └────────────────┘  └──────────────────────────────┘ │  │
+│  │                                                                            │  │
+│  │  + Distributed Tracing │ + Metrics Collection │ + Alerting                │  │
 │  └───────────────────────────────────────────────────────────────────────────┘  │
 │                                │                                                 │
-│ ┌────────────────────────────────────────────────────────────────────────────┐  │
-│ │                    RESILIENCE LAYER (infrastructure/)                       │  │
-│ │  ┌────────────┐  ┌──────────────┐  ┌────────────┐  ┌──────────────────┐   │  │
-│ │  │  Circuit   │  │ Exponential  │  │    Rate    │  │    Timeout       │   │  │
-│ │  │  Breaker   │  │   Backoff    │  │  Limiter   │  │    Manager       │   │  │
-│ │  └────────────┘  └──────────────┘  └────────────┘  └──────────────────┘   │  │
-│ │  infrastructure/resilience.py - Protects GEO, ENCODE, GDC adapters         │  │
-│ └────────────────────────────────────────────────────────────────────────────┘  │
-│                                │                                                 │
-│ ┌────────────────────────────────────────────────────────────────────────────┐  │
-│ │                 OBSERVABILITY LAYER (infrastructure/)                       │  │
-│ │  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌──────────────────────┐  │  │
-│ │  │  Tracer    │  │  Metrics   │  │ Structured │  │   Correlation IDs    │  │  │
-│ │  │  (Spans)   │  │ (Counters) │  │    Logs    │  │   (trace_id, span)   │  │  │
-│ │  └────────────┘  └────────────┘  └────────────┘  └──────────────────────┘  │  │
-│ │  infrastructure/observability.py - @traced decorator, MetricsCollector      │  │
-│ └────────────────────────────────────────────────────────────────────────────┘  │
+│  ┌───────────────────────────────────────────────────────────────────────────┐  │
+│  │              ★ AUTO-PROVISIONING LAYER (Phase 2.3) ★                      │  │
+│  │                                                                            │  │
+│  │  ┌─────────────────────┐  ┌─────────────────────────────────────────────┐ │  │
+│  │  │  ReferenceManager   │  │           ContainerManager                  │ │  │
+│  │  │  • Genome downloads │  │  • Singularity/Docker support              │ │  │
+│  │  │  • Index building   │  │  • Auto-pull from registries               │ │  │
+│  │  │  • Version tracking │  │  • Build from Dockerfiles                  │ │  │
+│  │  └─────────────────────┘  └─────────────────────────────────────────────┘ │  │
+│  └───────────────────────────────────────────────────────────────────────────┘  │
 │                                                                                  │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Key Architecture Changes (v2.1 → v2.2)
+## Key Architecture Changes (v2.2 → v2.3)
 
-| Component | v2.1 | v2.2 | Notes |
+| Component | v2.2 | v2.3 | Notes |
 |-----------|------|------|-------|
-| Intent Parser | HybridQueryParser | **UnifiedIntentParser** | Hierarchical with LLM arbiter |
-| LLM Selection | Single provider | **Provider Cascade** | Rate-limit resistant, auto-fallback |
-| LLM Rate | Always or Never | **~20% LLM** | Smart invocation only when needed |
-| Accuracy | ~87% | **~87-95%** | Depends on arbiter strategy |
-| Deleted Code | UnifiedEnsembleParser | N/A | 855 lines removed |
+| Workflow Generation | Single-pass | **Multi-Agent Specialists** | SupervisorAgent + 5 specialists |
+| Response Mode | Blocking | **Streaming** | Real-time token streaming |
+| Session Handling | Stateless | **Session Memory** | User profiles, preferences |
+| Resource Provisioning | Manual | **Auto-provisioning** | Reference + Container managers |
+| Observability | Basic logging | **Full stack** | Metrics, analytics, health |
+| Knowledge Retrieval | Simple search | **RAG Enhancement** | KnowledgeBase, ErrorPatternDB |
+| CLI | Basic commands | **--agents flag** | Multi-agent generation mode |
+| Web UI | Chat only | **Advanced Gen panel** | Streaming progress display |
 
 ---
 
-## Core Principles
+## Phase 2 Features Summary
 
-### 1. **Facade Pattern** - Single Entry Point
-All external interactions go through the `BioPipelines` facade class.
-
+### 2.1 Streaming Responses
+Real-time token streaming for improved UX:
 ```python
-from workflow_composer import BioPipelines
-
-pipeline = BioPipelines()
-result = pipeline.chat("Analyze RNA-seq data in /data/samples")
+async for chunk in bp.chat_stream("Explain RNA-seq workflow"):
+    print(chunk, end="", flush=True)
 ```
 
-### 2. **Hierarchical Intent Parsing** - Fast + Smart
-80% of queries are resolved by fast pattern/semantic matching. Only complex queries (negation, ambiguity, disagreement) invoke the LLM arbiter.
-
+### 2.2 Session Memory
+Persistent user sessions with preferences:
 ```python
-from workflow_composer.agents.intent import UnifiedIntentParser
-
-parser = UnifiedIntentParser(use_cascade=True)
-result = parser.parse("search for human brain RNA-seq data")
-print(result.primary_intent)  # IntentType.DATA_SEARCH
-print(result.confidence)      # 0.92
-print(result.method)          # "unanimous" or "llm_arbiter"
-print(result.llm_invoked)     # False (80% of time)
+session = bp.create_session("user123")
+bp.chat("I prefer STAR over HISAT2", session_id=session)
+# Future queries remember preference
 ```
 
-### 3. **Provider Cascade** - Never Fail on Rate Limits
-The arbiter uses a cascading provider router that automatically falls back when rate-limited:
-
+### 2.3 Auto-Provisioning
+Automatic download and indexing of references:
 ```python
-# Provider priority (lower = higher priority)
-PROVIDER_PRIORITY = {
-    "lightning": 1,     # Lightning.ai (DeepSeek)
-    "github_models": 2, # GitHub Models (GPT-4o)
-    "gemini": 3,        # Google Gemini
-    "ollama": 5,        # Local Ollama
-    "vllm": 6,          # Local vLLM
-    "openai": 99,       # OpenAI (expensive fallback)
-}
+from workflow_composer.agents.provisioning import ReferenceManager
+ref_mgr = ReferenceManager()
+await ref_mgr.ensure_available("GRCh38", tools=["STAR", "salmon"])
 ```
 
-### 4. **Protocol-Based Interfaces** - Duck Typing with Type Safety
-Components communicate through Python Protocols.
-
+### 2.4 Multi-Agent Specialists
+Coordinated workflow generation:
 ```python
-from workflow_composer.infrastructure import LLMProtocol
+result = await bp.generate_with_agents(
+    "RNA-seq differential expression for human",
+    output_dir="workflows/rnaseq"
+)
+# Uses: Planner → CodeGen → Validator → Doc → QC agents
+```
 
-class CustomLLM(LLMProtocol):
-    def complete(self, prompt: str) -> str:
-        return "response"
+### 2.5 Observability
+Production-grade monitoring:
+```python
+from workflow_composer.agents.observability import ProviderMetrics
+metrics = ProviderMetrics()
+print(metrics.get_provider_stats())  # Latency, cost, success rates
+```
+
+### 2.6 RAG Enhancement
+Context-enhanced generation:
+```python
+from workflow_composer.agents.rag import KnowledgeBase
+kb = KnowledgeBase()
+await kb.index_nf_core()  # Index nf-core modules
+docs = kb.search("salmon quantification")
 ```
 
 ---
@@ -192,6 +213,8 @@ class CustomLLM(LLMProtocol):
 src/workflow_composer/
 ├── __init__.py              # Package exports
 ├── facade.py                # BioPipelines entry point
+├── composer.py              # Workflow composition with multi-agent option
+├── cli.py                   # CLI with --agents flag
 │
 ├── agents/                  # AI agent system
 │   ├── unified_agent.py     # Main agent orchestrator
@@ -202,80 +225,102 @@ src/workflow_composer/
 │   ├── orchestrator.py      # Multi-agent orchestration
 │   ├── coding_agent.py      # Code diagnosis/fixes
 │   ├── react_agent.py       # ReAct reasoning agent
-│   ├── intent/              # ★ Intent parsing subsystem
+│   │
+│   ├── specialists/         # ★ Multi-Agent Specialists (Phase 2.4)
+│   │   ├── __init__.py      # Exports all specialists
+│   │   ├── supervisor.py    # SupervisorAgent - orchestrator
+│   │   ├── planner.py       # PlannerAgent - NL → WorkflowPlan
+│   │   ├── codegen.py       # CodeGenAgent - Plan → Nextflow DSL2
+│   │   ├── validator.py     # ValidatorAgent - static + LLM review
+│   │   ├── docs.py          # DocAgent - README, DAG generation
+│   │   └── qc.py            # QCAgent - quality thresholds
+│   │
+│   ├── streaming/           # ★ Streaming Support (Phase 2.1)
+│   │   ├── __init__.py
+│   │   ├── stream_handler.py# Token streaming
+│   │   └── adapters.py      # Provider-specific streaming
+│   │
+│   ├── session/             # ★ Session Memory (Phase 2.2)
+│   │   ├── __init__.py
+│   │   ├── session_manager.py # Session lifecycle
+│   │   └── user_profile.py  # User preferences
+│   │
+│   ├── provisioning/        # ★ Auto-provisioning (Phase 2.3)
+│   │   ├── __init__.py
+│   │   ├── reference_manager.py # Genome downloads
+│   │   └── container_manager.py # Singularity/Docker
+│   │
+│   ├── observability/       # ★ Observability (Phase 2.5)
+│   │   ├── __init__.py
+│   │   ├── provider_metrics.py  # LLM metrics
+│   │   ├── query_analytics.py   # Query patterns
+│   │   └── health.py        # Health endpoints
+│   │
+│   ├── rag/                 # ★ RAG Enhancement (Phase 2.6)
+│   │   ├── __init__.py
+│   │   ├── knowledge_base.py    # Multi-source KB
+│   │   ├── error_pattern_db.py  # Error solutions
+│   │   └── semantic_retriever.py# Hybrid search
+│   │
+│   ├── intent/              # Intent parsing subsystem
 │   │   ├── __init__.py      # Exports UnifiedIntentParser
 │   │   ├── parser.py        # IntentParser (patterns + entities)
-│   │   ├── semantic.py      # SemanticIntentClassifier + BioinformaticsNER
-│   │   ├── arbiter.py       # ★ IntentArbiter (LLM for complex queries)
-│   │   ├── unified_parser.py# ★ UnifiedIntentParser (MAIN ENTRY POINT)
+│   │   ├── semantic.py      # SemanticIntentClassifier
+│   │   ├── arbiter.py       # IntentArbiter (LLM for complex)
+│   │   ├── unified_parser.py# UnifiedIntentParser (MAIN)
 │   │   ├── dialogue.py      # DialogueManager
 │   │   ├── context.py       # ConversationContext
-│   │   ├── integration.py   # ChatIntegration
-│   │   ├── negation_handler.py # Negation detection
 │   │   └── learning.py      # Feedback system
+│   │
 │   ├── executor/            # Safe execution layer
 │   │   ├── sandbox.py       # CommandSandbox
 │   │   ├── permissions.py   # PermissionManager
 │   │   └── audit.py         # AuditLogger
-│   ├── autonomous/          # Full autonomy system
-│   ├── rag/                 # RAG orchestration
+│   │
 │   └── tools/               # Agent tool implementations
 │       ├── base.py          # ToolResult, ToolName
 │       ├── registry.py      # Tool registration
 │       ├── prefetch.py      # Proactive prefetching
 │       └── (30+ tools)
 │
-├── providers/               # ★ LLM Provider Cascade
+├── providers/               # LLM Provider Cascade
 │   ├── __init__.py
 │   ├── base.py              # Provider protocol
 │   ├── factory.py           # Provider factory
-│   ├── router.py            # ★ CascadingProviderRouter
-│   ├── lightning.py         # Lightning.ai
-│   ├── github_models.py     # GitHub Models
+│   ├── router.py            # CascadingProviderRouter
 │   ├── gemini.py            # Google Gemini
+│   ├── cerebras.py          # Cerebras (fast)
+│   ├── groq.py              # Groq (fast)
+│   ├── openrouter.py        # OpenRouter
+│   ├── lightning.py         # Lightning.ai
 │   ├── ollama.py            # Local Ollama
-│   ├── openai.py            # OpenAI
-│   ├── anthropic.py         # Anthropic Claude
 │   └── vllm.py              # Local vLLM
 │
 ├── llm/                     # LLM orchestration layer
 │   ├── orchestrator.py      # ModelOrchestrator
 │   ├── strategies.py        # Strategy, EnsembleMode
 │   ├── task_router.py       # TaskRouter, TaskType
-│   ├── cost_tracker.py      # CostTracker
-│   └── providers/           # Provider abstractions
+│   └── cost_tracker.py      # CostTracker
 │
 ├── infrastructure/          # Cross-cutting concerns
 │   ├── container.py         # Dependency injection
 │   ├── protocols.py         # Interface definitions
 │   ├── exceptions.py        # Error hierarchy
-│   ├── logging.py           # Structured logging
-│   ├── settings.py          # Configuration management
-│   ├── resilience.py        # Circuit breaker, retry, rate limiting
-│   ├── observability.py     # Distributed tracing, metrics
-│   └── semantic_cache.py    # TTL cache with similarity matching
+│   ├── resilience.py        # Circuit breaker, retry
+│   └── observability.py     # Distributed tracing
 │
 ├── core/                    # Core workflow logic
 │   ├── workflow_generator.py# Nextflow generation
 │   ├── module_mapper.py     # Tool → module mapping
-│   ├── query_parser.py      # Query parsing
 │   └── tool_selector.py     # LLM-based tool selection
 │
 ├── data/                    # Data management
-│   ├── discovery/           # Multi-source search
-│   │   ├── parallel.py      # Parallel federated search
-│   │   ├── orchestrator.py  # Search orchestration
-│   │   └── adapters/        # ENCODE, GEO, GDC, etc.
-│   └── ...
-│
-├── evaluation/              # Evaluation framework
-│   ├── benchmarks.py        # Benchmark definitions
-│   ├── evaluator.py         # Evaluation runner
-│   ├── scorer.py            # Rule-based and LLM scoring
-│   └── report.py            # Report generation
+│   └── discovery/           # Multi-source search
+│       ├── parallel.py      # Parallel federated search
+│       └── adapters/        # ENCODE, GEO, GDC, etc.
 │
 └── web/                     # Web interface
-    ├── app.py               # Gradio application
+    ├── app.py               # Gradio app + Advanced Gen panel
     └── components/          # UI components
 ```
 
@@ -439,6 +484,7 @@ response = bp.chat("search for breast cancer RNA-seq")
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.3.0 | Dec 2025 | Multi-agent specialists, streaming, session memory, auto-provisioning, observability, RAG enhancement |
 | 2.2.0 | Dec 2025 | Hierarchical intent parsing with LLM arbiter, provider cascade, deleted UnifiedEnsembleParser |
 | 2.1.0 | Nov 30, 2025 | Resilience, observability, semantic cache, parallel search |
 | 2.0.0 | Nov 2025 | Architecture modernization - DI, Protocols, Facade |
@@ -448,10 +494,11 @@ response = bp.chat("search for breast cancer RNA-seq")
 
 ## Related Documents
 
+- [PHASE2_IMPLEMENTATION_PLAN.md](PHASE2_IMPLEMENTATION_PLAN.md) - Phase 2 feature implementation details
 - [HIERARCHICAL_INTENT_PARSING_PLAN.md](HIERARCHICAL_INTENT_PARSING_PLAN.md) - Detailed arbiter design
 - [LLM_ORCHESTRATION_PLAN.md](LLM_ORCHESTRATION_PLAN.md) - ModelOrchestrator implementation
 - [RESILIENCE_OBSERVABILITY_PLAN.md](RESILIENCE_OBSERVABILITY_PLAN.md) - Infrastructure hardening
-- [COMPONENTS.md](COMPONENTS.md) - Component details (needs update)
+- [COMPONENTS.md](COMPONENTS.md) - Component details
 
 ---
 
