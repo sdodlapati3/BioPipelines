@@ -7,7 +7,6 @@ Enhanced natural language understanding for the BioPipelines agent.
 Components:
 - IntentParser: Pattern-based intent detection with entity extraction
 - HybridQueryParser: Production-grade hybrid parser (pattern + semantic + NER)
-- UnifiedEnsembleParser: Multi-method ensemble with weighted voting
 - UnifiedIntentParser: Hierarchical parser with LLM arbiter (RECOMMENDED)
 - SemanticIntentClassifier: FAISS-based semantic similarity classification
 - BioinformaticsNER: Domain-specific named entity recognition
@@ -45,9 +44,9 @@ Usage:
     
     parser = UnifiedIntentParser()
     result = parser.parse("search for human brain RNA-seq data")
-    print(result.final_intent)  # "DATA_SEARCH"
-    print(result.confidence)    # 0.92
-    print(result.method)        # "unanimous" or "llm_arbiter"
+    print(result.primary_intent)  # IntentType.DATA_SEARCH
+    print(result.confidence)      # 0.92
+    print(result.method)          # "unanimous" or "llm_arbiter"
     
     # With chat integration (uses arbiter automatically)
     from workflow_composer.agents.intent import ChatIntegration
@@ -85,13 +84,6 @@ from .learning import (
     LLMIntentClassifier,
     FineTuningExporter,
 )
-from .unified_ensemble import (
-    UnifiedEnsembleParser,
-    EnsembleParseResult,
-    MethodVote,
-    ParsingMethod,
-    create_ensemble_parser,
-)
 from .arbiter import (
     IntentArbiter,
     ArbiterResult,
@@ -116,13 +108,6 @@ __all__ = [
     "HybridQueryParser",      # Production-grade hybrid parser
     "LearningHybridParser",   # With active learning & feedback
     "ChatIntegration",        # Chat handler integration
-    
-    # Deprecated (legacy)
-    "UnifiedEnsembleParser",  # DEPRECATED: Use UnifiedIntentParser instead
-    "EnsembleParseResult",    # DEPRECATED: Legacy ensemble result
-    "MethodVote",             # DEPRECATED: Legacy vote type
-    "ParsingMethod",          # DEPRECATED: Legacy parsing method enum
-    "create_ensemble_parser", # DEPRECATED: Use create_unified_parser instead
     
     # Learning components
     "QueryLogger",
