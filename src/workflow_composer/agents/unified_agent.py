@@ -86,6 +86,13 @@ from .intent import (
     get_role_resolver,
     TrainingDataLoader,
     get_training_data_loader,
+    # Session memory & recovery (robust agent features)
+    SessionMemory,
+    get_session_memory,
+    ConversationRecovery,
+    RecoveryResponse,
+    RecoveryStrategy,
+    get_conversation_recovery,
 )
 
 # Observability - distributed tracing
@@ -423,6 +430,10 @@ class UnifiedAgent:
         self._role_resolver = None
         self._training_data = None
         
+        # Session memory & recovery (robust agent features)
+        self._session_memory: Optional[SessionMemory] = None
+        self._recovery: Optional[ConversationRecovery] = None
+        
         # Execution history
         self._history: List[AgentResponse] = []
         
@@ -620,6 +631,51 @@ class UnifiedAgent:
             except Exception as e:
                 logger.warning(f"Failed to initialize TrainingDataLoader: {e}")
         return self._training_data
+    
+    @property
+    def session_memory(self) -> SessionMemory:
+        """
+        Get session-wide memory for persistent context.
+        
+        Remembers across the entire session:
+        - Paths (data directories, output locations)
+        - Datasets (IDs from searches)
+        - Preferences (organism, assay type)
+        - Action history (what was done)
+        
+        Usage:
+            # Remember a path used in a query
+            agent.session_memory.remember_path("/data/methylation")
+            
+            # Later, resolve "that path" 
+            path = agent.session_memory.get_remembered_path()
+        """
+        if self._session_memory is None:
+            try:
+                self._session_memory = get_session_memory()
+                logger.debug("SessionMemory initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize SessionMemory: {e}")
+        return self._session_memory
+    
+    @property
+    def recovery(self) -> ConversationRecovery:
+        """
+        Get the conversation recovery system.
+        
+        Handles:
+        - Low confidence intents (ask for clarification)
+        - Errors (graceful acknowledgment, suggestions)
+        - User corrections ("No, I meant X")
+        - Fallback responses (when nothing else works)
+        """
+        if self._recovery is None:
+            try:
+                self._recovery = get_conversation_recovery()
+                logger.debug("ConversationRecovery initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize ConversationRecovery: {e}")
+        return self._recovery
     
     @property
     def orchestrator(self):
@@ -849,6 +905,21 @@ class UnifiedAgent:
             
             logger.info(f"Processing query: {query[:100]}...")
             
+            # ================================================================
+            # STEP 0: Resolve references using session memory
+            # Handles: "that path", "the data", "it" -> actual values
+            # ================================================================
+            original_query = query
+            resolved_refs = {}
+            if self.session_memory:
+                try:
+                    query, resolved_refs = self.session_memory.resolve_references_in_query(query)
+                    if resolved_refs:
+                        logger.info(f"Resolved references: {resolved_refs}")
+                        span.add_event("references_resolved", {"resolutions": str(resolved_refs)})
+                except Exception as e:
+                    logger.debug(f"Reference resolution failed: {e}")
+            
             # Classify the task
             with tracer.start_span("classify_task") as classify_span:
                 task_type = classify_task(query)
@@ -885,14 +956,40 @@ class UnifiedAgent:
                     # Extract entities from result
                     extracted_entities = intent_result.entities if intent_result.entities else []
                     
-                    # Check if clarification needed (low confidence)
-                    if intent_result.needs_clarification:
-                        return AgentResponse(
-                            success=True,
-                            message=intent_result.clarification_prompt or "Could you please clarify your request?",
-                            response_type=ResponseType.QUESTION,
-                            task_type=task_type,
-                        )
+                    # ============================================================
+                    # ENHANCED: Use ConversationRecovery for low confidence
+                    # ============================================================
+                    if intent_result.needs_clarification or intent_result.confidence < 0.35:
+                        # Use recovery system for intelligent clarification
+                        if self.recovery:
+                            alternative_intents = []
+                            if hasattr(intent_result, 'all_intents') and intent_result.all_intents:
+                                alternative_intents = [
+                                    (i.name, c) for i, c in intent_result.all_intents[:3]
+                                ]
+                            
+                            recovery_response = self.recovery.handle_low_confidence(
+                                query=query,
+                                confidence=intent_result.confidence,
+                                detected_intent=intent_name,
+                                alternative_intents=alternative_intents,
+                            )
+                            
+                            return AgentResponse(
+                                success=True,
+                                message=recovery_response.message,
+                                response_type=ResponseType.QUESTION,
+                                task_type=task_type,
+                                suggestions=recovery_response.suggestions,
+                            )
+                        else:
+                            # Fallback to simple clarification
+                            return AgentResponse(
+                                success=True,
+                                message=intent_result.clarification_prompt or "Could you please clarify your request?",
+                                response_type=ResponseType.QUESTION,
+                                task_type=task_type,
+                            )
                     
                     # Map intent to tool if confidence is reasonable
                     if intent_result.confidence >= 0.35 and intent_name in INTENT_TO_TOOL:
@@ -1067,6 +1164,30 @@ class UnifiedAgent:
                 tool_span.add_tag("success", execution.result.success)
                 if not execution.result.success:
                     tool_span.set_error(Exception(execution.result.message))
+                    
+                    # ============================================================
+                    # ENHANCED ERROR HANDLING: Use ConversationRecovery
+                    # ============================================================
+                    if self.recovery and execution.result.error:
+                        try:
+                            recovery_response = self.recovery.handle_error(
+                                error=Exception(execution.result.error),
+                                query=query,
+                                tool_name=detected_tool.value,
+                                parameters=params,
+                            )
+                            
+                            # Return user-friendly error response with suggestions
+                            return AgentResponse(
+                                success=False,
+                                message=recovery_response.message,
+                                response_type=ResponseType.ERROR,
+                                task_type=task_type,
+                                suggestions=recovery_response.suggestions,
+                            )
+                        except Exception as recovery_err:
+                            logger.debug(f"Recovery handling failed: {recovery_err}")
+                    
                 metrics.counter(
                     "agent.tools.executed",
                     tags={"tool": detected_tool.value, "success": str(execution.result.success)}
@@ -1090,6 +1211,51 @@ class UnifiedAgent:
                     )
                 except Exception as e:
                     logger.debug(f"Active learning recording failed: {e}")
+            
+            # ================================================================
+            # SESSION MEMORY: Auto-remember paths, datasets, results
+            # This enables "that path", "the data" in future queries
+            # ================================================================
+            if self.session_memory and response.success:
+                try:
+                    # Remember paths from parameters
+                    for key in ("path", "data_path", "input_path", "output_path", "directory"):
+                        if key in params and params[key]:
+                            self.session_memory.remember_path(
+                                params[key], 
+                                context=key.replace("_path", "").replace("_", " ")
+                            )
+                    
+                    # Remember dataset IDs
+                    for key in ("dataset_id", "accession", "sample_id"):
+                        if key in params and params[key]:
+                            self.session_memory.remember_dataset(params[key])
+                    
+                    # Remember search results
+                    if detected_tool and detected_tool.value in ("search_databases", "scan_data"):
+                        result_data = execution.result.data if execution.result else {}
+                        if isinstance(result_data, dict):
+                            # From search
+                            results = result_data.get("results", result_data.get("samples", []))
+                            if results:
+                                self.session_memory.remember_search_results(results, query)
+                    
+                    # Record the action
+                    self.session_memory.record_action(
+                        action_type=detected_tool.value if detected_tool else "general",
+                        query=query,
+                        tool_used=detected_tool.value if detected_tool else "none",
+                        success=response.success,
+                        parameters=params,
+                        result_summary=response.message[:200] if response.message else None,
+                    )
+                    
+                    # Infer preferences from entities
+                    if extracted_entities:
+                        self.session_memory.infer_preferences_from_entities(extracted_entities)
+                        
+                except Exception as e:
+                    logger.debug(f"Session memory recording failed: {e}")
             
         else:
             # No specific tool detected - handle as general query
@@ -1690,6 +1856,14 @@ class UnifiedAgent:
     ) -> AgentResponse:
         """Handle queries that don't map to a specific tool."""
         
+        # ================================================================
+        # ENHANCED: Use session memory context for better handling
+        # ================================================================
+        if self.session_memory:
+            # Check if query references something we remember
+            context_summary = self.session_memory.get_context_summary()
+            logger.debug(f"Session context: {context_summary}")
+        
         # Route based on task type
         if task_type == TaskType.EDUCATION:
             # Try to explain a concept - extract the concept from the query
@@ -1714,6 +1888,20 @@ class UnifiedAgent:
             # Handle data queries - but validate query first
             # Don't send conversational or non-search queries to ENCODE/GEO APIs
             if not self._is_valid_search_query(query):
+                # ============================================================
+                # ENHANCED: Check session memory for context
+                # ============================================================
+                context_info = ""
+                if self.session_memory:
+                    last_path = self.session_memory.get_remembered_path()
+                    last_dataset = self.session_memory.get_remembered_dataset()
+                    if last_path or last_dataset:
+                        context_info = "\n\n📝 **From your session:**\n"
+                        if last_path:
+                            context_info += f"- Last used path: `{last_path}`\n"
+                        if last_dataset:
+                            context_info += f"- Last dataset: `{last_dataset}`\n"
+                
                 return AgentResponse(
                     success=True,
                     message="I understand you're asking about data. Could you please specify what you'd like to search for?\n\n"
@@ -1723,7 +1911,8 @@ class UnifiedAgent:
                             "- `search TCGA for GBM methylation`\n\n"
                             "Or use:\n"
                             "- `scan data` - to see your local files\n"
-                            "- `show jobs` - to check job status",
+                            "- `show jobs` - to check job status"
+                            + context_info,
                     response_type=ResponseType.INFO,
                     task_type=task_type,
                 )
@@ -1733,7 +1922,20 @@ class UnifiedAgent:
             return self._build_response(task_type, [execution], query)
             
         else:
-            # Return help
+            # ============================================================
+            # ENHANCED: Use ConversationRecovery for fallback
+            # ============================================================
+            if self.recovery:
+                fallback = self.recovery.get_fallback_response(query)
+                return AgentResponse(
+                    success=True,
+                    message=fallback.message,
+                    response_type=ResponseType.INFO,
+                    task_type=task_type,
+                    suggestions=fallback.suggestions,
+                )
+            
+            # Default: Return help
             execution = self.execute_tool(ToolName.SHOW_HELP)
             return self._build_response(task_type, [execution], query)
     

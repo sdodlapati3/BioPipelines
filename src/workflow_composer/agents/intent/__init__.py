@@ -137,6 +137,24 @@ from .entity_roles import (
     get_role_resolver,
 )
 
+# Session Memory & Recovery (Robust Agent Features)
+from .session_memory import (
+    SessionMemory,
+    MemoryEntry,
+    ActionRecord,
+    MemoryType,
+    MemoryPriority,
+    get_session_memory,
+)
+from .conversation_recovery import (
+    ConversationRecovery,
+    RecoveryResponse,
+    RecoveryStrategy,
+    ErrorCategory,
+    ErrorContext,
+    get_conversation_recovery,
+)
+
 __all__ = [
     # High-level (recommended)
     "UnifiedIntentParser",    # RECOMMENDED: Hierarchical parser with LLM arbiter
@@ -230,4 +248,18 @@ __all__ = [
     "ResolvedEntity",
     "RoleDefinition",
     "get_role_resolver",
+    
+    # Session Memory & Recovery (Robust Agent)
+    "SessionMemory",
+    "MemoryEntry", 
+    "ActionRecord",
+    "MemoryType",
+    "MemoryPriority",
+    "get_session_memory",
+    "ConversationRecovery",
+    "RecoveryResponse",
+    "RecoveryStrategy",
+    "ErrorCategory",
+    "ErrorContext",
+    "get_conversation_recovery",
 ]
