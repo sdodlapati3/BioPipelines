@@ -9,6 +9,7 @@ Specialist agents for coordinated workflow generation:
 - DocAgent: Generates documentation
 - QCAgent: Quality control validation
 - SupervisorAgent: Coordinates all specialists
+- OrchestratedSupervisor: SupervisorAgent with Orchestrator-8B routing (ToolOrchestra)
 - ReferenceDiscoveryAgent: Discovers relevant code references (DeepCode-inspired)
 - CodebaseIndexer: Indexes existing codebases for intelligent reference (DeepCode-inspired)
 """
@@ -65,6 +66,11 @@ from .codebase_indexer import (
     CodeElement,
     CodeElementType,
 )
+from .orchestrated_supervisor import (
+    OrchestratedSupervisor,
+    OrchestratedResult,
+    get_supervisor,
+)
 
 
 @dataclass
@@ -107,4 +113,8 @@ __all__ = [
     "CodebaseIndex",
     "CodeElement",
     "CodeElementType",
+    # ToolOrchestra Integration
+    "OrchestratedSupervisor",
+    "OrchestratedResult",
+    "get_supervisor",
 ]

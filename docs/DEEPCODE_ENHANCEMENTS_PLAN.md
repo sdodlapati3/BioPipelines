@@ -1648,12 +1648,43 @@ class DegradationChain:
 - 39 additional tests passing
 - 122+ total tests across DeepCode enhancements
 
-### Week 5: Integration & Documentation (NEXT)
-21. [ ] Integration tests for full workflow with reference discovery
-22. [ ] Integrate reference discovery into SupervisorAgent
-23. [ ] Update documentation
-24. [ ] Performance benchmarks
-25. [ ] Create migration guide for existing code
+### Week 5: ToolOrchestra Integration ✅ COMPLETED
+21. [x] Implement `Orchestrator8B` for intelligent model routing
+22. [x] Implement `OrchestratedSupervisor` (SupervisorAgent + Orchestrator-8B)
+23. [x] Create `tests/test_orchestrator_8b.py` (29 tests)
+24. [x] Create `docs/ORCHESTRATOR_8B_INTEGRATION.md`
+25. [x] Update module exports in `llm/__init__.py` and `specialists/__init__.py`
+
+**New Components:**
+- **Orchestrator8B**: NVIDIA's RL-trained orchestrator from ToolOrchestra paper:
+  - Routes queries to optimal model tier (local_small, local_large, cloud_small, cloud_large)
+  - User preference alignment (cost, speed, accuracy, balanced)
+  - Multi-turn tool orchestration
+  - Supports vLLM, transformers, or API backends
+  - Heuristic fallback when model not loaded
+
+- **OrchestratedSupervisor**: SupervisorAgent enhanced with Orchestrator-8B:
+  - Cost-aware routing decisions
+  - Automatic model tier selection
+  - Detailed metadata (cost, models used, reasoning)
+  - Graceful fallback to standard execution
+
+- **BioPipeline Tool Catalog**: Pre-configured tools for orchestrator:
+  - workflow_planner, code_generator, code_validator
+  - nfcore_reference, container_selector, cloud_expert
+
+**Test Results:**
+- 29 additional tests passing
+- 151+ total tests across DeepCode enhancements
+
+**Reference:** [ToolOrchestra Paper (arXiv:2511.21689)](https://arxiv.org/abs/2511.21689)
+
+### Week 6: Integration & Documentation (NEXT)
+26. [ ] Integration tests for full workflow with orchestrator
+27. [ ] vLLM deployment guide for Orchestrator-8B
+28. [ ] Fine-tuning data collection for BioPipelines-specific routing
+29. [ ] Performance benchmarks comparing with/without orchestrator
+30. [ ] Create cost savings report
 
 ---
 
@@ -1667,6 +1698,8 @@ class DegradationChain:
 | Error diagnosis accuracy | Pattern-only | Pattern + LLM + Guidance |
 | Reference discovery coverage | N/A | 90%+ common tools/pipelines |
 | Codebase indexing accuracy | N/A | 95%+ process detection |
+| **Cost efficiency (with Orchestrator)** | **N/A** | **80%+ reduction** |
+| **Routing accuracy** | **N/A** | **>90% optimal tier** |
 
 ---
 
@@ -1684,6 +1717,8 @@ class DegradationChain:
 ## References
 
 - DeepCode Repository: https://github.com/HKUDS/DeepCode
+- ToolOrchestra Paper: https://arxiv.org/abs/2511.21689
+- Orchestrator-8B Model: https://huggingface.co/nvidia/Orchestrator-8B
 - Key files analyzed:
   - `workflows/agents/memory_agent_concise.py`
   - `workflows/agents/code_implementation_agent.py`

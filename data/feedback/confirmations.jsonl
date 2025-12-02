@@ -65,3 +65,12 @@
 {"timestamp": "2025-12-02T08:22:00.349969", "query": "What's a good movie to watch tonight?", "intent": "META_UNKNOWN", "confidence": 0.9, "user": "anonymous", "type": "confirmation"}
 {"timestamp": "2025-12-02T08:23:21.522079", "query": "What's the best pizza recipe?", "intent": "META_UNKNOWN", "confidence": 0.9, "user": "anonymous", "type": "confirmation"}
 {"timestamp": "2025-12-02T08:23:39.709675", "query": "What's a good movie to watch tonight?", "intent": "META_UNKNOWN", "confidence": 0.9, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T20:08:24.536788", "query": "What's the best pizza recipe?", "intent": "META_UNKNOWN", "confidence": 0.95, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T20:08:46.446969", "query": "What's a good movie to watch tonight?", "intent": "META_UNKNOWN", "confidence": 0.95, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T20:09:22.162601", "query": "get help", "intent": "EDUCATION_HELP", "confidence": 0.95, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T20:09:23.948576", "query": "what is RNA-seq", "intent": "EDUCATION_EXPLAIN", "confidence": 0.5562136912866765, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T20:09:26.286844", "query": "show help", "intent": "EDUCATION_HELP", "confidence": 0.95, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T20:09:29.710636", "query": "explain what RNA-seq is", "intent": "EDUCATION_EXPLAIN", "confidence": 0.5465399899486312, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T20:09:32.072542", "query": "show help", "intent": "EDUCATION_HELP", "confidence": 0.95, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T20:09:33.434822", "query": "list jobs", "intent": "JOB_LIST", "confidence": 0.5249999999999999, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T20:09:35.845447", "query": "get help", "intent": "EDUCATION_HELP", "confidence": 0.95, "user": "anonymous", "type": "confirmation"}

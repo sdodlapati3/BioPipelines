@@ -78,6 +78,19 @@ from .cost_tracker import (
     CostSummary,
 )
 
+# === Orchestrator-8B (ToolOrchestra) ===
+from .orchestrator_8b import (
+    Orchestrator8B,
+    OrchestratorConfig,
+    OrchestrationResult,
+    RoutingDecision,
+    ModelTier,
+    ToolDefinition,
+    BIOPIPELINE_TOOLS,
+    get_orchestrator_8b,
+    quick_route,
+)
+
 # === Provider Layer (v2.0) ===
 from .providers import (
     # Types
@@ -141,6 +154,17 @@ __all__ = [
     "CostEntry",
     "BudgetAlert",
     "CostSummary",
+    
+    # === Orchestrator-8B (ToolOrchestra) ===
+    "Orchestrator8B",
+    "OrchestratorConfig",
+    "OrchestrationResult",
+    "RoutingDecision",
+    "ModelTier",
+    "ToolDefinition",
+    "BIOPIPELINE_TOOLS",
+    "get_orchestrator_8b",
+    "quick_route",
     
     # === Provider API ===
     "ProviderProtocol",
