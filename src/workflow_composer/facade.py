@@ -225,6 +225,32 @@ class BioPipelines:
         return self._agent
     
     @property
+    def chat_agent(self) -> "ChatAgent":
+        """
+        Access the professional ChatAgent for conversational AI.
+        
+        The ChatAgent provides:
+        - Dialog state management
+        - Scope detection (out-of-scope deflection)
+        - A/B testing for response optimization
+        - Analytics and metrics
+        - Human handoff when needed
+        - Rich response formatting
+        
+        This wraps UnifiedAgent and adds professional chat features.
+        
+        Example:
+            response = bp.chat_agent.process_message(
+                "Create an RNA-seq workflow",
+                user_id="user123"
+            )
+        """
+        if not hasattr(self, '_chat_agent') or self._chat_agent is None:
+            from .agents.intent.chat_agent import ChatAgent, AgentConfig
+            self._chat_agent = ChatAgent()
+        return self._chat_agent
+    
+    @property
     def orchestrator(self) -> "ModelOrchestrator":
         """
         Access the LLM orchestrator for smart model routing.
@@ -606,11 +632,13 @@ Be helpful, concise, and technically accurate."""
         """
         Chat interface for natural language interaction.
         
-        Provides a conversational interface for:
-        - Asking questions about bioinformatics
-        - Generating workflows step by step
-        - Getting help with errors
-        - Exploring the tool catalog
+        Uses the professional ChatAgent which provides:
+        - Scope detection (out-of-scope deflection)
+        - Dialog state management
+        - A/B testing for response optimization
+        - Analytics and metrics
+        - Human handoff when needed
+        - Tool execution via UnifiedAgent
         
         Session Support:
         - If session_id is provided, conversation is tracked
@@ -637,8 +665,41 @@ Be helpful, concise, and technically accurate."""
             # Context is maintained in follow-up
             response = bp.chat("Run RNA-seq", session_id=session.session_id)
         """
-        from .agents import UnifiedAgent
+        user_id = user_id or "default"
         
+        # Use professional ChatAgent for all chat interactions
+        try:
+            agent_response = self.chat_agent.process_message(
+                content=message,
+                session_id=session_id,
+                user_id=user_id,
+            )
+            
+            # Extract workflow if present in response metadata
+            workflow = None
+            if agent_response.entities_extracted and "workflow" in agent_response.entities_extracted:
+                workflow = agent_response.entities_extracted["workflow"]
+            
+            return ChatResponse(
+                message=agent_response.message.content,
+                workflow=workflow,
+                tools_used=[],  # Could be extracted from unified_result if present
+                suggestions=agent_response.suggestions or [],
+                session_id=agent_response.message.session_id,
+            )
+        except Exception as e:
+            logger.error(f"ChatAgent error, falling back to UnifiedAgent: {e}")
+            # Fallback to legacy path if ChatAgent fails
+            return self._chat_legacy(message, history, session_id, user_id)
+    
+    def _chat_legacy(
+        self,
+        message: str,
+        history: Optional[List[Dict[str, str]]] = None,
+        session_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> ChatResponse:
+        """Legacy chat implementation using UnifiedAgent directly."""
         user_id = user_id or "default"
         
         # Prepare session (uses shared helper)

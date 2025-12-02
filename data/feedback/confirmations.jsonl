@@ -1,0 +1,33 @@
+{"timestamp": "2025-12-02T04:18:35.933169", "query": "get help", "intent": "EDUCATION_HELP", "confidence": 0.95, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T04:18:37.317241", "query": "what is RNA-seq", "intent": "EDUCATION_EXPLAIN", "confidence": 0.5562136912866765, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T04:18:45.981380", "query": "explain what RNA-seq is", "intent": "EDUCATION_EXPLAIN", "confidence": 0.5465399899486312, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T04:18:48.553030", "query": "get help", "intent": "EDUCATION_HELP", "confidence": 0.95, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T04:18:53.392191", "query": "get help", "intent": "EDUCATION_HELP", "confidence": 0.95, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T04:23:30.966591", "query": "what types of datasets we have in our local folder?", "intent": "DATA_SCAN", "confidence": 0.95, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T04:26:30.314839", "query": "how come you forgot this path /scratch/sdodl001/BioPipelines/data, which you have used just before the last query?", "intent": "DIAGNOSE_ERROR", "confidence": 0.9, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T04:49:15.979395", "query": "get help", "intent": "EDUCATION_HELP", "confidence": 0.95, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T04:49:17.354072", "query": "what is RNA-seq", "intent": "EDUCATION_EXPLAIN", "confidence": 0.5562136912866765, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T04:49:22.948341", "query": "explain what RNA-seq is", "intent": "EDUCATION_EXPLAIN", "confidence": 0.5465399899486312, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T04:49:25.463777", "query": "get help", "intent": "EDUCATION_HELP", "confidence": 0.95, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T04:49:29.217967", "query": "get help", "intent": "EDUCATION_HELP", "confidence": 0.95, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T04:50:57.967683", "query": "get help", "intent": "EDUCATION_HELP", "confidence": 0.95, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T04:50:59.244312", "query": "what is RNA-seq", "intent": "EDUCATION_EXPLAIN", "confidence": 0.5562136912866765, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T04:51:01.676090", "query": "show help", "intent": "EDUCATION_HELP", "confidence": 0.95, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T04:51:05.194525", "query": "explain what RNA-seq is", "intent": "EDUCATION_EXPLAIN", "confidence": 0.5465399899486312, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T04:51:07.402815", "query": "show help", "intent": "EDUCATION_HELP", "confidence": 0.95, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T04:51:08.807012", "query": "list jobs", "intent": "JOB_LIST", "confidence": 0.5249999999999999, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T04:51:11.205293", "query": "get help", "intent": "EDUCATION_HELP", "confidence": 0.95, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T07:06:02.010112", "query": "get help", "intent": "EDUCATION_HELP", "confidence": 0.95, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T07:06:03.579938", "query": "what is RNA-seq", "intent": "EDUCATION_EXPLAIN", "confidence": 0.5562136912866765, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T07:06:05.738248", "query": "show help", "intent": "EDUCATION_HELP", "confidence": 0.95, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T07:06:09.212398", "query": "explain what RNA-seq is", "intent": "EDUCATION_EXPLAIN", "confidence": 0.5465399899486312, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T07:06:11.926890", "query": "show help", "intent": "EDUCATION_HELP", "confidence": 0.95, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T07:06:13.398755", "query": "list jobs", "intent": "JOB_LIST", "confidence": 0.5249999999999999, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T07:06:15.864484", "query": "get help", "intent": "EDUCATION_HELP", "confidence": 0.95, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T07:17:00.333767", "query": "get help", "intent": "EDUCATION_HELP", "confidence": 0.95, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T07:17:01.692924", "query": "what is RNA-seq", "intent": "EDUCATION_EXPLAIN", "confidence": 0.5562136912866765, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T07:17:03.962817", "query": "show help", "intent": "EDUCATION_HELP", "confidence": 0.95, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T07:17:07.706432", "query": "explain what RNA-seq is", "intent": "EDUCATION_EXPLAIN", "confidence": 0.5465399899486312, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T07:17:10.095988", "query": "show help", "intent": "EDUCATION_HELP", "confidence": 0.95, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T07:17:11.993950", "query": "list jobs", "intent": "JOB_LIST", "confidence": 0.5249999999999999, "user": "anonymous", "type": "confirmation"}
+{"timestamp": "2025-12-02T07:17:14.463203", "query": "get help", "intent": "EDUCATION_HELP", "confidence": 0.95, "user": "anonymous", "type": "confirmation"}

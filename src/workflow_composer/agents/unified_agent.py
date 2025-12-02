@@ -77,7 +77,6 @@ from .intent import (
     HybridQueryParser, 
     QueryParseResult, 
     ConversationContext, 
-    DialogueManager,
     UnifiedIntentParser,
     UnifiedParseResult,
     # Professional NLU components (Phase 1-5)
@@ -422,7 +421,6 @@ class UnifiedAgent:
         
         # Conversation context for multi-turn memory
         self._context: Optional[ConversationContext] = None
-        self._dialogue_manager: Optional[DialogueManager] = None
         
         # Professional NLU components (lazy-loaded)
         self._active_learner = None
@@ -520,25 +518,6 @@ class UnifiedAgent:
             self._context = ConversationContext(session_id=f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
             logger.info(f"ConversationContext initialized: {self._context.session_id}")
         return self._context
-    
-    @property
-    def dialogue_manager(self) -> DialogueManager:
-        """
-        Get or initialize the dialogue manager.
-        
-        Coordinates:
-        - Intent parsing with context
-        - Coreference resolution
-        - Task state management
-        - Slot filling for incomplete requests
-        """
-        if self._dialogue_manager is None:
-            self._dialogue_manager = DialogueManager(
-                intent_parser=None,  # Uses its own parser
-                context=self.context
-            )
-            logger.info("DialogueManager initialized")
-        return self._dialogue_manager
     
     @property
     def health_checker(self) -> HealthChecker:
@@ -1429,135 +1408,6 @@ class UnifiedAgent:
         
         return params
     
-    def _build_params_from_ensemble_result(
-        self,
-        ensemble_result,  # EnsembleParseResult or UnifiedParseResult
-        original_query: str
-    ) -> Dict[str, Any]:
-        """
-        Build tool parameters from ensemble parse result.
-        
-        DEPRECATED: Now using intent_result.slots directly.
-        Kept for backward compatibility.
-        """
-        params = {}
-        slots = ensemble_result.slots
-        entities = ensemble_result.entities
-        intent = ensemble_result.intent
-        
-        # For data search, build query from entities if available
-        if intent == "DATA_SEARCH":
-            if entities:
-                # Build a clean query from entities - deduplicate!
-                seen_terms = set()
-                query_parts = []
-                for entity in entities:
-                    if hasattr(entity, 'entity_type'):
-                        if entity.entity_type in ("ORGANISM", "TISSUE", "DISEASE", "ASSAY_TYPE"):
-                            term = (getattr(entity, 'canonical', None) or entity.text).lower()
-                            if term not in seen_terms:
-                                seen_terms.add(term)
-                                query_parts.append(getattr(entity, 'canonical', None) or entity.text)
-                    elif isinstance(entity, dict):
-                        if entity.get("type") in ("ORGANISM", "TISSUE", "DISEASE", "ASSAY_TYPE"):
-                            term = (entity.get("canonical") or entity.get("text", "")).lower()
-                            if term not in seen_terms:
-                                seen_terms.add(term)
-                                query_parts.append(entity.get("canonical") or entity.get("text"))
-                if query_parts:
-                    params["query"] = " ".join(query_parts)
-                elif "query" in slots:
-                    params["query"] = slots["query"]
-            elif "query" in slots:
-                params["query"] = slots["query"]
-                
-        elif intent == "DATA_DOWNLOAD":
-            if "dataset_id" in slots:
-                params["dataset_id"] = slots["dataset_id"]
-            else:
-                # Check entities for dataset IDs
-                for entity in entities:
-                    entity_type = entity.entity_type if hasattr(entity, 'entity_type') else entity.get("type")
-                    entity_text = entity.text if hasattr(entity, 'text') else entity.get("text")
-                    if entity_type == "DATASET_ID":
-                        params["dataset_id"] = entity_text
-                        break
-                
-            # Check for "download all"
-            if not params.get("dataset_id"):
-                query_lower = original_query.lower()
-                if any(kw in query_lower for kw in ["all", "everything", "both", "execute", "run"]):
-                    context_ids = self.context.get_state("last_search_ids")
-                    if context_ids:
-                        params["dataset_ids"] = context_ids.copy()
-                        params["download_all"] = True
-                    elif self._last_search_results:
-                        params["dataset_ids"] = self._last_search_results.copy()
-                        params["download_all"] = True
-                        
-        elif intent and intent.startswith("EDUCATION"):
-            if "concept" in slots:
-                params["concept"] = slots["concept"]
-            elif "topic" in slots:
-                params["concept"] = slots["topic"]
-        elif intent == "DATA_SCAN":
-            # For data scan, pass path and optional data_type filter
-            if "path" in slots:
-                params["path"] = slots["path"]
-            elif "directory" in slots:
-                params["path"] = slots["directory"]
-            elif "folder" in slots:
-                params["path"] = slots["folder"]
-            # Pass data_type for filtering if specified
-            if "data_type" in slots:
-                params["data_type"] = slots["data_type"]
-        else:
-            # Default: filter out common invalid params
-            invalid_params = {"concept", "topic", "question"}
-            params = {k: v for k, v in slots.items() if k not in invalid_params}
-        
-        return params
-    
-    def _build_clarification_request(
-        self,
-        query: str,
-        ensemble_result  # EnsembleParseResult (deprecated)
-    ) -> str:
-        """
-        Build a clarification request when ensemble methods disagree.
-        
-        DEPRECATED: UnifiedIntentParser handles clarification via needs_clarification flag.
-        Kept for backward compatibility.
-        """
-        conflicting_intents = {}
-        for vote in ensemble_result.votes:
-            if vote.intent not in conflicting_intents:
-                conflicting_intents[vote.intent] = []
-            conflicting_intents[vote.intent].append(vote.method)
-        
-        # Map intents to user-friendly descriptions
-        intent_descriptions = {
-            "DATA_SEARCH": "search for datasets",
-            "DATA_DOWNLOAD": "download a dataset",
-            "DATA_SCAN": "scan local files",
-            "DATA_DESCRIBE": "describe files",
-            "WORKFLOW_CREATE": "create a workflow",
-            "JOB_SUBMIT": "submit a job",
-            "JOB_STATUS": "check job status",
-            "EDUCATION_EXPLAIN": "explain a concept",
-        }
-        
-        options = []
-        for i, (intent, methods) in enumerate(conflicting_intents.items(), 1):
-            desc = intent_descriptions.get(intent, intent.lower().replace("_", " "))
-            options.append(f"{i}. **{desc}**")
-        
-        message = f"I'm not entirely sure what you'd like to do. Did you mean to:\n\n"
-        message += "\n".join(options)
-        message += "\n\nPlease clarify or rephrase your request."
-        
-        return message
-    
     def _store_search_results(self, result: ToolResult) -> None:
         """Store dataset IDs from search results in conversation context."""
         if result.data and "results" in result.data:
@@ -1814,33 +1664,29 @@ class UnifiedAgent:
         """Handle user confirmation - check if there's a pending download."""
         query_lower = query.lower()
         
-        # Check for download-related confirmation
+        # Check for download-related confirmation using last search results
         if self._last_search_results:
             dataset_ids = self._last_search_results
             
-            # Check last message for download preview
-            for msg in reversed(self.conversation_history[-5:]):
-                if isinstance(msg, dict) and msg.get("role") == "assistant":
-                    if "Download Preview" in msg.get("content", ""):
-                        # User is confirming a download
-                        file_filter = None
-                        # Check for filter modifiers
-                        for pattern in ["without", "no ", "only ", "exclude "]:
-                            if pattern in query_lower:
-                                file_filter = query
-                                break
-                        
-                        result = self.tools.download_dataset(
-                            dataset_ids=dataset_ids,
-                            file_filter=file_filter,
-                            confirm=True
-                        )
-                        return AgentResponse(
-                            success=result.success,
-                            message=result.message,
-                            response_type=ResponseType.SUCCESS if result.success else ResponseType.ERROR,
-                            task_type=task_type,
-                        )
+            # User is confirming a download of previously searched datasets
+            file_filter = None
+            # Check for filter modifiers
+            for pattern in ["without", "no ", "only ", "exclude "]:
+                if pattern in query_lower:
+                    file_filter = query
+                    break
+            
+            result = self.tools.download_dataset(
+                dataset_ids=dataset_ids,
+                file_filter=file_filter,
+                confirm=True
+            )
+            return AgentResponse(
+                success=result.success,
+                message=result.message,
+                response_type=ResponseType.SUCCESS if result.success else ResponseType.ERROR,
+                task_type=task_type,
+            )
         
         return AgentResponse(
             success=False,
