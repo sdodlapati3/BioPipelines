@@ -288,6 +288,25 @@ INTENT_PATTERNS: List[Tuple[str, IntentType, Dict[str, int]]] = [
     # "Explain/tell me what data we have" - asking about local data
     (r"(?:can\s+you\s+)?(?:explain|tell\s+me|show\s+me)\s+(?:me\s+)?what\s+(?:types?\s+of\s+)?(?:data|files?|samples?)\s+(?:we\s+have|i\s+have|is\s+available|are\s+(?:in|available))",
      IntentType.DATA_SCAN, {}),
+    
+    # Data type specific scans - extract data_type slot
+    # Natural language data type patterns (must come first to match longer phrases)
+    # "how many single cell rna seq data files do we have"
+    (r"how\s+many\s+(single[\s_-]?cell(?:\s+rna)?(?:\s+seq)?|sc[\s_-]?rna[\s_-]?seq)\s+(?:data\s+)?(?:files?|samples?)",
+     IntentType.DATA_SCAN, {"data_type": 1}),
+    # "do we have any single cell data" / "do we have single cell rna seq"
+    (r"do\s+we\s+have\s+(?:any\s+)?(single[\s_-]?cell(?:\s+rna)?(?:\s+seq)?|sc[\s_-]?rna[\s_-]?seq)",
+     IntentType.DATA_SCAN, {"data_type": 1}),
+    # "how many scRNA-seq files do we have" / "do we have any ChIP-seq data"
+    (r"(?:how\s+many|do\s+we\s+have(?:\s+any)?|show\s+me(?:\s+the)?|list(?:\s+all)?|find(?:\s+all)?)\s+((?:sc)?rna[_-]?seq|chip[_-]?seq|atac[_-]?seq|methylation|wgs|wes|hi[_-]?c|cut\s*(?:&|and)\s*run)\s*(?:data|files?|samples?)?",
+     IntentType.DATA_SCAN, {"data_type": 1}),
+    # "what scRNA-seq data do we have" / "what chip-seq samples are available"
+    (r"what\s+((?:sc)?rna[_-]?seq|chip[_-]?seq|atac[_-]?seq|single[\s_-]?cell|methylation|wgs|wes|hi[_-]?c)\s+(?:data|files?|samples?)\s+(?:do\s+we\s+have|are\s+available|exist)",
+     IntentType.DATA_SCAN, {"data_type": 1}),
+    # "check for scRNA-seq in the data folder"
+    (r"(?:check|scan|look)\s+(?:for\s+)?((?:sc)?rna[_-]?seq|chip[_-]?seq|atac[_-]?seq|single[\s_-]?cell|methylation|wgs|wes|hi[_-]?c)\s+(?:data|files?|samples?)?\s*(?:in|at|under)\s+([/~][^\s]+)?",
+     IntentType.DATA_SCAN, {"data_type": 1, "path": 2}),
+    
     # "Inventory my data in /path"
     (r"inventory\s+(?:my\s+)?(?:data|files?)\s+(?:in|at)\s+([/~][^\s]+)",
      IntentType.DATA_SCAN, {"path": 1}),

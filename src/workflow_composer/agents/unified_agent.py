@@ -1136,14 +1136,16 @@ class UnifiedAgent:
             elif "topic" in slots:
                 params["concept"] = slots["topic"]
         elif intent == "DATA_SCAN":
-            # For data scan, only pass path
+            # For data scan, pass path and optional data_type filter
             if "path" in slots:
                 params["path"] = slots["path"]
             elif "directory" in slots:
                 params["path"] = slots["directory"]
             elif "folder" in slots:
                 params["path"] = slots["folder"]
-            # Don't pass other slots - scan_data only needs path
+            # Pass data_type for filtering if specified
+            if "data_type" in slots:
+                params["data_type"] = slots["data_type"]
         else:
             # Default: use slots directly, but filter out common invalid params
             invalid_params = {"concept", "topic", "question"}  # These are for explain_concept only
@@ -1223,14 +1225,16 @@ class UnifiedAgent:
             elif "topic" in slots:
                 params["concept"] = slots["topic"]
         elif intent == "DATA_SCAN":
-            # For data scan, only pass path
+            # For data scan, pass path and optional data_type filter
             if "path" in slots:
                 params["path"] = slots["path"]
             elif "directory" in slots:
                 params["path"] = slots["directory"]
             elif "folder" in slots:
                 params["path"] = slots["folder"]
-            # Don't pass other slots - scan_data only needs path
+            # Pass data_type for filtering if specified
+            if "data_type" in slots:
+                params["data_type"] = slots["data_type"]
         else:
             # Default: filter out common invalid params
             invalid_params = {"concept", "topic", "question"}

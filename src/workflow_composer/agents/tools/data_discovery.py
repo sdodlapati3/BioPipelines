@@ -72,6 +72,7 @@ SCAN_DATA_PATTERNS = [
 
 def scan_data_impl(
     path: str = None,
+    data_type: str = None,
     scanner=None,
     manifest=None,
 ) -> ToolResult:
@@ -80,6 +81,7 @@ def scan_data_impl(
     
     Args:
         path: Directory path to scan. Defaults to current directory.
+        data_type: Optional filter for specific data type (e.g., "scRNA-seq", "RNA-seq", "ChIP-seq")
         scanner: DataScanner instance
         manifest: DataManifest instance
         
@@ -93,6 +95,11 @@ def scan_data_impl(
             error="Scanner not available",
             message="❌ Data scanner is not available. Please check installation."
         )
+    
+    # Normalize data_type filter
+    data_type_filter = None
+    if data_type:
+        data_type_filter = _normalize_data_type(data_type)
     
     # Smart default paths
     if not path:
@@ -127,13 +134,37 @@ def scan_data_impl(
         result = scanner.scan_directory(scan_path, recursive=True)
         samples = result.samples if hasattr(result, 'samples') else []
         
+        # Filter by data type if specified
+        if data_type_filter and samples:
+            filtered_samples = []
+            for sample in samples:
+                sample_type = _infer_data_type_from_path(
+                    str(sample.fastq_1) if hasattr(sample, 'fastq_1') else "",
+                    sample.sample_id
+                )
+                if sample_type and sample_type.lower() == data_type_filter.lower():
+                    filtered_samples.append(sample)
+            
+            # If filtering returns no results, report that
+            if not filtered_samples:
+                return ToolResult(
+                    success=True,
+                    tool_name="scan_data",
+                    data={"samples": [], "path": str(scan_path), "count": 0, "filter": data_type_filter},
+                    message=f"⚠️ **No {data_type_filter} samples found** in `{scan_path}`\n\n"
+                            f"The scan found {len(samples)} total samples, but none matched '{data_type_filter}'.\n\n"
+                            f"**Available data types**: {', '.join(sorted(set(_infer_data_type_from_path(str(s.fastq_1), s.sample_id) or 'Unknown' for s in samples)))}\n\n"
+                            f"💡 Try: *\"What data types do we have?\"* to see all available data.",
+                )
+            samples = filtered_samples
+        
         # Add samples to manifest
         if manifest and samples:
             for sample in samples:
                 manifest.add_sample(sample)
         
         # Build hierarchical folder summary
-        message = _build_folder_summary(scan_path, samples, result)
+        message = _build_folder_summary(scan_path, samples, result, data_type_filter)
         
         return ToolResult(
             success=True,
@@ -141,7 +172,8 @@ def scan_data_impl(
             data={
                 "samples": samples,
                 "path": str(scan_path),
-                "count": len(samples)
+                "count": len(samples),
+                "filter": data_type_filter
             },
             message=message,
             ui_update={
@@ -160,7 +192,59 @@ def scan_data_impl(
         )
 
 
-def _build_folder_summary(scan_path: Path, samples: list, scan_result) -> str:
+def _normalize_data_type(data_type: str) -> str:
+    """Normalize data type string to standard format."""
+    dt_lower = data_type.lower().strip()
+    # Remove extra spaces
+    dt_lower = " ".join(dt_lower.split())
+    
+    # Map common variations to standard names
+    type_map = {
+        "scrna": "scRNA-seq",
+        "scrna-seq": "scRNA-seq",
+        "scrnaseq": "scRNA-seq",
+        "sc-rna-seq": "scRNA-seq",
+        "sc rna seq": "scRNA-seq",
+        "single cell": "scRNA-seq",
+        "single-cell": "scRNA-seq",
+        "singlecell": "scRNA-seq",
+        "single cell rna": "scRNA-seq",
+        "single cell rna seq": "scRNA-seq",
+        "single-cell rna-seq": "scRNA-seq",
+        "10x": "scRNA-seq",
+        "rna": "RNA-seq",
+        "rna-seq": "RNA-seq",
+        "rnaseq": "RNA-seq",
+        "rna seq": "RNA-seq",
+        "chip": "ChIP-seq",
+        "chip-seq": "ChIP-seq",
+        "chipseq": "ChIP-seq",
+        "chip seq": "ChIP-seq",
+        "atac": "ATAC-seq",
+        "atac-seq": "ATAC-seq",
+        "atacseq": "ATAC-seq",
+        "atac seq": "ATAC-seq",
+        "methyl": "Methylation",
+        "methylation": "Methylation",
+        "wgbs": "Methylation",
+        "bisulfite": "Methylation",
+        "wgs": "WGS",
+        "whole genome": "WGS",
+        "wes": "WES",
+        "exome": "WES",
+        "hic": "Hi-C",
+        "hi-c": "Hi-C",
+        "hi c": "Hi-C",
+    }
+    
+    for key, value in type_map.items():
+        if key in dt_lower:
+            return value
+    
+    return data_type  # Return as-is if no match
+
+
+def _build_folder_summary(scan_path: Path, samples: list, scan_result, data_type_filter: str = None) -> str:
     """
     Build an intelligent folder summary that:
     1. Separates INPUT data from OUTPUT/work directories
@@ -246,21 +330,30 @@ def _build_folder_summary(scan_path: Path, samples: list, scan_result) -> str:
             input_folders[folder] = stats
     
     # Build output message
-    lines = [f"📁 **Data Overview**: `{scan_path}`\n"]
+    if data_type_filter:
+        lines = [f"📁 **{data_type_filter} Data** in `{scan_path}`\n"]
+    else:
+        lines = [f"📁 **Data Overview**: `{scan_path}`\n"]
     
     # Summary
     total_input = sum(s["paired"] + s["single"] for s in input_folders.values())
     total_output = sum(s["paired"] + s["single"] for s in output_folders.values())
     total_size = sum(s["total_size_bytes"] for s in input_folders.values())
     
-    lines.append(f"**Input Data**: {total_input} samples ({_format_size(total_size)})")
+    if data_type_filter:
+        lines.append(f"**Found**: {total_input} {data_type_filter} samples ({_format_size(total_size)})")
+    else:
+        lines.append(f"**Input Data**: {total_input} samples ({_format_size(total_size)})")
     if total_output > 0:
         lines.append(f"**Pipeline Outputs**: {total_output} intermediate files (in work/results folders)")
     lines.append("")
     
     # Show INPUT folders prominently
     if input_folders:
-        lines.append("### 📥 Input Data")
+        if data_type_filter:
+            lines.append(f"### 📥 {data_type_filter} Samples")
+        else:
+            lines.append("### 📥 Input Data")
         lines.append("")
         
         for folder in sorted(input_folders.keys(), key=lambda f: -(input_folders[f]["paired"] + input_folders[f]["single"])):
