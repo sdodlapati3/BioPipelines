@@ -1,0 +1,121 @@
+# Local Data Scan Skill
+# =====================
+
+name: data_scan
+display_name: "Data Scanner"
+version: "1.0.0"
+category: data_discovery
+
+description: |
+  Scan local directories for bioinformatics data files.
+  Automatically detects FASTQ, BAM, VCF, BED, and other common formats.
+  Identifies sample structure, paired-end relationships, and metadata.
+
+capabilities:
+  - Scan directories recursively for data files
+  - Identify file types (FASTQ, BAM, VCF, BED, BigWig, etc.)
+  - Detect paired-end read relationships
+  - Extract sample names from filenames
+  - Calculate file statistics (size, read counts)
+  - Generate sample manifests for workflows
+  - Validate file integrity (checksums)
+
+aliases:
+  - scan data
+  - find files
+  - list samples
+  - discover data
+  - file scanner
+
+triggers:
+  keywords:
+    - scan data
+    - find data
+    - list files
+    - what data
+    - available data
+    - show files
+    - discover samples
+  patterns:
+    - "scan.*data"
+    - "find.*files"
+    - "what.*data.*available"
+    - "list.*samples"
+    - "show.*fastq"
+
+parameters:
+  required: []
+  optional:
+    - name: path
+      type: string
+      description: Directory path to scan
+      default: ./data
+    - name: file_types
+      type: array
+      description: File extensions to search for
+      default: [fastq, fastq.gz, fq, fq.gz, bam, vcf, vcf.gz, bed]
+    - name: recursive
+      type: boolean
+      description: Scan subdirectories
+      default: true
+    - name: include_metadata
+      type: boolean
+      description: Extract metadata from files
+      default: true
+    - name: validate
+      type: boolean
+      description: Validate file integrity
+      default: false
+
+examples:
+  - query: "Scan the data directory for FASTQ files"
+    expected_behavior: Lists all FASTQ files with sample information
+    parameters:
+      path: ./data
+      file_types: [fastq, fastq.gz]
+
+  - query: "What data do I have available?"
+    expected_behavior: Scans default directory and summarizes all data files
+    parameters:
+      recursive: true
+
+  - query: "Find all BAM files in /scratch/project"
+    expected_behavior: Lists BAM files with alignment statistics
+    parameters:
+      path: /scratch/project
+      file_types: [bam]
+
+outputs:
+  - name: files
+    type: array
+    description: List of discovered files with metadata
+  - name: samples
+    type: array
+    description: Identified samples with paired files
+  - name: summary
+    type: object
+    description: Summary statistics (total files, types, sizes)
+  - name: manifest
+    type: file
+    description: Sample sheet for workflow input
+
+related_skills:
+  - describe_files
+  - validate_dataset
+  - generate_workflow
+
+best_practices:
+  - Organize data by sample in subdirectories
+  - Use consistent naming conventions
+  - Include checksums for data integrity
+  - Separate raw and processed data
+  - Document sample metadata in accompanying files
+
+limitations:
+  - Cannot read inside compressed archives
+  - Metadata extraction depends on standard naming
+  - Large directories may take time to scan
+  - Some file formats need specific tools for validation
+
+references:
+  documentation: https://github.com/BioPipelines/docs/data_organization

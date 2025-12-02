@@ -1,0 +1,123 @@
+# Submit Job Skill
+# ================
+
+name: submit_job
+display_name: "Submit Job"
+version: "1.0.0"
+category: job_management
+
+description: |
+  Submit workflow jobs to SLURM cluster or run locally.
+  Handles resource allocation, queue selection, and job monitoring setup.
+
+capabilities:
+  - Submit Nextflow workflows to SLURM
+  - Configure resource requirements (CPUs, memory, time)
+  - Select appropriate partition/queue
+  - Set up job dependencies
+  - Configure email notifications
+  - Generate submission scripts
+  - Support local execution mode
+
+aliases:
+  - run job
+  - execute workflow
+  - start pipeline
+  - launch job
+  - submit to cluster
+
+triggers:
+  keywords:
+    - submit job
+    - run workflow
+    - execute pipeline
+    - start job
+    - launch workflow
+    - submit to slurm
+  patterns:
+    - "submit.*job"
+    - "run.*workflow"
+    - "execute.*pipeline"
+    - "start.*analysis"
+    - "launch.*job"
+
+parameters:
+  required:
+    - name: workflow_dir
+      type: string
+      description: Path to workflow directory
+  optional:
+    - name: profile
+      type: string
+      description: Execution profile
+      default: slurm
+      enum: [slurm, local, docker, singularity]
+    - name: partition
+      type: string
+      description: SLURM partition
+      default: normal
+    - name: cpus
+      type: integer
+      description: Number of CPUs
+      default: 8
+    - name: memory
+      type: string
+      description: Memory allocation
+      default: 32G
+    - name: time
+      type: string
+      description: Wall time limit
+      default: 24:00:00
+    - name: email
+      type: string
+      description: Email for notifications
+
+examples:
+  - query: "Submit the RNA-seq workflow to SLURM"
+    expected_behavior: Submits job with default resources
+    parameters:
+      profile: slurm
+
+  - query: "Run the workflow locally with 16 CPUs"
+    expected_behavior: Executes locally with specified resources
+    parameters:
+      profile: local
+      cpus: 16
+
+  - query: "Submit to the GPU partition with 64GB memory"
+    expected_behavior: Submits with GPU resources
+    parameters:
+      partition: gpu
+      memory: 64G
+
+outputs:
+  - name: job_id
+    type: string
+    description: SLURM job ID
+  - name: submission_script
+    type: file
+    description: Generated submission script
+  - name: status
+    type: string
+    description: Initial job status
+
+related_skills:
+  - check_status
+  - cancel_job
+  - diagnose_error
+  - get_logs
+
+best_practices:
+  - Estimate resources based on data size
+  - Use checkpointing for long jobs
+  - Set appropriate time limits
+  - Monitor job progress
+  - Save submission scripts for reproducibility
+
+limitations:
+  - Requires SLURM cluster access
+  - Resource limits vary by partition
+  - Queue wait times depend on cluster load
+
+references:
+  slurm_docs: https://slurm.schedmd.com/documentation.html

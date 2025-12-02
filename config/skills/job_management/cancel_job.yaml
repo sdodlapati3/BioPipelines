@@ -1,0 +1,89 @@
+# Cancel Job Skill
+# ================
+
+name: cancel_job
+display_name: "Cancel Job"
+version: "1.0.0"
+category: job_management
+
+description: |
+  Cancel running or pending SLURM jobs. Can cancel individual jobs
+  or all jobs for the current user.
+
+capabilities:
+  - Cancel individual SLURM jobs
+  - Cancel all user jobs
+  - Cancel jobs by name pattern
+  - Force kill stuck jobs
+  - Clean up job resources
+
+aliases:
+  - stop job
+  - kill job
+  - abort job
+  - terminate job
+
+triggers:
+  keywords:
+    - cancel job
+    - stop job
+    - kill job
+    - abort workflow
+    - terminate job
+  patterns:
+    - "cancel.*job"
+    - "stop.*job"
+    - "kill.*job"
+    - "abort.*workflow"
+
+parameters:
+  required:
+    - name: job_id
+      type: string
+      description: SLURM job ID to cancel
+  optional:
+    - name: all_jobs
+      type: boolean
+      description: Cancel all user jobs
+      default: false
+    - name: force
+      type: boolean
+      description: Force kill
+      default: false
+
+examples:
+  - query: "Cancel job 12345"
+    expected_behavior: Cancels the specified job
+    parameters:
+      job_id: "12345"
+
+  - query: "Stop all my running jobs"
+    expected_behavior: Cancels all jobs for current user
+    parameters:
+      all_jobs: true
+
+outputs:
+  - name: cancelled
+    type: boolean
+    description: Whether cancellation succeeded
+  - name: message
+    type: string
+    description: Cancellation result message
+
+related_skills:
+  - check_status
+  - submit_job
+  - resubmit_job
+
+best_practices:
+  - Check job status before cancelling
+  - Allow Nextflow to clean up work directories
+  - Consider job dependencies before cancelling
+
+limitations:
+  - Cannot cancel other users' jobs
+  - Some jobs may take time to terminate
+  - Work directory may need manual cleanup
+
+references:
+  slurm_scancel: https://slurm.schedmd.com/scancel.html

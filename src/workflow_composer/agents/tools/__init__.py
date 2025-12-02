@@ -104,6 +104,109 @@ from .education import (
     CONCEPT_KNOWLEDGE,
 )
 
+# Database Clients (Phase 2)
+from .databases import (
+    get_uniprot_client,
+    get_string_client,
+    get_kegg_client,
+    get_reactome_client,
+    get_pubmed_client,
+    get_clinvar_client,
+    DatabaseResult,
+)
+
+
+# =============================================================================
+# DATABASE TOOL PATTERNS (Phase 2)
+# =============================================================================
+
+# UniProt patterns
+SEARCH_UNIPROT_PATTERNS = [
+    r"search\s+(?:uniprot|protein\s+database)\s+(?:for\s+)?(.+)",
+    r"find\s+protein\s+(?:for\s+|named\s+)?(.+)\s+(?:in\s+)?uniprot",
+    r"look\s+up\s+(.+)\s+(?:in\s+)?uniprot",
+    r"get\s+(?:protein\s+)?info(?:rmation)?\s+(?:for|about)\s+(.+)",
+]
+
+GET_PROTEIN_PATTERNS = [
+    r"get\s+protein\s+(.+)",
+    r"fetch\s+protein\s+(.+)",
+    r"uniprot\s+(?:id\s+)?([A-Z0-9_]+)",
+]
+
+# STRING patterns
+SEARCH_STRING_PATTERNS = [
+    r"search\s+string(?:\s+db)?\s+(?:for\s+)?(.+)",
+    r"find\s+interactions?\s+(?:for\s+)?(.+)\s+in\s+string",
+    r"protein\s+interactions?\s+(?:for\s+)?(.+)",
+]
+
+GET_INTERACTIONS_PATTERNS = [
+    r"get\s+(?:protein\s+)?interactions?\s+(?:for\s+)?(.+)",
+    r"what\s+(?:proteins?\s+)?interacts?\s+with\s+(.+)",
+    r"interaction\s+partners?\s+(?:for|of)\s+(.+)",
+]
+
+GET_ENRICHMENT_PATTERNS = [
+    r"(?:get\s+)?enrichment\s+(?:analysis\s+)?(?:for\s+)?(.+)",
+    r"pathway\s+enrichment\s+(?:for\s+)?(.+)",
+    r"go\s+enrichment\s+(?:for\s+)?(.+)",
+]
+
+# KEGG patterns
+SEARCH_KEGG_PATTERNS = [
+    r"search\s+kegg\s+(?:for\s+)?(.+)",
+    r"find\s+(?:kegg\s+)?pathway\s+(?:for\s+)?(.+)",
+    r"kegg\s+pathway\s+(.+)",
+]
+
+GET_PATHWAY_PATTERNS = [
+    r"get\s+pathway\s+(.+)",
+    r"show\s+pathway\s+(.+)",
+    r"pathway\s+(?:info|details?)\s+(?:for\s+)?(.+)",
+]
+
+# Reactome patterns
+SEARCH_REACTOME_PATTERNS = [
+    r"search\s+reactome\s+(?:for\s+)?(.+)",
+    r"find\s+(?:in\s+)?reactome\s+(.+)",
+    r"reactome\s+pathway\s+(.+)",
+]
+
+ANALYZE_GENES_PATTERNS = [
+    r"analyze\s+genes?\s+(.+)",
+    r"gene\s+analysis\s+(?:for\s+)?(.+)",
+    r"pathway\s+analysis\s+(?:for\s+)?(.+)",
+]
+
+# PubMed patterns
+SEARCH_PUBMED_PATTERNS = [
+    r"search\s+pubmed\s+(?:for\s+)?(.+)",
+    r"find\s+(?:papers?|articles?|publications?)\s+(?:about|on|for)\s+(.+)",
+    r"pubmed\s+search\s+(.+)",
+    r"literature\s+(?:search|review)\s+(?:for|on)\s+(.+)",
+]
+
+GET_ARTICLE_PATTERNS = [
+    r"get\s+(?:pubmed\s+)?article\s+(.+)",
+    r"fetch\s+(?:pubmed\s+)?paper\s+(\d+)",
+    r"pmid\s+(\d+)",
+]
+
+# ClinVar patterns
+SEARCH_CLINVAR_PATTERNS = [
+    r"search\s+clinvar\s+(?:for\s+)?(.+)",
+    r"find\s+(?:clinical\s+)?variants?\s+(?:for|in)\s+(.+)",
+    r"clinvar\s+(?:search\s+)?(.+)",
+    r"pathogenic\s+variants?\s+(?:for|in)\s+(.+)",
+]
+
+GET_VARIANTS_PATTERNS = [
+    r"get\s+variants?\s+(?:for|in)\s+(.+)",
+    r"show\s+variants?\s+(?:for|in)\s+(.+)",
+    r"variant\s+info\s+(.+)",
+]
+
 
 # =============================================================================
 # UNIFIED TOOL PATTERNS
@@ -153,6 +256,21 @@ ALL_TOOL_PATTERNS = [
     (ToolName.EXPLAIN_CONCEPT, EXPLAIN_CONCEPT_PATTERNS),
     (ToolName.COMPARE_SAMPLES, COMPARE_SAMPLES_PATTERNS),
     (ToolName.SHOW_HELP, GET_HELP_PATTERNS),
+    
+    # Database Clients (Phase 2)
+    (ToolName.SEARCH_UNIPROT, SEARCH_UNIPROT_PATTERNS),
+    (ToolName.GET_PROTEIN, GET_PROTEIN_PATTERNS),
+    (ToolName.SEARCH_STRING, SEARCH_STRING_PATTERNS),
+    (ToolName.GET_INTERACTIONS, GET_INTERACTIONS_PATTERNS),
+    (ToolName.GET_ENRICHMENT, GET_ENRICHMENT_PATTERNS),
+    (ToolName.SEARCH_KEGG, SEARCH_KEGG_PATTERNS),
+    (ToolName.GET_PATHWAY, GET_PATHWAY_PATTERNS),
+    (ToolName.SEARCH_REACTOME, SEARCH_REACTOME_PATTERNS),
+    (ToolName.ANALYZE_GENES, ANALYZE_GENES_PATTERNS),
+    (ToolName.SEARCH_PUBMED, SEARCH_PUBMED_PATTERNS),
+    (ToolName.GET_ARTICLE, GET_ARTICLE_PATTERNS),
+    (ToolName.SEARCH_CLINVAR, SEARCH_CLINVAR_PATTERNS),
+    (ToolName.GET_VARIANTS, GET_VARIANTS_PATTERNS),
 ]
 
 
@@ -253,8 +371,307 @@ class AgentTools:
             "compare_samples": lambda **kw: compare_samples_impl(**kw),
             "get_help": lambda **kw: get_help_impl(),
             "show_help": lambda **kw: get_help_impl(),  # Alias for get_help (matches ToolName.SHOW_HELP)
+            
+            # Database Clients (Phase 2)
+            "search_uniprot": lambda **kw: self._search_uniprot(**kw),
+            "get_protein": lambda **kw: self._get_protein(**kw),
+            "search_string": lambda **kw: self._search_string(**kw),
+            "get_interactions": lambda **kw: self._get_interactions(**kw),
+            "get_enrichment": lambda **kw: self._get_enrichment(**kw),
+            "search_kegg": lambda **kw: self._search_kegg(**kw),
+            "get_pathway": lambda **kw: self._get_pathway(**kw),
+            "search_reactome": lambda **kw: self._search_reactome(**kw),
+            "analyze_genes": lambda **kw: self._analyze_genes(**kw),
+            "search_pubmed": lambda **kw: self._search_pubmed(**kw),
+            "get_article": lambda **kw: self._get_article(**kw),
+            "search_clinvar": lambda **kw: self._search_clinvar(**kw),
+            "get_variants": lambda **kw: self._get_variants(**kw),
         }
         return dispatch
+    
+    # =========================================================================
+    # DATABASE CLIENT IMPLEMENTATIONS (Phase 2)
+    # =========================================================================
+    
+    def _search_uniprot(self, query: str, organism: str = "human", limit: int = 10, **kwargs) -> ToolResult:
+        """Search UniProt for proteins."""
+        try:
+            client = get_uniprot_client()
+            result = client.search(query, organism=organism, limit=limit)
+            if result.success:
+                return ToolResult(
+                    success=True,
+                    tool_name="search_uniprot",
+                    data=result.data,
+                    message=f"✅ Found {result.count} proteins in UniProt for '{query}'"
+                )
+            return ToolResult(
+                success=False,
+                tool_name="search_uniprot",
+                error=result.message,
+                message=f"❌ UniProt search failed: {result.message}"
+            )
+        except Exception as e:
+            return ToolResult(success=False, tool_name="search_uniprot", error=str(e))
+    
+    def _get_protein(self, accession: str, **kwargs) -> ToolResult:
+        """Get protein details from UniProt."""
+        try:
+            client = get_uniprot_client()
+            result = client.get_by_id(accession)
+            if result.success:
+                return ToolResult(
+                    success=True,
+                    tool_name="get_protein",
+                    data=result.data,
+                    message=f"✅ Retrieved protein {accession} from UniProt"
+                )
+            return ToolResult(
+                success=False,
+                tool_name="get_protein",
+                error=result.message,
+                message=f"❌ Failed to get protein: {result.message}"
+            )
+        except Exception as e:
+            return ToolResult(success=False, tool_name="get_protein", error=str(e))
+    
+    def _search_string(self, query: str, organism: str = "human", limit: int = 10, **kwargs) -> ToolResult:
+        """Search STRING for proteins."""
+        try:
+            client = get_string_client()
+            result = client.search(query, organism=organism, limit=limit)
+            if result.success:
+                return ToolResult(
+                    success=True,
+                    tool_name="search_string",
+                    data=result.data,
+                    message=f"✅ Found {result.count} proteins in STRING for '{query}'"
+                )
+            return ToolResult(
+                success=False,
+                tool_name="search_string",
+                error=result.message,
+                message=f"❌ STRING search failed: {result.message}"
+            )
+        except Exception as e:
+            return ToolResult(success=False, tool_name="search_string", error=str(e))
+    
+    def _get_interactions(self, proteins: str, organism: str = "human", score_threshold: float = 0.4, **kwargs) -> ToolResult:
+        """Get protein-protein interactions from STRING."""
+        try:
+            client = get_string_client()
+            # proteins can be comma-separated or a single protein
+            protein_list = [p.strip() for p in proteins.split(",")]
+            result = client.get_interactions(protein_list, organism=organism, score_threshold=score_threshold)
+            if result.success:
+                return ToolResult(
+                    success=True,
+                    tool_name="get_interactions",
+                    data=result.data,
+                    message=f"✅ Found {result.count} interactions from STRING"
+                )
+            return ToolResult(
+                success=False,
+                tool_name="get_interactions",
+                error=result.message,
+                message=f"❌ Failed to get interactions: {result.message}"
+            )
+        except Exception as e:
+            return ToolResult(success=False, tool_name="get_interactions", error=str(e))
+    
+    def _get_enrichment(self, genes: str, organism: str = "human", **kwargs) -> ToolResult:
+        """Get functional enrichment from STRING."""
+        try:
+            client = get_string_client()
+            gene_list = [g.strip() for g in genes.split(",")]
+            result = client.get_enrichment(gene_list, organism=organism)
+            if result.success:
+                return ToolResult(
+                    success=True,
+                    tool_name="get_enrichment",
+                    data=result.data,
+                    message=f"✅ Found {result.count} enriched terms"
+                )
+            return ToolResult(
+                success=False,
+                tool_name="get_enrichment",
+                error=result.message,
+                message=f"❌ Enrichment analysis failed: {result.message}"
+            )
+        except Exception as e:
+            return ToolResult(success=False, tool_name="get_enrichment", error=str(e))
+    
+    def _search_kegg(self, query: str, database: str = "pathway", organism: str = "hsa", **kwargs) -> ToolResult:
+        """Search KEGG for pathways or genes."""
+        try:
+            client = get_kegg_client()
+            result = client.search(query, database=database, organism=organism)
+            if result.success:
+                return ToolResult(
+                    success=True,
+                    tool_name="search_kegg",
+                    data=result.data,
+                    message=f"✅ Found {result.count} results in KEGG"
+                )
+            return ToolResult(
+                success=False,
+                tool_name="search_kegg",
+                error=result.message,
+                message=f"❌ KEGG search failed: {result.message}"
+            )
+        except Exception as e:
+            return ToolResult(success=False, tool_name="search_kegg", error=str(e))
+    
+    def _get_pathway(self, pathway_id: str, **kwargs) -> ToolResult:
+        """Get pathway details from KEGG."""
+        try:
+            client = get_kegg_client()
+            result = client.get_pathway(pathway_id)
+            if result.success:
+                return ToolResult(
+                    success=True,
+                    tool_name="get_pathway",
+                    data=result.data,
+                    message=f"✅ Retrieved pathway {pathway_id} from KEGG"
+                )
+            return ToolResult(
+                success=False,
+                tool_name="get_pathway",
+                error=result.message,
+                message=f"❌ Failed to get pathway: {result.message}"
+            )
+        except Exception as e:
+            return ToolResult(success=False, tool_name="get_pathway", error=str(e))
+    
+    def _search_reactome(self, query: str, species: str = "Homo sapiens", **kwargs) -> ToolResult:
+        """Search Reactome for pathways."""
+        try:
+            client = get_reactome_client()
+            result = client.search(query, species=species)
+            if result.success:
+                return ToolResult(
+                    success=True,
+                    tool_name="search_reactome",
+                    data=result.data,
+                    message=f"✅ Found {result.count} pathways in Reactome"
+                )
+            return ToolResult(
+                success=False,
+                tool_name="search_reactome",
+                error=result.message,
+                message=f"❌ Reactome search failed: {result.message}"
+            )
+        except Exception as e:
+            return ToolResult(success=False, tool_name="search_reactome", error=str(e))
+    
+    def _analyze_genes(self, genes: str, species: str = "Homo sapiens", **kwargs) -> ToolResult:
+        """Analyze gene list with Reactome pathway analysis."""
+        try:
+            client = get_reactome_client()
+            gene_list = [g.strip() for g in genes.split(",")]
+            result = client.analyze_genes(gene_list, species=species)
+            if result.success:
+                return ToolResult(
+                    success=True,
+                    tool_name="analyze_genes",
+                    data=result.data,
+                    message=f"✅ Pathway analysis complete: {result.count} enriched pathways"
+                )
+            return ToolResult(
+                success=False,
+                tool_name="analyze_genes",
+                error=result.message,
+                message=f"❌ Gene analysis failed: {result.message}"
+            )
+        except Exception as e:
+            return ToolResult(success=False, tool_name="analyze_genes", error=str(e))
+    
+    def _search_pubmed(self, query: str, limit: int = 10, sort: str = "relevance", **kwargs) -> ToolResult:
+        """Search PubMed for articles."""
+        try:
+            client = get_pubmed_client()
+            result = client.search(query, max_results=limit, sort=sort)
+            if result.success:
+                return ToolResult(
+                    success=True,
+                    tool_name="search_pubmed",
+                    data=result.data,
+                    message=f"✅ Found {result.count} articles in PubMed"
+                )
+            return ToolResult(
+                success=False,
+                tool_name="search_pubmed",
+                error=result.message,
+                message=f"❌ PubMed search failed: {result.message}"
+            )
+        except Exception as e:
+            return ToolResult(success=False, tool_name="search_pubmed", error=str(e))
+    
+    def _get_article(self, pmid: str, **kwargs) -> ToolResult:
+        """Get article details from PubMed."""
+        try:
+            client = get_pubmed_client()
+            result = client.get_by_id(pmid)
+            if result.success:
+                return ToolResult(
+                    success=True,
+                    tool_name="get_article",
+                    data=result.data,
+                    message=f"✅ Retrieved article PMID {pmid}"
+                )
+            return ToolResult(
+                success=False,
+                tool_name="get_article",
+                error=result.message,
+                message=f"❌ Failed to get article: {result.message}"
+            )
+        except Exception as e:
+            return ToolResult(success=False, tool_name="get_article", error=str(e))
+    
+    def _search_clinvar(self, query: str, limit: int = 20, **kwargs) -> ToolResult:
+        """Search ClinVar for variants."""
+        try:
+            client = get_clinvar_client()
+            result = client.search(query, max_results=limit)
+            if result.success:
+                return ToolResult(
+                    success=True,
+                    tool_name="search_clinvar",
+                    data=result.data,
+                    message=f"✅ Found {result.count} variants in ClinVar"
+                )
+            return ToolResult(
+                success=False,
+                tool_name="search_clinvar",
+                error=result.message,
+                message=f"❌ ClinVar search failed: {result.message}"
+            )
+        except Exception as e:
+            return ToolResult(success=False, tool_name="search_clinvar", error=str(e))
+    
+    def _get_variants(self, gene: str, significance: str = None, limit: int = 20, **kwargs) -> ToolResult:
+        """Get variants for a gene from ClinVar."""
+        try:
+            client = get_clinvar_client()
+            if significance:
+                result = client.get_pathogenic_variants(gene, max_results=limit)
+            else:
+                result = client.search_gene(gene, max_results=limit)
+            if result.success:
+                return ToolResult(
+                    success=True,
+                    tool_name="get_variants",
+                    data=result.data,
+                    message=f"✅ Found {result.count} variants for {gene}"
+                )
+            return ToolResult(
+                success=False,
+                tool_name="get_variants",
+                error=result.message,
+                message=f"❌ Failed to get variants: {result.message}"
+            )
+        except Exception as e:
+            return ToolResult(success=False, tool_name="get_variants", error=str(e))
     
     def execute_tool(self, tool_name: str, **kwargs) -> ToolResult:
         """
@@ -306,6 +723,20 @@ class AgentTools:
         ToolName.GET_LOGS: ["job_id"],
         ToolName.CANCEL_JOB: ["job_id"],
         ToolName.DIAGNOSE_ERROR: ["job_id", "log_content"],
+        # Database Clients (Phase 2)
+        ToolName.SEARCH_UNIPROT: ["query", "organism"],
+        ToolName.GET_PROTEIN: ["accession"],
+        ToolName.SEARCH_STRING: ["query", "organism"],
+        ToolName.GET_INTERACTIONS: ["proteins", "organism"],
+        ToolName.GET_ENRICHMENT: ["genes", "organism"],
+        ToolName.SEARCH_KEGG: ["query", "database"],
+        ToolName.GET_PATHWAY: ["pathway_id"],
+        ToolName.SEARCH_REACTOME: ["query", "species"],
+        ToolName.ANALYZE_GENES: ["genes", "species"],
+        ToolName.SEARCH_PUBMED: ["query", "limit"],
+        ToolName.GET_ARTICLE: ["pmid"],
+        ToolName.SEARCH_CLINVAR: ["query", "limit"],
+        ToolName.GET_VARIANTS: ["gene", "significance"],
     }
     
     def execute(self, tool_name_or_enum, args: List[str] = None) -> ToolResult:
@@ -773,6 +1204,166 @@ class AgentTools:
                 "description": "Show help information about available commands",
                 "parameters": {"type": "object", "properties": {}, "required": []}
             },
+            # Database Clients (Phase 2)
+            {
+                "name": "search_uniprot",
+                "description": "Search UniProt protein database for proteins by name, gene, function, or organism. Returns protein accessions, names, and annotations.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "Search query (protein name, gene symbol, function keyword)"},
+                        "organism": {"type": "string", "description": "Organism filter: human, mouse, rat, yeast, etc. (default: human)"},
+                        "limit": {"type": "integer", "description": "Maximum results to return (default: 10)"},
+                    },
+                    "required": ["query"]
+                }
+            },
+            {
+                "name": "get_protein",
+                "description": "Get detailed protein information from UniProt by accession ID. Includes sequence, function, GO terms, and more.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "accession": {"type": "string", "description": "UniProt accession ID (e.g., P53_HUMAN, P04637)"},
+                    },
+                    "required": ["accession"]
+                }
+            },
+            {
+                "name": "search_string",
+                "description": "Search STRING protein interaction database for proteins. STRING provides protein-protein interaction networks.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "Protein or gene name to search"},
+                        "organism": {"type": "string", "description": "Organism: human, mouse, yeast, etc. (default: human)"},
+                        "limit": {"type": "integer", "description": "Maximum results (default: 10)"},
+                    },
+                    "required": ["query"]
+                }
+            },
+            {
+                "name": "get_interactions",
+                "description": "Get protein-protein interactions from STRING database. Returns interaction partners with confidence scores.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "proteins": {"type": "string", "description": "Comma-separated protein names (e.g., 'TP53,MDM2,BRCA1')"},
+                        "organism": {"type": "string", "description": "Organism: human, mouse, etc. (default: human)"},
+                        "score_threshold": {"type": "number", "description": "Minimum interaction score 0-1 (default: 0.4)"},
+                    },
+                    "required": ["proteins"]
+                }
+            },
+            {
+                "name": "get_enrichment",
+                "description": "Perform functional enrichment analysis on a gene list using STRING. Returns enriched GO terms, KEGG pathways, and more.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "genes": {"type": "string", "description": "Comma-separated gene/protein names (e.g., 'TP53,BRCA1,EGFR')"},
+                        "organism": {"type": "string", "description": "Organism: human, mouse, etc. (default: human)"},
+                    },
+                    "required": ["genes"]
+                }
+            },
+            {
+                "name": "search_kegg",
+                "description": "Search KEGG pathway database. KEGG provides metabolic and signaling pathway information.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "Search query (pathway name, gene, compound)"},
+                        "database": {"type": "string", "description": "Database to search: pathway, genes, compound (default: pathway)"},
+                        "organism": {"type": "string", "description": "KEGG organism code: hsa (human), mmu (mouse), etc. (default: hsa)"},
+                    },
+                    "required": ["query"]
+                }
+            },
+            {
+                "name": "get_pathway",
+                "description": "Get detailed KEGG pathway information including genes, reactions, and connections.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "pathway_id": {"type": "string", "description": "KEGG pathway ID (e.g., hsa04110, map04110)"},
+                    },
+                    "required": ["pathway_id"]
+                }
+            },
+            {
+                "name": "search_reactome",
+                "description": "Search Reactome pathway database. Reactome provides curated pathway and reaction information.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "Search query (pathway name, gene, reaction)"},
+                        "species": {"type": "string", "description": "Species filter (default: Homo sapiens)"},
+                    },
+                    "required": ["query"]
+                }
+            },
+            {
+                "name": "analyze_genes",
+                "description": "Perform Reactome pathway enrichment analysis on a gene list. Identifies over-represented biological pathways.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "genes": {"type": "string", "description": "Comma-separated gene symbols (e.g., 'TP53,BRCA1,EGFR')"},
+                        "species": {"type": "string", "description": "Species (default: Homo sapiens)"},
+                    },
+                    "required": ["genes"]
+                }
+            },
+            {
+                "name": "search_pubmed",
+                "description": "Search PubMed for scientific articles and publications. Returns article titles, abstracts, and PMIDs.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "Search query (keywords, authors, MeSH terms)"},
+                        "limit": {"type": "integer", "description": "Maximum results (default: 10)"},
+                        "sort": {"type": "string", "description": "Sort by: relevance, pub_date, first_author (default: relevance)"},
+                    },
+                    "required": ["query"]
+                }
+            },
+            {
+                "name": "get_article",
+                "description": "Get detailed article information from PubMed by PMID. Returns title, abstract, authors, and citations.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "pmid": {"type": "string", "description": "PubMed ID (e.g., 12345678)"},
+                    },
+                    "required": ["pmid"]
+                }
+            },
+            {
+                "name": "search_clinvar",
+                "description": "Search ClinVar for clinical variant annotations. Returns variant pathogenicity and clinical significance.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "Search query (gene, variant, condition)"},
+                        "limit": {"type": "integer", "description": "Maximum results (default: 20)"},
+                    },
+                    "required": ["query"]
+                }
+            },
+            {
+                "name": "get_variants",
+                "description": "Get ClinVar variants for a specific gene, optionally filtered by clinical significance.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "gene": {"type": "string", "description": "Gene symbol (e.g., BRCA1, TP53)"},
+                        "significance": {"type": "string", "description": "Filter by significance: pathogenic, likely_pathogenic, benign (optional)"},
+                        "limit": {"type": "integer", "description": "Maximum results (default: 20)"},
+                    },
+                    "required": ["gene"]
+                }
+            },
         ]
         
         return self._function_definitions
@@ -887,4 +1478,13 @@ __all__ = [
     "PrefetchStrategy",
     "BackgroundExecutor",
     "get_prefetch_manager",
+    
+    # Database Clients (Phase 2)
+    "get_uniprot_client",
+    "get_string_client",
+    "get_kegg_client",
+    "get_reactome_client",
+    "get_pubmed_client",
+    "get_clinvar_client",
+    "DatabaseResult",
 ]

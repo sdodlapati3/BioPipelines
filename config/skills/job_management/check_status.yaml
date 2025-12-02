@@ -1,0 +1,102 @@
+# Check Job Status Skill
+# ======================
+
+name: check_status
+display_name: "Check Job Status"
+version: "1.0.0"
+category: job_management
+
+description: |
+  Check the status of submitted SLURM jobs and Nextflow workflows.
+  Provides progress information, resource usage, and error detection.
+
+capabilities:
+  - Query SLURM job status
+  - Monitor Nextflow workflow progress
+  - Display process completion percentages
+  - Show resource usage (CPU, memory)
+  - Detect failed processes
+  - Estimate time remaining
+  - List all user jobs
+
+aliases:
+  - job status
+  - check job
+  - workflow status
+  - monitor job
+  - job progress
+
+triggers:
+  keywords:
+    - check status
+    - job status
+    - workflow progress
+    - is it running
+    - how is my job
+    - check job
+    - monitor progress
+  patterns:
+    - "check.*status"
+    - "job.*status"
+    - "how.*job"
+    - "is.*running"
+    - "progress.*workflow"
+
+parameters:
+  required: []
+  optional:
+    - name: job_id
+      type: string
+      description: SLURM job ID to check
+    - name: workflow_dir
+      type: string
+      description: Nextflow workflow directory
+    - name: all_jobs
+      type: boolean
+      description: Show all user jobs
+      default: false
+
+examples:
+  - query: "Check the status of job 12345"
+    expected_behavior: Shows job state, runtime, and resources
+    parameters:
+      job_id: "12345"
+
+  - query: "How is my workflow progressing?"
+    expected_behavior: Shows Nextflow process completion
+    parameters: {}
+
+  - query: "List all my running jobs"
+    expected_behavior: Shows all SLURM jobs for user
+    parameters:
+      all_jobs: true
+
+outputs:
+  - name: status
+    type: string
+    description: Job state (RUNNING, PENDING, COMPLETED, FAILED)
+  - name: progress
+    type: object
+    description: Process completion statistics
+  - name: resources
+    type: object
+    description: CPU and memory usage
+
+related_skills:
+  - submit_job
+  - cancel_job
+  - get_logs
+
+best_practices:
+  - Check status periodically for long jobs
+  - Monitor memory usage to avoid OOM
+  - Review failed processes early
+  - Use workflow directory for detailed progress
+
+limitations:
+  - SLURM history limited by cluster config
+  - Real-time metrics may have delay
+  - Some resource metrics unavailable until completion
+
+references:
+  slurm_squeue: https://slurm.schedmd.com/squeue.html

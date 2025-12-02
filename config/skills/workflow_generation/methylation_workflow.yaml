@@ -1,0 +1,123 @@
+# Methylation Workflow Skill
+# ==========================
+
+name: methylation_workflow
+display_name: "DNA Methylation Workflow"
+version: "1.0.0"
+category: workflow_generation
+
+description: |
+  Generate DNA methylation analysis workflows for bisulfite sequencing data.
+  Supports WGBS, RRBS, and methylation array analysis with DMR calling
+  and annotation.
+
+capabilities:
+  - Generate bisulfite-seq analysis pipelines
+  - Alignment with Bismark or bwa-meth
+  - Methylation calling at CpG/CHG/CHH contexts
+  - DMR (Differentially Methylated Region) detection
+  - Methylation array analysis (450K, EPIC)
+  - Integration with gene expression data
+  - Visualization of methylation patterns
+
+aliases:
+  - methylation
+  - bisulfite sequencing
+  - wgbs
+  - rrbs
+  - dna methylation
+  - epigenetics
+
+triggers:
+  keywords:
+    - methylation workflow
+    - bisulfite pipeline
+    - wgbs analysis
+    - dmr calling
+    - methylation analysis
+    - epigenetic workflow
+  patterns:
+    - "methylation.*workflow"
+    - "bisulfite.*pipeline"
+    - "dmr.*analysis"
+    - "wgbs.*pipeline"
+    - "dna.*methylation"
+
+parameters:
+  required:
+    - name: input_dir
+      type: string
+      description: Directory containing FASTQ files or IDAT files
+    - name: organism
+      type: string
+      description: Reference organism
+      enum: [human, mouse]
+  optional:
+    - name: protocol
+      type: string
+      description: Bisulfite protocol
+      default: WGBS
+      enum: [WGBS, RRBS, PBAT, ARRAY_450K, ARRAY_EPIC]
+    - name: aligner
+      type: string
+      description: Alignment tool
+      default: bismark
+      enum: [bismark, bwa-meth]
+    - name: dmr_caller
+      type: string
+      description: DMR detection tool
+      default: methylKit
+      enum: [methylKit, DSS, dmrseq, minfi]
+    - name: coverage_threshold
+      type: integer
+      description: Minimum read coverage
+      default: 10
+
+examples:
+  - query: "Create a WGBS methylation pipeline for human samples"
+    expected_behavior: Generates Bismark-based pipeline with DMR calling
+    parameters:
+      protocol: WGBS
+      organism: human
+
+  - query: "Generate an RRBS analysis workflow"
+    expected_behavior: Pipeline optimized for reduced representation data
+    parameters:
+      protocol: RRBS
+
+  - query: "Analyze 450K methylation array data"
+    expected_behavior: Uses minfi for array preprocessing and analysis
+    parameters:
+      protocol: ARRAY_450K
+      dmr_caller: minfi
+
+outputs:
+  - name: methylation_calls
+    type: file
+    description: Per-base methylation levels
+  - name: dmrs
+    type: file
+    description: Differentially methylated regions
+  - name: visualization
+    type: file
+    description: Methylation heatmaps and plots
+
+related_skills:
+  - rnaseq_workflow
+  - check_references
+  - submit_job
+
+best_practices:
+  - Use adequate coverage (>10x for WGBS)
+  - Include spike-in controls for efficiency
+  - Consider strand-specific analysis
+  - Validate with biological replicates
+  - Filter low-coverage CpGs
+
+limitations:
+  - WGBS requires high sequencing depth
+  - Bisulfite conversion may be incomplete
+  - PCR duplicates can bias results
+
+references:
+  nf-core: https://nf-co.re/methylseq

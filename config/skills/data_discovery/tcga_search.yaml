@@ -1,0 +1,126 @@
+# TCGA/GDC Search Skill
+# =====================
+
+name: tcga_search
+display_name: "TCGA/GDC Search"
+version: "1.0.0"
+category: data_discovery
+
+description: |
+  Search The Cancer Genome Atlas (TCGA) via the Genomic Data Commons (GDC).
+  Access comprehensive cancer genomics data including RNA-seq, DNA methylation,
+  whole genome/exome sequencing, and clinical data across 33 cancer types.
+
+capabilities:
+  - Search by cancer type (BRCA, GBM, LUAD, etc.)
+  - Filter by data type (RNA-seq, methylation, WXS, WGS)
+  - Access clinical and biospecimen metadata
+  - Retrieve controlled-access and open-access data
+  - Download mutation annotation files (MAF)
+  - Query by sample or case UUID
+
+aliases:
+  - tcga
+  - gdc
+  - cancer genome atlas
+  - genomic data commons
+
+triggers:
+  keywords:
+    - search tcga
+    - find tcga
+    - tcga data
+    - cancer data
+    - gdc search
+    - tumor data
+    - cancer genomics
+  patterns:
+    - "search.*tcga"
+    - "tcga.*data"
+    - "cancer.*data"
+    - "tumor.*sequencing"
+    - "TCGA-[A-Z]+"
+
+parameters:
+  required: []
+  optional:
+    - name: cancer_type
+      type: string
+      description: TCGA project code
+      enum: [TCGA-BRCA, TCGA-GBM, TCGA-LUAD, TCGA-LUSC, TCGA-COAD, TCGA-READ, TCGA-PRAD, TCGA-KIRC, TCGA-LIHC, TCGA-SKCM, TCGA-OV, TCGA-PAAD, TCGA-STAD, TCGA-BLCA, TCGA-HNSC]
+    - name: data_type
+      type: string
+      description: Type of data
+      enum: [Gene Expression Quantification, DNA Methylation, Masked Somatic Mutation, Copy Number Segment, Clinical, Biospecimen]
+    - name: experimental_strategy
+      type: string
+      description: Experimental approach
+      enum: [RNA-Seq, WXS, WGS, Methylation Array, miRNA-Seq, ATAC-Seq]
+    - name: sample_type
+      type: string
+      description: Sample type
+      enum: [Primary Tumor, Solid Tissue Normal, Blood Derived Normal, Metastatic]
+    - name: limit
+      type: integer
+      description: Maximum results
+      default: 50
+
+examples:
+  - query: "Search TCGA for breast cancer RNA-seq data"
+    expected_behavior: Returns RNA-seq files from TCGA-BRCA project
+    parameters:
+      cancer_type: TCGA-BRCA
+      data_type: Gene Expression Quantification
+
+  - query: "Find glioblastoma methylation data"
+    expected_behavior: Returns DNA methylation data from TCGA-GBM
+    parameters:
+      cancer_type: TCGA-GBM
+      data_type: DNA Methylation
+
+  - query: "Get mutation data for lung cancer"
+    expected_behavior: Returns MAF files for TCGA-LUAD and TCGA-LUSC
+    parameters:
+      data_type: Masked Somatic Mutation
+      experimental_strategy: WXS
+
+  - query: "Download clinical data for pancreatic cancer"
+    expected_behavior: Returns clinical metadata for TCGA-PAAD
+    parameters:
+      cancer_type: TCGA-PAAD
+      data_type: Clinical
+
+outputs:
+  - name: files
+    type: array
+    description: Matching data files with UUIDs
+  - name: cases
+    type: array
+    description: Patient cases with clinical data
+  - name: annotations
+    type: array
+    description: Any annotations or notes on samples
+
+related_skills:
+  - encode_search
+  - geo_search
+  - download_dataset
+  - clinvar_search
+
+best_practices:
+  - Check data access level (open vs controlled)
+  - Match tumor and normal samples for comparative analysis
+  - Use harmonized data (GRCh38) for consistent analysis
+  - Include clinical data for survival analysis
+  - Verify sample quality metrics before analysis
+
+limitations:
+  - Controlled-access data requires dbGaP approval
+  - Some cancer types have limited sample sizes
+  - Not all samples have matched normal tissue
+  - Legacy data may use different reference genomes
+
+references:
+  portal: https://portal.gdc.cancer.gov/
+  api: https://docs.gdc.cancer.gov/API/Users_Guide/Getting_Started/
+  documentation: https://docs.gdc.cancer.gov/

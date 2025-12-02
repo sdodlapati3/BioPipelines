@@ -1,0 +1,119 @@
+# UniProt Skill Documentation
+# Protein sequence and annotation database
+
+name: uniprot
+display_name: UniProt Protein Database
+version: "1.0.0"
+category: database
+subcategory: protein
+
+description: |
+  UniProt is the comprehensive protein sequence and functional database.
+  It combines Swiss-Prot (manually reviewed, high-quality annotations)
+  and TrEMBL (computationally analyzed entries) to provide detailed
+  protein information including sequences, functions, domains, variants,
+  and post-translational modifications.
+
+capabilities:
+  - Search for proteins by gene name, protein name, or keywords
+  - Retrieve protein sequences in FASTA format
+  - Get functional annotations and descriptions
+  - Access Gene Ontology (GO) terms
+  - Filter by organism and review status
+  - Batch retrieval of multiple proteins
+
+triggers:
+  keywords:
+    - uniprot
+    - protein database
+    - protein sequence
+    - protein function
+    - swiss-prot
+    - protein annotation
+    - get protein
+    - search protein
+    - protein info
+  patterns:
+    - "search.*protein"
+    - "find.*protein"
+    - "get.*protein.*sequence"
+    - "what.*protein"
+    - "protein.*function"
+  intents:
+    - PROTEIN_SEARCH
+    - PROTEIN_INFO
+    - DATABASE_SEARCH
+
+parameters:
+  required:
+    - name: query
+      type: string
+      description: Search terms - gene name, protein name, or keywords
+      example: "BRCA1"
+  optional:
+    - name: organism
+      type: string
+      description: Filter by organism (human, mouse, etc.)
+      default: human
+      enum: [human, mouse, rat, zebrafish, drosophila, yeast]
+    - name: reviewed
+      type: boolean
+      description: Only return Swiss-Prot (reviewed) entries
+      default: true
+    - name: limit
+      type: integer
+      description: Maximum results to return
+      default: 25
+      max: 500
+
+outputs:
+  type: list
+  description: List of protein entries
+  item_schema:
+    accession: UniProt accession number
+    protein_name: Full protein name
+    gene_names: List of gene symbols
+    organism: Species name
+    function: Functional description
+    sequence_length: Length in amino acids
+    go_terms: Gene Ontology annotations
+
+examples:
+  - prompt: "Search UniProt for BRCA1 protein in human"
+    expected_params:
+      query: "BRCA1"
+      organism: "human"
+      reviewed: true
+    expected_behavior: "Returns Swiss-Prot entries for human BRCA1"
+    
+  - prompt: "Get the protein sequence for TP53"
+    expected_params:
+      query: "TP53"
+    expected_behavior: "Returns TP53 protein information including sequence"
+    
+  - prompt: "Find all mouse proteins involved in apoptosis"
+    expected_params:
+      query: "apoptosis"
+      organism: "mouse"
+    expected_behavior: "Returns mouse proteins annotated with apoptosis function"
+
+related_skills:
+  - string_db
+  - kegg
+  - reactome
+
+tool_binding:
+  tool_name: search_uniprot
+  tool_module: workflow_composer.agents.tools.databases
+  function: get_uniprot_client().search
+
+best_practices:
+  - Use reviewed=true to get only high-quality Swiss-Prot entries
+  - Search by gene symbol for most accurate results
+  - Use organism filter to narrow down results
+  - For batch queries, use batch_retrieve method with accession list
+
+limitations:
+  - Maximum 500 results per query
+  - Rate limited to 10 requests per second
+  - TrEMBL entries may have incomplete annotations

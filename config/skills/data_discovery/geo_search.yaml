@@ -1,0 +1,115 @@
+# GEO Database Search Skill
+# =========================
+
+name: geo_search
+display_name: "GEO Search"
+version: "1.0.0"
+category: data_discovery
+
+description: |
+  Search NCBI Gene Expression Omnibus (GEO) for gene expression datasets.
+  GEO is the largest public repository for functional genomics data including
+  microarray, RNA-seq, ChIP-seq, and methylation data.
+
+capabilities:
+  - Search by keywords, organism, or experiment type
+  - Find datasets by GEO accession (GSE, GSM, GPL)
+  - Filter by platform type (microarray, sequencing)
+  - Access raw and processed data
+  - Retrieve sample metadata and experimental design
+  - Download supplementary files
+
+aliases:
+  - geo
+  - gene expression omnibus
+  - ncbi geo
+  - gse
+
+triggers:
+  keywords:
+    - search geo
+    - find geo
+    - geo datasets
+    - geo database
+    - gse search
+    - gene expression omnibus
+  patterns:
+    - "search.*geo"
+    - "find.*in geo"
+    - "geo.*data"
+    - "GSE\\d+"
+    - "download.*geo"
+
+parameters:
+  required:
+    - name: query
+      type: string
+      description: Search terms or GEO accession number
+  optional:
+    - name: organism
+      type: string
+      description: Filter by organism
+      default: human
+    - name: study_type
+      type: string
+      description: Type of study
+      enum: [expression profiling by array, expression profiling by high throughput sequencing, methylation profiling, genome binding/occupancy profiling]
+    - name: entry_type
+      type: string
+      description: GEO entry type
+      enum: [gse, gds, gpl, gsm]
+      default: gse
+    - name: limit
+      type: integer
+      description: Maximum results to return
+      default: 20
+
+examples:
+  - query: "Search GEO for breast cancer RNA-seq datasets"
+    expected_behavior: Returns RNA-seq studies related to breast cancer
+    parameters:
+      organism: human
+      study_type: expression profiling by high throughput sequencing
+
+  - query: "Find GSE12345"
+    expected_behavior: Returns metadata and files for the specific GEO series
+    parameters:
+      query: GSE12345
+
+  - query: "Get methylation datasets for Alzheimer's disease"
+    expected_behavior: Returns methylation profiling studies related to Alzheimer's
+    parameters:
+      study_type: methylation profiling
+
+outputs:
+  - name: datasets
+    type: array
+    description: List of matching GEO datasets with accessions
+  - name: metadata
+    type: object
+    description: Study metadata including title, summary, samples
+  - name: supplementary_files
+    type: array
+    description: Available supplementary files for download
+
+related_skills:
+  - encode_search
+  - sra_search
+  - download_dataset
+
+best_practices:
+  - Use GEO accession numbers for direct access to known datasets
+  - Check sample sizes and replicate numbers before analysis
+  - Verify platform compatibility for meta-analysis
+  - Download processed data when available for faster analysis
+  - Review experimental design in series matrix files
+
+limitations:
+  - Metadata quality varies by submitter
+  - Some older datasets may lack raw sequencing data
+  - Large datasets may require SRA download tools
+  - Processing pipelines may differ between datasets
+
+references:
+  documentation: https://www.ncbi.nlm.nih.gov/geo/info/overview.html
+  api: https://www.ncbi.nlm.nih.gov/geo/info/geo_paccess.html

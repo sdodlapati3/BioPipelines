@@ -1,0 +1,125 @@
+# ChIP-seq Workflow Skill
+# =======================
+
+name: chipseq_workflow
+display_name: "ChIP-seq Workflow"
+version: "1.0.0"
+category: workflow_generation
+
+description: |
+  Generate ChIP-seq analysis workflows for transcription factor binding
+  and histone modification profiling. Includes peak calling, annotation,
+  and differential binding analysis.
+
+capabilities:
+  - Generate Nextflow/Snakemake ChIP-seq pipelines
+  - Alignment with BWA or Bowtie2
+  - Peak calling with MACS2 or SICER
+  - IDR analysis for reproducibility
+  - Peak annotation with ChIPseeker
+  - Differential binding with DiffBind
+  - Motif analysis with HOMER or MEME
+  - Signal visualization (bigWig generation)
+
+aliases:
+  - chip-seq
+  - chipseq
+  - chromatin immunoprecipitation
+  - histone modification
+  - transcription factor binding
+
+triggers:
+  keywords:
+    - chipseq workflow
+    - chip-seq pipeline
+    - peak calling
+    - histone chip-seq
+    - tf binding analysis
+    - chromatin immunoprecipitation
+  patterns:
+    - "chip.?seq.*workflow"
+    - "peak.*calling.*pipeline"
+    - "histone.*modification"
+    - "transcription.*factor.*binding"
+
+parameters:
+  required:
+    - name: input_dir
+      type: string
+      description: Directory containing FASTQ files
+    - name: organism
+      type: string
+      description: Reference organism
+      enum: [human, mouse, rat]
+  optional:
+    - name: aligner
+      type: string
+      description: Alignment tool
+      default: BWA
+      enum: [BWA, bowtie2]
+    - name: peak_caller
+      type: string
+      description: Peak calling tool
+      default: MACS2
+      enum: [MACS2, SICER, HOMER]
+    - name: peak_type
+      type: string
+      description: Type of peaks expected
+      default: narrow
+      enum: [narrow, broad]
+    - name: control_samples
+      type: array
+      description: Input/IgG control sample names
+    - name: effective_genome_size
+      type: integer
+      description: Effective genome size for normalization
+
+examples:
+  - query: "Create a ChIP-seq workflow for H3K4me3 in human cells"
+    expected_behavior: Generates narrow peak pipeline with MACS2
+    parameters:
+      organism: human
+      peak_type: narrow
+
+  - query: "Generate a histone ChIP-seq pipeline for H3K27me3"
+    expected_behavior: Uses broad peak calling for repressive mark
+    parameters:
+      peak_type: broad
+
+  - query: "Make a ChIP-seq pipeline for transcription factor binding"
+    expected_behavior: Narrow peak calling with motif analysis
+    parameters:
+      peak_type: narrow
+
+outputs:
+  - name: workflow_dir
+    type: directory
+    description: Workflow directory
+  - name: peaks
+    type: file
+    description: Called peaks in BED/narrowPeak format
+  - name: bigwig
+    type: file
+    description: Signal tracks for visualization
+
+related_skills:
+  - atacseq_workflow
+  - rnaseq_workflow
+  - check_references
+  - submit_job
+
+best_practices:
+  - Always include input controls
+  - Use biological replicates for IDR
+  - Choose appropriate peak type for target
+  - Verify library complexity metrics
+  - Check FRiP (Fraction of Reads in Peaks)
+
+limitations:
+  - Broad marks need different parameters
+  - Low complexity libraries affect results
+  - Requires sufficient sequencing depth
+
+references:
+  nf-core: https://nf-co.re/chipseq
+  encode_guidelines: https://www.encodeproject.org/chip-seq/

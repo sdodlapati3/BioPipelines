@@ -1,0 +1,135 @@
+# PubMed Skill Documentation
+# Biomedical literature database
+
+name: pubmed
+display_name: PubMed Literature Search
+version: "1.0.0"
+category: database
+subcategory: literature
+
+description: |
+  PubMed comprises more than 35 million citations for biomedical literature
+  from MEDLINE, life science journals, and online books. It is the primary
+  resource for finding scientific literature in biology, medicine, and
+  related fields. The client provides search, citation retrieval, and
+  related article discovery.
+
+capabilities:
+  - Search for articles by keywords, authors, or topics
+  - Retrieve article abstracts and metadata
+  - Find related articles for a given publication
+  - Get articles that cite a specific paper
+  - Search by MeSH terms
+  - Find recent publications
+
+triggers:
+  keywords:
+    - pubmed
+    - literature
+    - papers
+    - publications
+    - research articles
+    - scientific papers
+    - citations
+    - abstract
+    - find papers
+    - search literature
+  patterns:
+    - "search.*paper"
+    - "find.*publication"
+    - "literature.*search"
+    - "recent.*paper"
+    - "paper.*about"
+    - "pubmed.*search"
+  intents:
+    - LITERATURE_SEARCH
+    - PAPER_LOOKUP
+    - CITATION_SEARCH
+
+parameters:
+  required:
+    - name: query
+      type: string
+      description: Search terms (supports PubMed query syntax)
+      example: "CRISPR gene editing"
+  optional:
+    - name: limit
+      type: integer
+      description: Maximum results to return
+      default: 20
+      max: 100
+    - name: sort
+      type: string
+      description: Sort order for results
+      default: relevance
+      enum: [relevance, pub_date, first_author]
+    - name: date_from
+      type: string
+      description: Filter by publication date start
+      example: "2023"
+    - name: date_to
+      type: string
+      description: Filter by publication date end
+      example: "2024"
+
+outputs:
+  type: list
+  description: List of article records
+  item_schema:
+    pmid: PubMed ID
+    title: Article title
+    authors: List of author names
+    journal: Journal name
+    year: Publication year
+    abstract: Article abstract
+    doi: Digital Object Identifier
+    mesh_terms: MeSH subject headings
+
+examples:
+  - prompt: "Search PubMed for CRISPR gene editing papers"
+    expected_params:
+      query: "CRISPR gene editing"
+      limit: 20
+    expected_behavior: "Returns recent papers on CRISPR gene editing technology"
+    
+  - prompt: "Find recent papers on single cell RNA-seq from 2023"
+    expected_params:
+      query: "single cell RNA-seq"
+      date_from: "2023"
+      sort: "pub_date"
+    expected_behavior: "Returns 2023 papers on scRNA-seq sorted by date"
+    
+  - prompt: "Get papers by Jennifer Doudna"
+    expected_params:
+      query: "Doudna JA[Author]"
+    expected_behavior: "Returns publications by Jennifer Doudna"
+
+query_syntax:
+  author_search: "Smith J[Author]"
+  title_search: "CRISPR[Title]"
+  mesh_search: "neoplasms[MeSH Terms]"
+  journal_search: "nature[Journal]"
+  date_filter: "2020:2024[dp]"
+  combine: "AND, OR, NOT operators"
+
+related_skills:
+  - uniprot
+  - string_db
+
+tool_binding:
+  tool_name: search_pubmed
+  tool_module: workflow_composer.agents.tools.databases
+  function: get_pubmed_client().search
+
+best_practices:
+  - Use MeSH terms for controlled vocabulary searches
+  - Combine terms with AND/OR for specific queries
+  - Use [Title] qualifier for title-only searches
+  - Register for NCBI API key for higher rate limits
+  - Use date filters to find recent research
+
+limitations:
+  - Rate limited to 3 requests/second (10 with API key)
+  - Abstracts may not be available for all articles
+  - Full text not accessible through API
+  - Some recent articles may not be indexed yet

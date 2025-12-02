@@ -1,0 +1,125 @@
+# RNA-seq Workflow Skill
+# ======================
+
+name: rnaseq_workflow
+display_name: "RNA-seq Workflow"
+version: "1.0.0"
+category: workflow_generation
+
+description: |
+  Generate RNA-seq analysis workflows for differential expression analysis.
+  Supports both bulk and single-cell RNA-seq with multiple alignment and
+  quantification strategies.
+
+capabilities:
+  - Generate Nextflow/Snakemake pipelines
+  - Support multiple aligners (STAR, HISAT2, Salmon, Kallisto)
+  - Differential expression with DESeq2, edgeR, or limma
+  - Quality control with FastQC and MultiQC
+  - Strandedness detection
+  - Gene-level and transcript-level quantification
+  - Pathway enrichment analysis integration
+
+aliases:
+  - rna-seq
+  - rnaseq
+  - rna sequencing
+  - transcriptome analysis
+  - differential expression
+
+triggers:
+  keywords:
+    - rnaseq workflow
+    - rna-seq pipeline
+    - differential expression
+    - gene expression analysis
+    - transcriptome workflow
+    - create rnaseq
+    - generate rna pipeline
+  patterns:
+    - "rna.?seq.*workflow"
+    - "differential.*expression"
+    - "gene.*expression.*pipeline"
+    - "create.*rna.*pipeline"
+
+parameters:
+  required:
+    - name: input_dir
+      type: string
+      description: Directory containing FASTQ files
+    - name: organism
+      type: string
+      description: Reference organism
+      enum: [human, mouse, rat, zebrafish]
+  optional:
+    - name: aligner
+      type: string
+      description: Alignment tool
+      default: STAR
+      enum: [STAR, HISAT2, salmon, kallisto]
+    - name: strandedness
+      type: string
+      description: Library strandedness
+      default: auto
+      enum: [auto, unstranded, forward, reverse]
+    - name: de_tool
+      type: string
+      description: Differential expression tool
+      default: DESeq2
+      enum: [DESeq2, edgeR, limma]
+    - name: comparisons
+      type: array
+      description: Condition comparisons
+    - name: genome_build
+      type: string
+      description: Genome assembly version
+      default: auto
+
+examples:
+  - query: "Create an RNA-seq workflow for human samples"
+    expected_behavior: Generates Nextflow pipeline with STAR alignment and DESeq2
+    parameters:
+      organism: human
+      aligner: STAR
+
+  - query: "Generate a differential expression pipeline for mouse RNA-seq"
+    expected_behavior: Creates workflow with proper mouse references
+    parameters:
+      organism: mouse
+
+  - query: "Make a fast RNA-seq pipeline using pseudo-alignment"
+    expected_behavior: Uses Salmon for fast quantification
+    parameters:
+      aligner: salmon
+
+outputs:
+  - name: workflow_dir
+    type: directory
+    description: Directory containing workflow files
+  - name: main_workflow
+    type: file
+    description: Main Nextflow/Snakemake file
+  - name: config
+    type: file
+    description: Configuration file with parameters
+
+related_skills:
+  - chipseq_workflow
+  - methylation_workflow
+  - check_references
+  - submit_job
+
+best_practices:
+  - Verify reference genome matches sample organism
+  - Include biological and technical replicates
+  - Use appropriate strandedness setting
+  - Perform QC before and after alignment
+  - Include adapter trimming if needed
+
+limitations:
+  - Requires pre-built aligner indexes
+  - Large genomes need significant memory
+  - Some organisms may lack GTF annotations
+
+references:
+  nf-core: https://nf-co.re/rnaseq

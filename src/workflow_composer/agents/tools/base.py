@@ -58,6 +58,21 @@ class ToolName(Enum):
     # Visualization
     VISUALIZE_WORKFLOW = "visualize_workflow"
     
+    # Database Clients (Phase 2)
+    SEARCH_UNIPROT = "search_uniprot"
+    GET_PROTEIN = "get_protein"
+    SEARCH_STRING = "search_string"
+    GET_INTERACTIONS = "get_interactions"
+    GET_ENRICHMENT = "get_enrichment"
+    SEARCH_KEGG = "search_kegg"
+    GET_PATHWAY = "get_pathway"
+    SEARCH_REACTOME = "search_reactome"
+    ANALYZE_GENES = "analyze_genes"
+    SEARCH_PUBMED = "search_pubmed"
+    GET_ARTICLE = "get_article"
+    SEARCH_CLINVAR = "search_clinvar"
+    GET_VARIANTS = "get_variants"
+    
     # Education
     EXPLAIN_CONCEPT = "explain_concept"
     COMPARE_SAMPLES = "compare_samples"

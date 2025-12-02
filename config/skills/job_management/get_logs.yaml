@@ -1,0 +1,103 @@
+# Get Logs Skill
+# ==============
+
+name: get_logs
+display_name: "Get Job Logs"
+version: "1.0.0"
+category: job_management
+
+description: |
+  Retrieve and display logs from SLURM jobs and Nextflow workflows.
+  Helps diagnose errors and monitor execution progress.
+
+capabilities:
+  - Retrieve SLURM stdout/stderr logs
+  - Parse Nextflow execution logs
+  - Identify error messages
+  - Show process-specific logs
+  - Tail logs in real-time
+  - Search logs for patterns
+
+aliases:
+  - show logs
+  - view logs
+  - job logs
+  - error logs
+
+triggers:
+  keywords:
+    - get logs
+    - show logs
+    - view logs
+    - job output
+    - error logs
+    - check logs
+  patterns:
+    - "get.*logs"
+    - "show.*logs"
+    - "view.*output"
+    - "what.*error"
+
+parameters:
+  required: []
+  optional:
+    - name: job_id
+      type: string
+      description: SLURM job ID
+    - name: workflow_dir
+      type: string
+      description: Nextflow workflow directory
+    - name: tail_lines
+      type: integer
+      description: Number of lines from end
+      default: 50
+    - name: errors_only
+      type: boolean
+      description: Show only error messages
+      default: false
+
+examples:
+  - query: "Show logs for job 12345"
+    expected_behavior: Displays job output
+    parameters:
+      job_id: "12345"
+
+  - query: "Get the last 100 lines of workflow logs"
+    expected_behavior: Shows recent log entries
+    parameters:
+      tail_lines: 100
+
+  - query: "Show me the error messages"
+    expected_behavior: Filters for errors only
+    parameters:
+      errors_only: true
+
+outputs:
+  - name: stdout
+    type: string
+    description: Standard output content
+  - name: stderr
+    type: string
+    description: Standard error content
+  - name: errors
+    type: array
+    description: Identified error messages
+
+related_skills:
+  - check_status
+  - diagnose_error
+  - submit_job
+
+best_practices:
+  - Check logs early for long-running jobs
+  - Look for memory and time warnings
+  - Save logs for reproducibility
+  - Use errors_only for quick diagnosis
+
+limitations:
+  - Log files may be large
+  - Real-time logs have slight delay
+  - Some processes may not log errors
+
+references:
+  nextflow_logs: https://www.nextflow.io/docs/latest/tracing.html

@@ -1,0 +1,120 @@
+# Reactome Skill Documentation
+# Pathway analysis and biological process database
+
+name: reactome
+display_name: Reactome Pathways
+version: "1.0.0"
+category: database
+subcategory: pathway
+
+description: |
+  Reactome is a free, open-source, curated and peer-reviewed pathway
+  database that provides intuitive bioinformatics tools for visualization,
+  interpretation, and analysis of pathway knowledge. Unlike KEGG, Reactome
+  pathways are represented as detailed reaction networks with explicit
+  molecular interactions, making it excellent for mechanistic understanding.
+
+capabilities:
+  - Search for pathways, reactions, and complexes
+  - Perform statistically rigorous pathway enrichment
+  - Get pathway hierarchy and relationships
+  - Find all pathways containing a gene
+  - Retrieve protein complex components
+  - Generate pathway diagram URLs
+
+triggers:
+  keywords:
+    - reactome
+    - pathway analysis
+    - pathway enrichment
+    - biological process
+    - signaling
+    - reaction
+    - pathway diagram
+    - pathway visualization
+  patterns:
+    - "reactome.*pathway"
+    - "pathway.*enrichment"
+    - "analyze.*gene.*list"
+    - "enrichment.*analysis"
+    - "pathway.*for.*gene"
+  intents:
+    - PATHWAY_SEARCH
+    - PATHWAY_ENRICHMENT
+    - GENE_ANALYSIS
+
+parameters:
+  required:
+    - name: query
+      type: string
+      description: Search terms or gene list
+      example: "apoptosis"
+  optional:
+    - name: species
+      type: string
+      description: Species name
+      default: Homo sapiens
+      enum: [Homo sapiens, Mus musculus, Rattus norvegicus, Danio rerio]
+    - name: include_interactors
+      type: boolean
+      description: Include known interactors in analysis
+      default: false
+
+outputs:
+  type: list
+  description: Pathway enrichment or search results
+  item_schema:
+    stId: Reactome stable ID
+    name: Pathway name
+    entities_pvalue: p-value for entity enrichment
+    entities_fdr: FDR-corrected p-value
+    entities_found: Number of query genes found
+    entities_total: Total entities in pathway
+
+examples:
+  - prompt: "Run pathway enrichment on BRCA1, BRCA2, TP53, ATM, CHEK2"
+    expected_params:
+      genes: ["BRCA1", "BRCA2", "TP53", "ATM", "CHEK2"]
+    expected_behavior: "Returns enriched pathways with FDR values for DNA repair genes"
+    
+  - prompt: "Find all pathways containing TP53"
+    expected_params:
+      query: "TP53"
+      species: "Homo sapiens"
+    expected_behavior: "Returns all Reactome pathways with TP53 participation"
+    
+  - prompt: "Search Reactome for cell cycle in mouse"
+    expected_params:
+      query: "cell cycle"
+      species: "Mus musculus"
+    expected_behavior: "Returns mouse cell cycle pathways"
+
+related_skills:
+  - kegg
+  - string_db
+  - uniprot
+
+tool_binding:
+  tool_name: search_reactome
+  tool_module: workflow_composer.agents.tools.databases
+  function: get_reactome_client().search
+
+enrichment_output:
+  - entities_pvalue: Raw p-value
+  - entities_fdr: Benjamini-Hochberg FDR
+  - entities_found: Genes from input found in pathway
+  - entities_total: Total genes in pathway
+  - reactions_found: Reactions with input genes
+  - reactions_total: Total reactions in pathway
+
+best_practices:
+  - Use analyze_genes() for proper statistical enrichment
+  - Filter by FDR < 0.05 for significant pathways
+  - Reactome IDs start with R-[species code] (e.g., R-HSA-*)
+  - Use pathway hierarchy to understand relationships
+  - Consider both Reactome and KEGG for comprehensive coverage
+
+limitations:
+  - Mainly focused on human pathways
+  - Some pathways are computationally projected to other species
+  - Rate limited to 5 requests per second

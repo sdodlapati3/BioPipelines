@@ -1,0 +1,124 @@
+# STRING Database Skill Documentation
+# Protein-protein interaction network database
+
+name: string_db
+display_name: STRING Protein Interactions
+version: "1.0.0"
+category: database
+subcategory: interaction
+
+description: |
+  STRING is a database of known and predicted protein-protein interactions.
+  The interactions include direct (physical) and indirect (functional)
+  associations derived from genomic context predictions, high-throughput
+  lab experiments, coexpression data, automated textmining, and previous
+  knowledge in databases. STRING also provides functional enrichment
+  analysis against GO, KEGG, and other databases.
+
+capabilities:
+  - Get protein-protein interaction networks
+  - Perform functional enrichment analysis
+  - Find interaction partners for a protein
+  - Test network connectivity significance
+  - Generate network visualization URLs
+  - Find homologs/orthologs across species
+
+triggers:
+  keywords:
+    - string
+    - protein interaction
+    - ppi
+    - interaction network
+    - protein network
+    - interactome
+    - enrichment analysis
+    - functional enrichment
+  patterns:
+    - "protein.*interact"
+    - "interact.*protein"
+    - "network.*gene"
+    - "enrichment.*gene"
+    - "what.*interact.*with"
+  intents:
+    - INTERACTION_SEARCH
+    - ENRICHMENT_ANALYSIS
+    - NETWORK_ANALYSIS
+
+parameters:
+  required:
+    - name: identifiers
+      type: list
+      description: Gene names or protein IDs to analyze
+      example: ["TP53", "MDM2", "CDKN1A"]
+  optional:
+    - name: species
+      type: integer
+      description: NCBI taxonomy ID (9606=human, 10090=mouse)
+      default: 9606
+    - name: required_score
+      type: integer
+      description: Minimum interaction confidence (0-1000)
+      default: 400
+      enum: [150, 400, 700, 900]
+    - name: network_type
+      type: string
+      description: Type of interactions
+      default: functional
+      enum: [functional, physical]
+
+outputs:
+  type: object
+  description: Network and enrichment results
+  schema:
+    interactions: List of protein-protein interactions with scores
+    enrichment: Enriched functional terms (GO, KEGG, etc.)
+    network_image: URL to network visualization
+
+examples:
+  - prompt: "Get protein interactions for TP53"
+    expected_params:
+      identifiers: ["TP53"]
+      species: 9606
+    expected_behavior: "Returns TP53 interaction partners with confidence scores"
+    
+  - prompt: "Run enrichment analysis on my gene list BRCA1, BRCA2, TP53, ATM"
+    expected_params:
+      identifiers: ["BRCA1", "BRCA2", "TP53", "ATM"]
+    expected_behavior: "Returns enriched pathways and GO terms for DNA repair genes"
+    
+  - prompt: "Find what proteins interact with MDM2 in mouse"
+    expected_params:
+      identifiers: ["MDM2"]
+      species: 10090
+    expected_behavior: "Returns mouse MDM2 interaction network"
+
+related_skills:
+  - uniprot
+  - kegg
+  - reactome
+
+tool_binding:
+  tool_name: search_string
+  tool_module: workflow_composer.agents.tools.databases
+  function: get_string_client().get_interactions
+
+confidence_levels:
+  - score: 150
+    label: low confidence
+  - score: 400
+    label: medium confidence
+  - score: 700
+    label: high confidence
+  - score: 900
+    label: highest confidence
+
+best_practices:
+  - Use medium confidence (400) as default threshold
+  - For physical interaction studies, use required_score >= 700
+  - Include enough genes (>5) for meaningful enrichment
+  - Use species parameter to ensure correct organism
+
+limitations:
+  - Rate limited to 1 request per second
+  - Enrichment requires minimum 3-5 genes
+  - Some interactions are computational predictions

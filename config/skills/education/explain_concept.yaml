@@ -1,0 +1,112 @@
+# Explain Concept Skill
+# =====================
+
+name: explain_concept
+display_name: "Explain Concept"
+version: "1.0.0"
+category: education
+
+description: |
+  Explain bioinformatics concepts, tools, and methods in clear terms.
+  Provides educational content about analysis techniques, file formats,
+  and best practices.
+
+capabilities:
+  - Explain bioinformatics concepts
+  - Describe analysis methods and algorithms
+  - Clarify file formats (FASTQ, BAM, VCF, etc.)
+  - Compare different tools and approaches
+  - Provide beginner-friendly explanations
+  - Include practical examples
+  - Reference documentation and papers
+
+aliases:
+  - what is
+  - explain
+  - describe
+  - help with
+  - teach me
+
+triggers:
+  keywords:
+    - what is
+    - explain
+    - describe
+    - how does
+    - tell me about
+    - help me understand
+    - what does
+  patterns:
+    - "what.*is.*"
+    - "explain.*"
+    - "how.*does.*work"
+    - "tell.*about"
+    - "describe.*"
+
+parameters:
+  required:
+    - name: concept
+      type: string
+      description: The concept to explain
+  optional:
+    - name: detail_level
+      type: string
+      description: Level of detail
+      default: intermediate
+      enum: [beginner, intermediate, advanced]
+    - name: include_examples
+      type: boolean
+      description: Include practical examples
+      default: true
+
+examples:
+  - query: "What is differential expression analysis?"
+    expected_behavior: Explains DE analysis with examples
+    parameters:
+      concept: differential expression
+
+  - query: "Explain how STAR alignment works"
+    expected_behavior: Describes STAR algorithm
+    parameters:
+      concept: STAR alignment
+
+  - query: "What is a p-value in RNA-seq?"
+    expected_behavior: Statistical concept explanation
+    parameters:
+      concept: p-value
+
+outputs:
+  - name: explanation
+    type: string
+    description: Detailed explanation
+  - name: examples
+    type: array
+    description: Practical examples
+  - name: references
+    type: array
+    description: Links to documentation
+
+related_skills:
+  - compare_tools
+  - best_practices
+
+topics_covered:
+  - RNA-seq analysis
+  - ChIP-seq analysis
+  - Variant calling
+  - DNA methylation
+  - Single-cell analysis
+  - File formats
+  - Statistical methods
+  - Quality control
+  - Normalization methods
+  - Multiple testing correction
+
+best_practices:
+  - Start with basic concepts
+  - Use analogies for complex topics
+  - Include visual examples when possible
+  - Reference authoritative sources
+
+references:
+  bioinformatics_textbook: https://www.ncbi.nlm.nih.gov/books/NBK21054/

@@ -1,0 +1,129 @@
+# ClinVar Skill Documentation
+# Clinical variant pathogenicity database
+
+name: clinvar
+display_name: ClinVar Variant Database
+version: "1.0.0"
+category: database
+subcategory: variant
+
+description: |
+  ClinVar is a freely accessible, public archive of reports of the
+  relationships among human variations and phenotypes, with supporting
+  evidence. It is the primary resource for clinical interpretation of
+  genetic variants, particularly for understanding pathogenicity of
+  variants identified in sequencing studies.
+
+capabilities:
+  - Search for variants by gene, condition, or coordinates
+  - Retrieve clinical significance annotations
+  - Get pathogenic variants for a gene
+  - Find variants associated with diseases
+  - Get variant summary and review status
+  - Count variants by pathogenicity category
+
+triggers:
+  keywords:
+    - clinvar
+    - variant
+    - pathogenic
+    - clinical significance
+    - mutation
+    - genetic variant
+    - snp
+    - pathogenicity
+    - disease variant
+  patterns:
+    - "clinvar.*variant"
+    - "pathogenic.*variant"
+    - "variant.*pathogen"
+    - "clinical.*significance"
+    - "mutation.*in"
+  intents:
+    - VARIANT_SEARCH
+    - PATHOGENICITY_LOOKUP
+    - CLINICAL_ANNOTATION
+
+parameters:
+  required:
+    - name: query
+      type: string
+      description: Gene name, variant, or condition
+      example: "BRCA1"
+  optional:
+    - name: significance
+      type: string
+      description: Filter by clinical significance
+      enum: [pathogenic, likely_pathogenic, uncertain, likely_benign, benign]
+    - name: limit
+      type: integer
+      description: Maximum results to return
+      default: 20
+      max: 100
+
+outputs:
+  type: list
+  description: List of variant records
+  item_schema:
+    variation_id: ClinVar variation ID
+    name: Variant name
+    type: Variant type (SNV, deletion, etc.)
+    genes: Associated genes
+    clinical_significance: Pathogenicity classification
+    review_status: Level of review/evidence
+    conditions: Associated diseases/phenotypes
+    hgvs: HGVS nomenclature expressions
+
+clinical_significance_categories:
+  - pathogenic: Causes disease
+  - likely_pathogenic: Probably causes disease (>90% certainty)
+  - uncertain_significance: Not enough evidence
+  - likely_benign: Probably not disease-causing
+  - benign: Not disease-causing
+  - conflicting: Multiple interpretations submitted
+
+examples:
+  - prompt: "Find pathogenic variants in BRCA1"
+    expected_params:
+      query: "BRCA1"
+      significance: "pathogenic"
+    expected_behavior: "Returns pathogenic BRCA1 variants associated with disease"
+    
+  - prompt: "Search ClinVar for breast cancer variants"
+    expected_params:
+      query: "breast cancer"
+    expected_behavior: "Returns variants associated with breast cancer"
+    
+  - prompt: "Get variants at position chr17:7674220"
+    expected_params:
+      query: "chr17:7674220"
+    expected_behavior: "Returns variants at the specified genomic location"
+
+review_status_levels:
+  - practice_guideline: Expert panel reviewed
+  - reviewed_by_expert_panel: Expert consensus
+  - criteria_provided_multiple_submitters: Multiple concordant submissions
+  - criteria_provided_single_submitter: One submission with criteria
+  - no_assertion_criteria_provided: Submitted without criteria
+
+related_skills:
+  - uniprot
+  - pubmed
+
+tool_binding:
+  tool_name: search_clinvar
+  tool_module: workflow_composer.agents.tools.databases
+  function: get_clinvar_client().search
+
+best_practices:
+  - Filter by pathogenic/likely_pathogenic for disease variants
+  - Check review_status for evidence quality
+  - Use gene symbol search for comprehensive results
+  - Cross-reference with PubMed for supporting literature
+  - Consider ACMG guidelines for interpretation
+
+limitations:
+  - Rate limited to 3 requests/second (10 with API key)
+  - Interpretations may conflict between submitters
+  - Not all variants have been classified
+  - Human variants only

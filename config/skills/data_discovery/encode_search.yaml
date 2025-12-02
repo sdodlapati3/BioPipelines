@@ -1,0 +1,118 @@
+# ENCODE Database Search Skill
+# =============================
+
+name: encode_search
+display_name: "ENCODE Search"
+version: "1.0.0"
+category: data_discovery
+
+description: |
+  Search the ENCODE database for experiments and datasets.
+  ENCODE contains chromatin accessibility, histone modifications,
+  transcription factor binding, and gene expression data.
+
+capabilities:
+  - Search by assay type (ChIP-seq, ATAC-seq, RNA-seq, DNase-seq)
+  - Filter by organism (human, mouse)
+  - Filter by biosample (cell line, tissue, primary cell)
+  - Filter by target (transcription factors, histone marks)
+  - Retrieve experiment metadata and file URLs
+  - Access processed data files (BAM, bigWig, peaks)
+
+aliases:
+  - encode
+  - encode database
+  - encode portal
+
+triggers:
+  keywords:
+    - search encode
+    - find encode
+    - encode datasets
+    - encode experiments
+    - encode data
+    - query encode
+  patterns:
+    - "search.*encode"
+    - "find.*in encode"
+    - "encode.*data"
+    - "encode.*experiment"
+    - "download.*encode"
+
+parameters:
+  required:
+    - name: query
+      type: string
+      description: Search terms (cell type, target, assay type, etc.)
+  optional:
+    - name: assay_type
+      type: string
+      description: Filter by assay type
+      enum: [ChIP-seq, RNA-seq, ATAC-seq, DNase-seq, WGBS, Hi-C]
+    - name: organism
+      type: string
+      description: Filter by organism
+      default: human
+      enum: [human, mouse]
+    - name: biosample_type
+      type: string
+      description: Type of biological sample
+      enum: [cell line, tissue, primary cell, in vitro differentiated cells]
+    - name: target
+      type: string
+      description: Target protein or histone mark (for ChIP-seq)
+    - name: limit
+      type: integer
+      description: Maximum number of results
+      default: 10
+
+examples:
+  - query: "Search ENCODE for H3K27ac ChIP-seq in K562 cells"
+    expected_behavior: Returns ChIP-seq experiments for H3K27ac histone mark in K562 cell line
+    parameters:
+      assay_type: ChIP-seq
+      target: H3K27ac
+      biosample: K562
+
+  - query: "Find ATAC-seq data for human brain tissue in ENCODE"
+    expected_behavior: Returns ATAC-seq experiments from human brain samples
+    parameters:
+      assay_type: ATAC-seq
+      organism: human
+      biosample_type: tissue
+
+  - query: "Get RNA-seq experiments for mouse liver"
+    expected_behavior: Returns RNA-seq datasets from mouse liver
+    parameters:
+      assay_type: RNA-seq
+      organism: mouse
+
+outputs:
+  - name: experiments
+    type: array
+    description: List of matching ENCODE experiments with metadata
+  - name: files
+    type: array
+    description: Available files for download
+
+related_skills:
+  - geo_search
+  - tcga_search
+  - data_scan
+  - download_dataset
+
+best_practices:
+  - Use specific cell types or tissues for more relevant results
+  - Combine assay type with target for ChIP-seq searches
+  - Check data quality metrics before downloading
+  - Use processed files (bigWig, peaks) for quick analysis
+  - Verify replicate information for statistical analysis
+
+limitations:
+  - Limited to ENCODE consortium data
+  - Some older experiments may have incomplete metadata
+  - Large files require significant storage space
+
+references:
+  documentation: https://www.encodeproject.org/help/rest-api/
+  portal: https://www.encodeproject.org/

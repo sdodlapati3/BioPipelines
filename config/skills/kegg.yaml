@@ -1,0 +1,121 @@
+# KEGG Skill Documentation
+# Pathway and metabolic database
+
+name: kegg
+display_name: KEGG Pathways
+version: "1.0.0"
+category: database
+subcategory: pathway
+
+description: |
+  KEGG (Kyoto Encyclopedia of Genes and Genomes) is a database resource
+  for understanding high-level functions and utilities of biological
+  systems. It provides pathway maps for cellular processes, metabolic
+  reactions, and signaling cascades. KEGG is essential for pathway
+  enrichment analysis and understanding gene function in context.
+
+capabilities:
+  - Search for pathways by name or keywords
+  - Retrieve pathway details and gene lists
+  - List all pathways for an organism
+  - Get gene information
+  - Convert between database IDs
+  - Simple pathway enrichment analysis
+
+triggers:
+  keywords:
+    - kegg
+    - pathway
+    - metabolic pathway
+    - signaling pathway
+    - pathway analysis
+    - pathway enrichment
+    - biological pathway
+    - cell cycle
+    - apoptosis pathway
+  patterns:
+    - "pathway.*gene"
+    - "kegg.*pathway"
+    - "search.*pathway"
+    - "what.*pathway"
+    - "gene.*pathway"
+  intents:
+    - PATHWAY_SEARCH
+    - PATHWAY_ANALYSIS
+    - ENRICHMENT_ANALYSIS
+
+parameters:
+  required:
+    - name: query
+      type: string
+      description: Search terms for pathway
+      example: "cell cycle"
+  optional:
+    - name: database
+      type: string
+      description: KEGG database to search
+      default: pathway
+      enum: [pathway, module, ko, compound, drug, disease]
+    - name: organism
+      type: string
+      description: KEGG organism code
+      default: hsa
+      enum: [hsa, mmu, rno, dre, dme, cel, sce]
+
+outputs:
+  type: list
+  description: List of pathway entries
+  item_schema:
+    id: KEGG pathway ID (e.g., hsa04110)
+    name: Pathway name
+    genes: List of genes in pathway
+    compounds: List of metabolites
+    description: Pathway description
+
+examples:
+  - prompt: "Search KEGG for cell cycle pathway"
+    expected_params:
+      query: "cell cycle"
+      organism: "hsa"
+    expected_behavior: "Returns cell cycle pathway (hsa04110) and related pathways"
+    
+  - prompt: "Get all genes in the apoptosis pathway"
+    expected_params:
+      query: "apoptosis"
+    expected_behavior: "Returns apoptosis pathway with list of participating genes"
+    
+  - prompt: "Find pathways in mouse related to cancer"
+    expected_params:
+      query: "cancer"
+      organism: "mmu"
+    expected_behavior: "Returns mouse cancer-related pathways"
+
+organism_codes:
+  human: hsa
+  mouse: mmu
+  rat: rno
+  zebrafish: dre
+  drosophila: dme
+  c_elegans: cel
+  yeast: sce
+
+related_skills:
+  - reactome
+  - string_db
+  - uniprot
+
+tool_binding:
+  tool_name: search_kegg
+  tool_module: workflow_composer.agents.tools.databases
+  function: get_kegg_client().search
+
+best_practices:
+  - Use organism codes (hsa, mmu) not full names for API calls
+  - Pathway IDs follow pattern [organism][numbers] (e.g., hsa04110)
+  - For enrichment, consider STRING or specialized tools (clusterProfiler)
+  - Combine with Reactome for comprehensive pathway coverage
+
+limitations:
+  - Rate limited to 3 requests per second
+  - Enrichment is basic (overlap-based, not statistical)
+  - Some pathways are curated for specific organisms only

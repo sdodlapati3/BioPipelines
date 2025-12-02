@@ -1,0 +1,97 @@
+# Compare Samples Skill
+# =====================
+
+name: compare_samples
+display_name: "Compare Samples"
+version: "1.0.0"
+category: education
+
+description: |
+  Compare two samples or conditions with statistical analysis
+  and visualization suggestions. Helps interpret differences
+  between experimental conditions.
+
+capabilities:
+  - Compare gene expression between conditions
+  - Analyze methylation differences
+  - Compare variant profiles
+  - Suggest appropriate statistical tests
+  - Recommend visualization methods
+  - Identify significant differences
+
+aliases:
+  - compare conditions
+  - compare groups
+  - difference between
+  - contrast analysis
+
+triggers:
+  keywords:
+    - compare samples
+    - compare conditions
+    - difference between
+    - versus
+    - contrast
+  patterns:
+    - "compare.*samples"
+    - "compare.*conditions"
+    - "difference.*between"
+    - "vs\\."
+    - "versus"
+
+parameters:
+  required:
+    - name: sample1
+      type: string
+      description: First sample or condition
+    - name: sample2
+      type: string
+      description: Second sample or condition
+  optional:
+    - name: comparison_type
+      type: string
+      description: Type of comparison
+      default: expression
+      enum: [expression, methylation, variants, peaks]
+    - name: statistical_test
+      type: string
+      description: Statistical test to use
+      enum: [t-test, wilcoxon, DESeq2, edgeR]
+
+examples:
+  - query: "Compare treated vs control samples"
+    expected_behavior: Suggests DE analysis approach
+    parameters:
+      sample1: treated
+      sample2: control
+
+  - query: "What's the difference between tumor and normal?"
+    expected_behavior: Recommends comparative analysis
+    parameters:
+      sample1: tumor
+      sample2: normal
+
+outputs:
+  - name: comparison_method
+    type: string
+    description: Recommended analysis method
+  - name: statistical_approach
+    type: string
+    description: Suggested statistical test
+  - name: visualization
+    type: array
+    description: Recommended plots
+
+related_skills:
+  - explain_concept
+  - rnaseq_workflow
+  - analyze_results
+
+best_practices:
+  - Use biological replicates
+  - Account for batch effects
+  - Apply multiple testing correction
+  - Validate key findings
+
+references:
+  statistics_guide: https://www.nature.com/articles/nmeth.3091
