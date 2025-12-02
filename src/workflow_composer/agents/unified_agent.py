@@ -80,6 +80,12 @@ from .intent import (
     DialogueManager,
     UnifiedIntentParser,
     UnifiedParseResult,
+    # Professional NLU components (Phase 1-5)
+    get_active_learner,
+    get_slot_prompter,
+    get_role_resolver,
+    TrainingDataLoader,
+    get_training_data_loader,
 )
 
 # Observability - distributed tracing
@@ -411,6 +417,12 @@ class UnifiedAgent:
         self._context: Optional[ConversationContext] = None
         self._dialogue_manager: Optional[DialogueManager] = None
         
+        # Professional NLU components (lazy-loaded)
+        self._active_learner = None
+        self._slot_prompter = None
+        self._role_resolver = None
+        self._training_data = None
+        
         # Execution history
         self._history: List[AgentResponse] = []
         
@@ -537,6 +549,77 @@ class UnifiedAgent:
         if self._job_monitor is None:
             self._job_monitor = JobMonitor()
         return self._job_monitor
+    
+    # =========================================================================
+    # Professional NLU Components (Phase 1-5)
+    # =========================================================================
+    
+    @property
+    def active_learner(self):
+        """
+        Get the active learner for tracking corrections and feedback.
+        
+        Records:
+        - Corrections when user corrects an intent
+        - Confirmations when prediction is correct
+        - Confusion matrix analysis
+        """
+        if self._active_learner is None:
+            try:
+                self._active_learner = get_active_learner()
+                logger.debug("ActiveLearner initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize ActiveLearner: {e}")
+        return self._active_learner
+    
+    @property
+    def slot_prompter(self):
+        """
+        Get the slot prompter for checking required parameters.
+        
+        Prompts user for missing required slots with natural language.
+        """
+        if self._slot_prompter is None:
+            try:
+                self._slot_prompter = get_slot_prompter()
+                logger.debug("SlotPrompter initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize SlotPrompter: {e}")
+        return self._slot_prompter
+    
+    @property
+    def role_resolver(self):
+        """
+        Get the entity role resolver.
+        
+        Determines semantic roles from context:
+        - source vs destination paths
+        - baseline vs target conditions
+        """
+        if self._role_resolver is None:
+            try:
+                self._role_resolver = get_role_resolver()
+                logger.debug("EntityRoleResolver initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize EntityRoleResolver: {e}")
+        return self._role_resolver
+    
+    @property
+    def training_data(self):
+        """
+        Get the training data loader.
+        
+        Provides:
+        - Entity alias normalization
+        - Intent examples for classification
+        """
+        if self._training_data is None:
+            try:
+                self._training_data = get_training_data_loader()
+                logger.debug("TrainingDataLoader initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize TrainingDataLoader: {e}")
+        return self._training_data
     
     @property
     def orchestrator(self):
@@ -901,6 +984,22 @@ class UnifiedAgent:
         if detected_tool:
             logger.info(f"Final detected tool: {detected_tool.value} with args: {detected_args}")
             
+            # Slot prompting: Check if required parameters are missing
+            if detected_intent:
+                try:
+                    slot_check = self.slot_prompter.check_slots(detected_intent, hybrid_params or {})
+                    if slot_check.needs_prompting:
+                        logger.info(f"Missing required slots for intent '{detected_intent}': {slot_check.missing_slots}")
+                        return AgentResponse(
+                            success=True,
+                            message=slot_check.prompt,
+                            response_type=ResponseType.QUESTION,
+                            task_type=task_type,
+                            suggestions=[f"Provide {slot}" for slot in slot_check.missing_slots[:3]],
+                        )
+                except Exception as e:
+                    logger.warning(f"Slot prompting check failed: {e}")
+            
             # Check permission
             perm = self.check_tool_permission(detected_tool)
             
@@ -980,6 +1079,17 @@ class UnifiedAgent:
                 query=query,
             )
             span.add_tag("response_success", response.success)
+            
+            # Active learning: Record successful query-intent-slots mapping for potential retraining
+            if response.success and detected_intent:
+                try:
+                    self.active_learner.record_confirmation(
+                        query=query,
+                        intent=detected_intent,
+                        confidence=intent_result.confidence if intent_result else 0.5,
+                    )
+                except Exception as e:
+                    logger.debug(f"Active learning recording failed: {e}")
             
         else:
             # No specific tool detected - handle as general query
@@ -1744,6 +1854,79 @@ class UnifiedAgent:
     def get_recent_entities(self, limit: int = 5) -> List:
         """Get recently mentioned entities from context."""
         return self.context.get_salient_entities(limit)
+    
+    def provide_feedback(
+        self, 
+        correct_intent: Optional[str] = None,
+        correct_slots: Optional[Dict[str, Any]] = None,
+        feedback_text: Optional[str] = None,
+    ) -> bool:
+        """
+        Provide explicit feedback on the last query for active learning.
+        
+        Call this method when the user wants to correct the agent's
+        understanding of their last query. The feedback is recorded
+        for potential model retraining.
+        
+        Args:
+            correct_intent: The correct intent if the agent predicted wrong
+            correct_slots: The correct slot values if extracted incorrectly  
+            feedback_text: Optional free-text feedback
+            
+        Returns:
+            True if feedback was recorded successfully
+            
+        Example:
+            # User: "run RNA-seq on sample123"
+            # Agent: Detected WORKFLOW_GENERATE (wrong)
+            # User: "No, I wanted to analyze existing data"
+            agent.provide_feedback(
+                correct_intent="DATA_ANALYSIS",
+                correct_slots={"sample_id": "sample123"}
+            )
+        """
+        if not self._history:
+            logger.warning("No previous query to provide feedback on")
+            return False
+            
+        # Get the last conversation turn
+        last_turns = self.context.get_recent_turns(2)
+        if len(last_turns) < 2:
+            logger.warning("No user query found in context")
+            return False
+            
+        # Find the user's query (second to last turn)
+        user_turn = last_turns[-2] if last_turns[-2].get("role") == "user" else None
+        if not user_turn:
+            logger.warning("Could not find user turn")
+            return False
+            
+        query = user_turn.get("content", "")
+        predicted_intent = user_turn.get("intent", "UNKNOWN")
+        
+        try:
+            # Record correction when user provides correct intent
+            if correct_intent and correct_intent != predicted_intent:
+                self.active_learner.record_correction(
+                    query=query,
+                    predicted=predicted_intent,
+                    corrected=correct_intent,
+                )
+            logger.info(f"Recorded user feedback: intent={correct_intent}, slots={correct_slots}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to record feedback: {e}")
+            return False
+    
+    def get_active_learning_stats(self) -> Dict[str, Any]:
+        """
+        Get statistics about active learning feedback collected.
+        
+        Returns:
+            Dictionary with feedback counts, distribution, etc.
+        """
+        metrics = self.active_learner.get_metrics()
+        return metrics.to_dict()
     
     def reset_context(self):
         """Reset conversation context (start fresh session)."""
