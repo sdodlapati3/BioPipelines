@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "biopipelines": {
+      "command": "python",
+      "args": ["-m", "workflow_composer.mcp.server"],
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src:${workspaceFolder}/config"
+      }
+    }
+  }
+}
