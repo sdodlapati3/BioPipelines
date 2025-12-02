@@ -10,6 +10,12 @@ Specialized agent for code-related tasks:
 
 Uses coding-optimized models (Qwen-Coder, DeepSeek-Coder) when available,
 falls back to general models or cloud APIs.
+
+Enhanced with DeepCode-inspired patterns:
+- Adaptive retry with parameter reduction
+- JSON repair for LLM outputs
+- Error guidance generation
+- Graceful degradation chains
 """
 
 import os
@@ -19,6 +25,23 @@ import logging
 from typing import Dict, Any, Optional, List, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
+
+# DeepCode-inspired utilities
+from .utils.json_repair import safe_json_loads, extract_json_from_text
+from .utils.retry_strategy import (
+    AdaptiveLLMCaller, 
+    RetryConfig, 
+    adjust_llm_params_for_retry,
+    get_retry_delay,
+)
+from .utils.response_validator import ResponseValidator, ValidationResult
+from .utils.degradation import DegradationChain, FallbackResult
+from .utils.error_guidance import (
+    ErrorGuidance,
+    ErrorCategory,
+    generate_error_guidance,
+    generate_guidance_from_log,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -180,7 +203,23 @@ class CodingAgent:
     
     Supports dependency injection: pass llm_client directly for better
     testability and decoupling (similar to ReactAgent pattern).
+    
+    Enhanced with DeepCode-inspired patterns:
+    - Adaptive retry with parameter reduction on failure
+    - JSON repair for malformed LLM outputs
+    - Error guidance generation with anti-patterns
+    - Graceful degradation (LLM -> pattern match -> default)
     """
+    
+    # Retry configuration - reduce complexity on failure
+    DEFAULT_RETRY_CONFIG = RetryConfig(
+        max_attempts=3,
+        base_delay=1.0,
+        token_reduction_factor=0.75,  # Reduce by 25% each retry
+        temperature_reduction=0.2,    # Lower temp for stability
+        min_temperature=0.1,
+        min_tokens=512,
+    )
     
     def __init__(
         self,
@@ -190,6 +229,7 @@ class CodingAgent:
         coder_model: str = "Qwen/Qwen2.5-Coder-32B-Instruct",
         fallback_url: Optional[str] = None,
         fallback_model: str = "meta-llama/Llama-3.3-70B-Instruct",
+        retry_config: Optional[RetryConfig] = None,
     ):
         """
         Initialize the coding agent.
@@ -201,6 +241,7 @@ class CodingAgent:
             coder_model: HuggingFace model ID for coding
             fallback_url: URL of fallback model server
             fallback_model: Model to use if coder unavailable
+            retry_config: Configuration for adaptive retry behavior
             
         Note:
             If llm_client is provided, it takes precedence over URL-based discovery.
@@ -216,9 +257,13 @@ class CodingAgent:
         self.fallback_url = fallback_url or os.environ.get("VLLM_URL", "http://localhost:8000/v1")
         self.fallback_model = fallback_model
         
+        # Retry configuration
+        self.retry_config = retry_config or self.DEFAULT_RETRY_CONFIG
+        
         self._client = None
         self._model = None
         self._using_coder = False
+        self._adaptive_caller: Optional[AdaptiveLLMCaller] = None
     
     def _get_client(self):
         """Get the OpenAI-compatible client, preferring coder model."""
@@ -292,68 +337,141 @@ class CodingAgent:
         workflow_config: Optional[str] = None,
         context: Optional[Dict[str, Any]] = None,
         use_llm: bool = True,
+        include_guidance: bool = True,
     ) -> DiagnosisResult:
         """
         Diagnose an error from logs.
+        
+        Uses a graceful degradation chain:
+        1. LLM diagnosis (if available and use_llm=True)
+        2. Pattern matching (fast, always available)
+        3. Default unknown error
         
         Args:
             error_log: The error log content
             workflow_config: Optional workflow configuration
             context: Additional context
             use_llm: Whether to use LLM (False = pattern matching only)
+            include_guidance: Include actionable guidance in result
             
         Returns:
-            DiagnosisResult with diagnosis and suggested fix
+            DiagnosisResult with diagnosis, suggested fix, and guidance
         """
-        # Try fast pattern matching first
-        quick_result = quick_diagnose(error_log)
-        if quick_result and quick_result.confidence >= 0.8:
-            logger.info(f"Quick diagnosis: {quick_result.error_type.value}")
-            return quick_result
+        # Build degradation chain
+        chain = DegradationChain()
         
-        if not use_llm:
-            return quick_result or DiagnosisResult(
-                error_type=ErrorType.UNKNOWN,
-                root_cause="Could not determine error cause",
-                explanation="Unable to diagnose this error automatically.",
-                confidence=0.0,
+        # Try LLM-based diagnosis first (most accurate)
+        if use_llm:
+            chain.add(
+                name="llm_diagnosis",
+                method=lambda: self._llm_diagnose(error_log, workflow_config, context),
+                condition=lambda: self._get_client()[0] is not None,
             )
         
-        # Use LLM for complex diagnosis
+        # Fall back to pattern matching
+        chain.add(
+            name="pattern_diagnosis",
+            method=lambda: quick_diagnose(error_log),
+        )
+        
+        # Execute chain with default fallback
+        default_result = DiagnosisResult(
+            error_type=ErrorType.UNKNOWN,
+            root_cause="Could not determine error cause",
+            explanation="Unable to diagnose this error automatically.",
+            confidence=0.0,
+        )
+        
+        fallback = chain.execute(default=default_result)
+        result = fallback.value
+        
+        if self.verbose:
+            logger.info(f"Diagnosis method: {fallback.method_used}, level: {fallback.fallback_level}")
+        
+        # Add actionable guidance if requested
+        if include_guidance and result:
+            # Map ErrorType to ErrorCategory for guidance generation
+            category_map = {
+                ErrorType.MEMORY: ErrorCategory.MEMORY,
+                ErrorType.DISK: ErrorCategory.DISK,
+                ErrorType.PERMISSION: ErrorCategory.PERMISSION,
+                ErrorType.NEXTFLOW: ErrorCategory.NEXTFLOW,
+                ErrorType.SNAKEMAKE: ErrorCategory.SNAKEMAKE,
+                ErrorType.SLURM: ErrorCategory.SLURM,
+                ErrorType.TOOL: ErrorCategory.TOOL,
+                ErrorType.NETWORK: ErrorCategory.NETWORK,
+                ErrorType.SYNTAX: ErrorCategory.SYNTAX,
+                ErrorType.UNKNOWN: ErrorCategory.UNKNOWN,
+            }
+            category = category_map.get(result.error_type, ErrorCategory.UNKNOWN)
+            guidance = generate_error_guidance(category, result.root_cause)
+            result.additional_context["guidance"] = guidance
+            result.additional_context["guidance_markdown"] = guidance.to_markdown()
+        
+        return result
+    
+    def _llm_diagnose(
+        self,
+        error_log: str,
+        workflow_config: Optional[str],
+        context: Optional[Dict[str, Any]],
+    ) -> DiagnosisResult:
+        """
+        LLM-based diagnosis with adaptive retry.
+        
+        On retry, reduces max_tokens and temperature for stability.
+        """
         client, model = self._get_client()
         if not client:
-            logger.warning("No LLM available for diagnosis")
-            return quick_result or DiagnosisResult(
-                error_type=ErrorType.UNKNOWN,
-                root_cause="No LLM available",
-                explanation="Could not diagnose error - no AI model available.",
-                confidence=0.0,
-            )
+            raise RuntimeError("No LLM client available")
         
         # Build prompt
         prompt = self._build_diagnosis_prompt(error_log, workflow_config, context)
         
-        try:
-            response = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": CODING_SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.1,
-                max_tokens=1024,
-            )
-            
-            return self._parse_diagnosis(response.choices[0].message.content, error_log)
-            
-        except Exception as e:
-            logger.error(f"LLM diagnosis failed: {e}")
-            return quick_result or DiagnosisResult(
-                error_type=ErrorType.UNKNOWN,
-                root_cause=str(e),
-                explanation=f"Diagnosis failed: {e}",
-                confidence=0.0,
-            )
+        # Use adaptive retry
+        last_error = None
+        for attempt in range(self.retry_config.max_attempts):
+            try:
+                # Adjust params for retry (reduce complexity)
+                params = adjust_llm_params_for_retry(
+                    {"temperature": 0.1, "max_tokens": 1024},
+                    attempt=attempt,
+                    config=self.retry_config,
+                )
+                
+                response = client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": CODING_SYSTEM_PROMPT},
+                        {"role": "user", "content": prompt}
+                    ],
+                    **params,
+                )
+                
+                response_text = response.choices[0].message.content
+                
+                # Validate response structure
+                validation = ResponseValidator.validate_diagnosis_response(response_text)
+                if validation.warnings:
+                    logger.debug(f"Diagnosis validation warnings: {validation.warnings}")
+                
+                return self._parse_diagnosis(response_text, error_log)
+                
+            except Exception as e:
+                last_error = e
+                if attempt < self.retry_config.max_attempts - 1:
+                    delay = get_retry_delay(attempt, self.retry_config)
+                    logger.warning(f"LLM diagnosis attempt {attempt + 1} failed: {e}, retrying in {delay:.1f}s")
+                    import time
+                    time.sleep(delay)
+        
+        # All retries failed
+        raise last_error or RuntimeError("LLM diagnosis failed")
+    
+    @property
+    def verbose(self) -> bool:
+        """Check if verbose logging is enabled."""
+        return logger.isEnabledFor(logging.DEBUG)
     
     def generate_fix(
         self,
@@ -524,14 +642,24 @@ Format as JSON: {{"errors": [...], "warnings": [...], "suggestions": [...]}}"""
                     max_tokens=1024,
                 )
                 
-                # Try to parse JSON from response
+                # Use JSON repair for LLM output (DeepCode pattern)
                 content = response.choices[0].message.content
-                json_match = re.search(r'\{.*\}', content, re.DOTALL)
-                if json_match:
-                    llm_result = json.loads(json_match.group())
-                    result["errors"].extend(llm_result.get("errors", []))
-                    result["warnings"].extend(llm_result.get("warnings", []))
-                    result["suggestions"].extend(llm_result.get("suggestions", []))
+                
+                # Extract and repair JSON from response
+                json_str = extract_json_from_text(content)
+                if json_str:
+                    llm_result = safe_json_loads(json_str, default={})
+                    if llm_result:
+                        result["errors"].extend(llm_result.get("errors", []))
+                        result["warnings"].extend(llm_result.get("warnings", []))
+                        result["suggestions"].extend(llm_result.get("suggestions", []))
+                else:
+                    # Fallback: try parsing the whole content
+                    llm_result = safe_json_loads(content, default=None)
+                    if llm_result:
+                        result["errors"].extend(llm_result.get("errors", []))
+                        result["warnings"].extend(llm_result.get("warnings", []))
+                        result["suggestions"].extend(llm_result.get("suggestions", []))
                     
             except Exception as e:
                 logger.debug(f"LLM validation failed: {e}")
@@ -684,7 +812,76 @@ Provide your diagnosis as:
             "using_coder_model": self._using_coder,
             "coder_url": self.coder_url,
             "fallback_url": self.fallback_url,
+            "retry_config": {
+                "max_attempts": self.retry_config.max_attempts,
+                "token_reduction_factor": self.retry_config.token_reduction_factor,
+                "temperature_reduction": self.retry_config.temperature_reduction,
+            },
         }
+    
+    def get_guidance_for_error(
+        self,
+        error_type: ErrorType,
+        root_cause: str = "",
+    ) -> str:
+        """
+        Get formatted guidance for an error type.
+        
+        Useful for displaying to users or injecting into agent prompts.
+        
+        Args:
+            error_type: Type of error
+            root_cause: Optional root cause description
+            
+        Returns:
+            Markdown-formatted guidance string
+        """
+        # Map ErrorType to ErrorCategory
+        category_map = {
+            ErrorType.MEMORY: ErrorCategory.MEMORY,
+            ErrorType.DISK: ErrorCategory.DISK,
+            ErrorType.PERMISSION: ErrorCategory.PERMISSION,
+            ErrorType.NEXTFLOW: ErrorCategory.NEXTFLOW,
+            ErrorType.SNAKEMAKE: ErrorCategory.SNAKEMAKE,
+            ErrorType.SLURM: ErrorCategory.SLURM,
+            ErrorType.TOOL: ErrorCategory.TOOL,
+            ErrorType.NETWORK: ErrorCategory.NETWORK,
+            ErrorType.SYNTAX: ErrorCategory.SYNTAX,
+            ErrorType.UNKNOWN: ErrorCategory.UNKNOWN,
+        }
+        category = category_map.get(error_type, ErrorCategory.UNKNOWN)
+        guidance = generate_error_guidance(category, root_cause)
+        return guidance.to_markdown()
+    
+    def diagnose_with_full_guidance(
+        self,
+        error_log: str,
+        workflow_config: Optional[str] = None,
+    ) -> Tuple[DiagnosisResult, str]:
+        """
+        Diagnose error and return full formatted guidance.
+        
+        Convenience method that combines diagnosis + guidance formatting.
+        
+        Args:
+            error_log: Error log content
+            workflow_config: Optional workflow configuration
+            
+        Returns:
+            Tuple of (DiagnosisResult, formatted_guidance_markdown)
+        """
+        result = self.diagnose_error(
+            error_log, 
+            workflow_config, 
+            include_guidance=True
+        )
+        
+        guidance_md = result.additional_context.get(
+            "guidance_markdown",
+            self.get_guidance_for_error(result.error_type, result.root_cause)
+        )
+        
+        return result, guidance_md
 
 
 # =============================================================================

@@ -10,8 +10,15 @@ Implements the ReAct pattern:
 3. Observation - What happened?
 4. Repeat until done
 
+Enhanced with DeepCode-inspired patterns:
+- JSON repair for parsing action inputs
+- Response validation before parsing
+- Token tracking for long workflows
+- Concise memory for multi-step tasks
+
 References:
 - ReAct: Synergizing Reasoning and Acting in LLMs (https://arxiv.org/abs/2210.03629)
+- DeepCode: workflows/agents/memory_agent_concise.py
 """
 
 import asyncio
@@ -20,6 +27,12 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any, AsyncGenerator, Callable
 from enum import Enum
 from datetime import datetime
+
+# DeepCode-inspired utilities
+from .utils.json_repair import safe_json_loads, extract_json_from_text
+from .utils.response_validator import ResponseValidator, ValidationResult
+from .memory.token_tracker import TokenTracker, TokenBudget, create_tracker_for_model
+from .memory.concise_memory import ConciseMemory, create_concise_memory
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +119,12 @@ class ReactAgent:
     5. Repeat until done or max_steps
     6. Synthesize final response
     
+    Enhanced with DeepCode patterns:
+    - Token tracking to prevent context overflow
+    - JSON repair for robust action input parsing
+    - Response validation before parsing
+    - Concise memory for long multi-step workflows
+    
     Example:
         agent = ReactAgent(tools=my_tools, llm_client=client)
         response = await agent.run("Scan /data/fastq for RNA-seq samples")
@@ -118,6 +137,8 @@ class ReactAgent:
         model: str = "meta-llama/Llama-3.3-70B-Instruct",
         max_steps: int = 5,
         verbose: bool = True,
+        use_concise_memory: bool = False,  # Enable for long workflows
+        token_budget: Optional[TokenBudget] = None,
     ):
         """
         Initialize ReAct agent.
@@ -128,6 +149,8 @@ class ReactAgent:
             model: Model name for completions
             max_steps: Maximum reasoning steps
             verbose: Log intermediate steps
+            use_concise_memory: Use concise memory pattern for long workflows
+            token_budget: Token budget configuration (auto-detected if None)
         """
         self.tools = tools
         self.client = llm_client
@@ -137,6 +160,19 @@ class ReactAgent:
         
         self.steps: List[AgentStep] = []
         self.state = AgentState.THINKING
+        
+        # Token tracking (DeepCode pattern)
+        self.token_tracker = create_tracker_for_model(model)
+        if token_budget:
+            self.token_tracker.budget = token_budget
+        
+        # Concise memory for long workflows (DeepCode pattern)
+        self.use_concise_memory = use_concise_memory
+        self._concise_memory: Optional[ConciseMemory] = None
+        
+        # Track JSON repair statistics
+        self._json_repair_count = 0
+        self._validation_warnings: List[str] = []
     
     async def run(
         self,
@@ -157,19 +193,40 @@ class ReactAgent:
         """
         self.steps = []
         self.state = AgentState.THINKING
+        self._json_repair_count = 0
+        self._validation_warnings = []
+        
+        # Initialize concise memory if enabled
+        if self.use_concise_memory:
+            system_prompt = self._build_system_prompt()
+            self._concise_memory = create_concise_memory(
+                system_prompt=system_prompt,
+                model_name=self.model,
+            )
+            self._concise_memory.set_initial_query(query)
         
         # Build initial prompt
         system_prompt = self._build_system_prompt()
         
+        # Track tokens for system prompt
+        self.token_tracker.add_system_prompt(system_prompt)
+        
         for step_num in range(1, self.max_steps + 1):
             if self.verbose:
                 logger.info(f"ReAct Step {step_num}/{self.max_steps}")
+                # Log token status
+                token_status = self.token_tracker.get_status()
+                logger.debug(f"Token usage: {token_status['usage']['total']}/{token_status['budget']['max_context']}")
             
             if stream_callback:
                 stream_callback(f"🤔 Step {step_num}: Thinking...\n")
             
             # Get next thought/action from LLM
             messages = self._build_messages(query, context)
+            
+            # Track message tokens
+            for msg in messages:
+                self.token_tracker.add_message(msg["role"], msg.get("content", ""))
             
             try:
                 response = await self._get_completion(system_prompt, messages)
@@ -201,6 +258,14 @@ class ReactAgent:
                 step.state = AgentState.DONE
                 self.steps.append(step)
                 
+                # Complete step in concise memory
+                if self._concise_memory:
+                    self._concise_memory.complete_step(
+                        step_num=step_num,
+                        action="finish",
+                        summary="Task completed successfully",
+                    )
+                
                 # Extract final answer from action_input or thought
                 final_answer = self._extract_final_answer(action_input, thought)
                 if stream_callback:
@@ -218,6 +283,14 @@ class ReactAgent:
                 step.observation = result.output if result.success else f"Error: {result.error}"
                 step.state = AgentState.OBSERVING
                 
+                # Track tool result tokens
+                self.token_tracker.add_tool_result(step.observation)
+                
+                # Update concise memory if enabled
+                if self._concise_memory:
+                    self._concise_memory.add_working_message("assistant", f"Action: {action}")
+                    self._concise_memory.add_tool_result(step.observation, action)
+                
                 if stream_callback:
                     obs_preview = step.observation[:200] + "..." if len(step.observation) > 200 else step.observation
                     stream_callback(f"📋 Result: {obs_preview}\n\n")
@@ -226,6 +299,10 @@ class ReactAgent:
                 step.observation = f"Unknown tool: {action}. Available: {list(self.tools.keys())}"
             
             self.steps.append(step)
+            
+            # Check if we should compress context (DeepCode pattern)
+            if self.token_tracker.should_compress():
+                logger.warning(f"Token budget exceeded ({self.token_tracker.get_usage_percentage():.1f}%), consider using concise_memory=True")
         
         # Max steps reached - synthesize response
         if stream_callback:
@@ -342,10 +419,23 @@ class ReactAgent:
         return response.choices[0].message.content
     
     def _parse_response(self, response: str) -> tuple:
-        """Parse LLM response into thought, action, action_input."""
+        """
+        Parse LLM response into thought, action, action_input.
+        
+        Uses JSON repair for robust action input parsing (DeepCode pattern).
+        Validates response structure before parsing.
+        """
         thought = ""
         action = None
         action_input = None
+        
+        # Validate response structure first
+        validation = ResponseValidator.validate_react_response(response)
+        if validation.warnings:
+            self._validation_warnings.extend(validation.warnings)
+            if self.verbose:
+                for warning in validation.warnings:
+                    logger.debug(f"Response validation warning: {warning}")
         
         lines = response.strip().split('\n')
         
@@ -357,13 +447,26 @@ class ReactAgent:
                 action = line[7:].strip()
             elif line.startswith("Action Input:"):
                 input_str = line[13:].strip()
-                try:
-                    import json
-                    action_input = json.loads(input_str)
-                except:
-                    action_input = {"raw": input_str}
+                
+                # Use JSON repair for robust parsing (DeepCode pattern)
+                if input_str:
+                    # First try direct parse
+                    parsed = safe_json_loads(input_str, default=None)
+                    if parsed is not None:
+                        action_input = parsed
+                    else:
+                        # Try extracting JSON from surrounding text
+                        extracted = extract_json_from_text(input_str)
+                        if extracted:
+                            action_input = safe_json_loads(extracted, default={"raw": input_str})
+                            self._json_repair_count += 1
+                            if self.verbose:
+                                logger.debug(f"Repaired JSON action input (repair #{self._json_repair_count})")
+                        else:
+                            # Fall back to raw string
+                            action_input = {"raw": input_str}
         
-        # If no structured thought, use entire response
+        # If no structured thought, use entire response up to Action:
         if not thought:
             thought = response.split("Action:")[0].strip()
         
@@ -453,6 +556,33 @@ class ReactAgent:
             trace_parts.append("")
         
         return "\n".join(trace_parts)
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """
+        Get agent execution statistics.
+        
+        Includes token usage, JSON repair stats, and validation info.
+        Useful for debugging and optimization.
+        """
+        stats = {
+            "steps_executed": len(self.steps),
+            "max_steps": self.max_steps,
+            "state": self.state.value,
+            "model": self.model,
+            "token_usage": self.token_tracker.get_status(),
+            "json_repairs": self._json_repair_count,
+            "validation_warnings": self._validation_warnings,
+            "use_concise_memory": self.use_concise_memory,
+        }
+        
+        if self._concise_memory:
+            stats["concise_memory"] = self._concise_memory.get_stats()
+        
+        return stats
+    
+    def get_token_status(self) -> Dict[str, Any]:
+        """Get current token usage status."""
+        return self.token_tracker.get_status()
 
 
 # =============================================================================
