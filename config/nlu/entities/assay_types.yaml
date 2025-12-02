@@ -1,0 +1,164 @@
+# Assay Type Entities
+# ===================
+# Sequencing and assay types for entity extraction.
+
+version: "1.0"
+
+entities:
+  - entity: assay_type
+    description: "Sequencing and analysis assay types"
+    
+    values:
+      # RNA sequencing
+      - canonical: "RNA-seq"
+        display: "RNA-seq"
+        category: "transcriptomics"
+        aliases:
+          - rna-seq
+          - rnaseq
+          - rna seq
+          - rna sequencing
+          - transcriptome
+          - bulk rna
+          - mrna-seq
+          - total rna
+          
+      - canonical: "scRNA-seq"
+        display: "Single-cell RNA-seq"
+        category: "transcriptomics"
+        aliases:
+          - scrna-seq
+          - scrnaseq
+          - sc-rna-seq
+          - sc rna seq
+          - single cell
+          - single-cell
+          - singlecell
+          - single cell rna
+          - single cell rna seq
+          - single-cell rna-seq
+          - 10x
+          - 10x genomics
+          - drop-seq
+          - smart-seq
+          
+      # Chromatin
+      - canonical: "ChIP-seq"
+        display: "ChIP-seq"
+        category: "epigenomics"
+        aliases:
+          - chip-seq
+          - chipseq
+          - chip seq
+          - chromatin immunoprecipitation
+          - histone chip
+          - tf chip
+          
+      - canonical: "ATAC-seq"
+        display: "ATAC-seq"
+        category: "epigenomics"
+        aliases:
+          - atac-seq
+          - atacseq
+          - atac seq
+          - chromatin accessibility
+          - open chromatin
+          
+      - canonical: "CUT&RUN"
+        display: "CUT&RUN"
+        category: "epigenomics"
+        aliases:
+          - cut&run
+          - cutandrun
+          - cut and run
+          - cut&tag
+          - cutandtag
+          
+      # DNA methylation
+      - canonical: "Methylation"
+        display: "DNA Methylation"
+        category: "epigenomics"
+        aliases:
+          - methylation
+          - methyl
+          - bisulfite
+          - wgbs
+          - whole genome bisulfite
+          - rrbs
+          - reduced representation
+          - methylome
+          
+      # DNA sequencing
+      - canonical: "WGS"
+        display: "Whole Genome Sequencing"
+        category: "genomics"
+        aliases:
+          - wgs
+          - whole genome
+          - whole genome sequencing
+          - dna-seq
+          - dnaseq
+          - genome sequencing
+          
+      - canonical: "WES"
+        display: "Whole Exome Sequencing"
+        category: "genomics"
+        aliases:
+          - wes
+          - exome
+          - whole exome
+          - exome sequencing
+          - targeted exome
+          
+      # 3D genome
+      - canonical: "Hi-C"
+        display: "Hi-C"
+        category: "3d_genome"
+        aliases:
+          - hi-c
+          - hic
+          - hi c
+          - chromatin conformation
+          - 3c
+          - 4c
+          - 5c
+          - capture-c
+          
+      # Spatial
+      - canonical: "Spatial"
+        display: "Spatial Transcriptomics"
+        category: "transcriptomics"
+        aliases:
+          - spatial
+          - spatial transcriptomics
+          - visium
+          - 10x visium
+          - slide-seq
+          - merfish
+          - seqfish
+          
+      # Long read
+      - canonical: "Long-read"
+        display: "Long-read Sequencing"
+        category: "genomics"
+        aliases:
+          - long-read
+          - long read
+          - pacbio
+          - nanopore
+          - ont
+          - oxford nanopore
+          - iso-seq
+          - isoseq
+          
+      # Metagenomics
+      - canonical: "Metagenomics"
+        display: "Metagenomics"
+        category: "genomics"
+        aliases:
+          - metagenomics
+          - microbiome
+          - 16s
+          - 16s rrna
+          - shotgun metagenomics
+          - amplicon

@@ -1,0 +1,123 @@
+# Workflow Operations Intents
+# ===========================
+# Intents for pipeline/workflow creation and management.
+
+version: "1.0"
+
+intents:
+  # =========================================================================
+  # WORKFLOW_CREATE - Generate a workflow/pipeline
+  # =========================================================================
+  - intent: WORKFLOW_CREATE
+    description: "Generate a bioinformatics workflow/pipeline"
+    category: "workflow"
+    
+    slots:
+      - name: analysis_type
+        type: assay_type
+        required: true
+        prompt: "What type of analysis? (e.g., RNA-seq, ChIP-seq, scRNA-seq)"
+        
+      - name: organism
+        type: organism
+        required: false
+        prompt: "Which organism? (e.g., human, mouse)"
+        
+      - name: input_path
+        type: file_path
+        required: false
+        prompt: "Where are your input files?"
+        
+      - name: output_path
+        type: file_path
+        required: false
+    
+    examples:
+      # Basic workflow creation
+      - "create a [RNA-seq](analysis_type) pipeline"
+      - "generate a [ChIP-seq](analysis_type) workflow"
+      - "make a [scRNA-seq](analysis_type) analysis pipeline"
+      - "build a [ATAC-seq](analysis_type) workflow"
+      - "set up a [methylation](analysis_type) pipeline"
+      
+      # With organism
+      - "create a [RNA-seq](analysis_type) pipeline for [human](organism)"
+      - "generate a [ChIP-seq](analysis_type) workflow for [mouse](organism)"
+      - "make a [scRNA-seq](analysis_type) pipeline for [human](organism) samples"
+      
+      # With paths
+      - "create a [RNA-seq](analysis_type) pipeline using data from [/data/raw](input_path)"
+      - "generate workflow for [/scratch/samples](input_path)"
+      
+      # Imperative forms
+      - "I need a [RNA-seq](analysis_type) pipeline"
+      - "I want to analyze [ChIP-seq](analysis_type) data"
+      - "help me process [scRNA-seq](analysis_type) samples"
+      
+      # Natural language
+      - "how do I analyze [RNA-seq](analysis_type) data"
+      - "can you create a [ChIP-seq](analysis_type) pipeline"
+      - "what's the best way to process [ATAC-seq](analysis_type)"
+
+  # =========================================================================
+  # WORKFLOW_LIST - List available workflows
+  # =========================================================================
+  - intent: WORKFLOW_LIST
+    description: "List available workflow templates and pipelines"
+    category: "workflow"
+    
+    slots:
+      - name: category
+        type: text
+        required: false
+    
+    examples:
+      - "list available workflows"
+      - "show me all pipelines"
+      - "what workflows do you have"
+      - "what pipelines are available"
+      - "show workflow templates"
+      - "list supported analyses"
+      - "what can you analyze"
+
+  # =========================================================================
+  # WORKFLOW_CONFIGURE - Configure workflow parameters
+  # =========================================================================
+  - intent: WORKFLOW_CONFIGURE
+    description: "Configure or modify workflow parameters"
+    category: "workflow"
+    
+    slots:
+      - name: parameter
+        type: text
+        required: false
+        prompt: "Which parameter do you want to change?"
+        
+      - name: value
+        type: text
+        required: false
+        prompt: "What value should it be?"
+    
+    examples:
+      - "configure the workflow"
+      - "change pipeline settings"
+      - "modify the parameters"
+      - "set [threads](parameter) to [16](value)"
+      - "use [8](value) CPUs"
+      - "increase memory to [64GB](value)"
+      - "change reference genome to [hg38](value)"
+
+  # =========================================================================
+  # WORKFLOW_VISUALIZE - Show workflow DAG
+  # =========================================================================
+  - intent: WORKFLOW_VISUALIZE
+    description: "Visualize workflow as a directed acyclic graph (DAG)"
+    category: "workflow"
+    
+    examples:
+      - "show the workflow"
+      - "visualize the pipeline"
+      - "show me the DAG"
+      - "display workflow graph"
+      - "what steps are in the pipeline"
+      - "show workflow structure"

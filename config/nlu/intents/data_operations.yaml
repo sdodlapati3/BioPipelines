@@ -1,0 +1,215 @@
+# Data Operations Intents
+# =======================
+# Intents for data discovery, search, and download operations.
+
+version: "1.0"
+
+intents:
+  # =========================================================================
+  # DATA_SCAN - Scan local filesystem for data files
+  # =========================================================================
+  - intent: DATA_SCAN
+    description: "Scan local filesystem for data files and samples"
+    category: "data"
+    
+    slots:
+      - name: path
+        type: file_path
+        required: false
+        prompt: "Which directory should I scan?"
+        default: "/scratch/sdodl001/BioPipelines/data"
+        
+      - name: data_type
+        type: assay_type
+        required: false
+        prompt: "Any specific data type? (e.g., RNA-seq, ChIP-seq, scRNA-seq)"
+    
+    examples:
+      # Basic scan queries
+      - "scan my data folder"
+      - "scan data"
+      - "what files do we have"
+      - "what data do we have"
+      - "show me my data"
+      - "list my samples"
+      - "inventory my data"
+      - "check my data folder"
+      
+      # With path
+      - "scan [/data/raw](path)"
+      - "show me what's in [/scratch/data](path)"
+      - "what files are in [~/projects](path)"
+      - "list contents of [/home/user/samples](path)"
+      - "check [/data/processed](path) for files"
+      
+      # With data type
+      - "how many [scRNA-seq](data_type) files do we have"
+      - "how many [single cell](data_type) samples"
+      - "do we have any [ChIP-seq](data_type) data"
+      - "list [RNA-seq](data_type) files"
+      - "show me [ATAC-seq](data_type) samples"
+      - "what [methylation](data_type) data do we have"
+      - "find [Hi-C](data_type) files"
+      
+      # Combined path + data type
+      - "scan [/data/raw](path) for [ChIP-seq](data_type)"
+      - "check [/scratch](path) for [scRNA-seq](data_type) data"
+      - "list [RNA-seq](data_type) samples in [/projects](path)"
+      
+      # Question forms
+      - "what types of data do we have"
+      - "what kinds of samples are available"
+      - "do we have any data locally"
+      - "is there any sequencing data"
+
+  # =========================================================================
+  # DATA_SEARCH - Search public databases
+  # =========================================================================
+  - intent: DATA_SEARCH
+    description: "Search public databases (GEO, SRA, ENCODE) for datasets"
+    category: "data"
+    
+    slots:
+      - name: query
+        type: text
+        required: true
+        prompt: "What are you looking for? (e.g., 'human liver RNA-seq')"
+        
+      - name: organism
+        type: organism
+        required: false
+        prompt: "Which organism? (e.g., human, mouse)"
+        
+      - name: tissue
+        type: tissue
+        required: false
+        
+      - name: disease
+        type: disease
+        required: false
+        
+      - name: assay_type
+        type: assay_type
+        required: false
+        
+      - name: source
+        type: choice
+        required: false
+        choices: ["GEO", "SRA", "ENCODE", "ArrayExpress"]
+    
+    examples:
+      # Basic search
+      - "search for [human](organism) [liver](tissue) data"
+      - "find [cancer](disease) datasets"
+      - "look for [mouse](organism) [brain](tissue) samples"
+      
+      # With assay type
+      - "search for [human](organism) [ChIP-seq](assay_type) data"
+      - "find [RNA-seq](assay_type) datasets for [Alzheimer's](disease)"
+      - "look for [ATAC-seq](assay_type) [heart](tissue) samples"
+      
+      # Complex queries
+      - "search for [human](organism) [liver](tissue) [cancer](disease) [RNA-seq](assay_type)"
+      - "find [mouse](organism) [brain](tissue) [single cell](assay_type) data"
+      - "look for [Parkinson's](disease) [dopaminergic neurons](tissue) samples"
+      
+      # Database-specific
+      - "search [GEO](source) for [human](organism) data"
+      - "find datasets in [ENCODE](source)"
+      - "look in [SRA](source) for [mouse](organism) [ChIP-seq](assay_type)"
+      
+      # Imperative forms
+      - "I need [human](organism) [liver](tissue) data"
+      - "I want [RNA-seq](assay_type) datasets"
+      - "get me [cancer](disease) samples"
+      
+      # Question forms
+      - "can you find [human](organism) [heart](tissue) data"
+      - "is there any [mouse](organism) [brain](tissue) data available"
+      - "do you have [Alzheimer's](disease) datasets"
+
+  # =========================================================================
+  # DATA_DOWNLOAD - Download datasets
+  # =========================================================================
+  - intent: DATA_DOWNLOAD
+    description: "Download datasets from public repositories"
+    category: "data"
+    
+    slots:
+      - name: dataset_id
+        type: dataset_id
+        required: false
+        prompt: "Which dataset? (e.g., GSE12345, SRR1234567)"
+        
+      - name: download_all
+        type: boolean
+        required: false
+        default: false
+        
+      - name: output_path
+        type: file_path
+        required: false
+        default: "/scratch/sdodl001/BioPipelines/data/raw"
+    
+    examples:
+      # Single dataset
+      - "download [GSE12345](dataset_id)"
+      - "get [SRR1234567](dataset_id)"
+      - "fetch [ENCSR123ABC](dataset_id)"
+      
+      # Download all from search
+      - "download all"
+      - "download everything"
+      - "get all the datasets"
+      - "download both"
+      - "fetch all of them"
+      
+      # Execute commands
+      - "execute the download commands"
+      - "run the downloads"
+      - "start downloading"
+      
+      # With destination
+      - "download [GSE12345](dataset_id) to [/data/raw](output_path)"
+      - "save [SRR1234567](dataset_id) in [~/downloads](output_path)"
+
+  # =========================================================================
+  # DATA_VALIDATE - Validate data integrity
+  # =========================================================================
+  - intent: DATA_VALIDATE
+    description: "Validate data file integrity (checksums, formats)"
+    category: "data"
+    
+    slots:
+      - name: path
+        type: file_path
+        required: false
+        prompt: "Which files should I validate?"
+    
+    examples:
+      - "validate my data"
+      - "check data integrity"
+      - "verify checksums"
+      - "validate [/data/raw](path)"
+      - "check if files are corrupted"
+      - "verify the downloaded files"
+
+  # =========================================================================
+  # DATA_DESCRIBE - Describe file contents
+  # =========================================================================
+  - intent: DATA_DESCRIBE
+    description: "Describe contents and metadata of data files"
+    category: "data"
+    
+    slots:
+      - name: path
+        type: file_path
+        required: true
+        prompt: "Which file should I describe?"
+    
+    examples:
+      - "describe [sample1.fastq.gz](path)"
+      - "what's in [/data/raw/reads.bam](path)"
+      - "tell me about [experiment.h5ad](path)"
+      - "show metadata for [GSE12345](path)"
+      - "analyze [peaks.bed](path)"

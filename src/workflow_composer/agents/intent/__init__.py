@@ -96,6 +96,47 @@ from .unified_parser import (
     create_unified_parser,
 )
 
+# Professional NLU components (Phase 1-5)
+from .training_data import (
+    TrainingDataLoader,
+    SlotValidator,
+    SlotValidationResult,
+    IntentDefinition,
+    EntityDefinition,
+    EntityValue,
+    get_training_data_loader,
+    reload_training_data,
+)
+from .active_learning import (
+    ActiveLearner,
+    CorrectionRecord,
+    ConfirmationRecord,
+    LearningMetrics,
+    get_active_learner,
+)
+from .slot_prompting import (
+    SlotPrompter,
+    SlotCheckResult,
+    SlotDefinition as SlotSchema,
+    IntentSlotSchema,
+    DialogueState,
+    get_slot_prompter,
+    SlotPriority,
+    PromptStyle,
+)
+from .balance_metrics import (
+    TrainingDataAnalyzer,
+    BalanceReport,
+    IntentStats,
+    analyze_training_balance,
+)
+from .entity_roles import (
+    EntityRoleResolver,
+    ResolvedEntity,
+    RoleDefinition,
+    get_role_resolver,
+)
+
 __all__ = [
     # High-level (recommended)
     "UnifiedIntentParser",    # RECOMMENDED: Hierarchical parser with LLM arbiter
@@ -150,4 +191,43 @@ __all__ = [
     # Integration helpers
     "route_to_tool",
     "format_clarification_response",
+    
+    # Professional NLU - Training Data (Phase 1)
+    "TrainingDataLoader",
+    "SlotValidator",
+    "SlotValidationResult",
+    "IntentDefinition",
+    "EntityDefinition",
+    "EntityValue",
+    "get_training_data_loader",
+    "reload_training_data",
+    
+    # Professional NLU - Active Learning (Phase 2)
+    "ActiveLearner",
+    "CorrectionRecord",
+    "ConfirmationRecord",
+    "LearningMetrics",
+    "get_active_learner",
+    
+    # Professional NLU - Slot Prompting (Phase 3)
+    "SlotPrompter",
+    "SlotCheckResult",
+    "SlotSchema",
+    "IntentSlotSchema",
+    "DialogueState",
+    "get_slot_prompter",
+    "SlotPriority",
+    "PromptStyle",
+    
+    # Professional NLU - Balance Metrics (Phase 4)
+    "TrainingDataAnalyzer",
+    "BalanceReport",
+    "IntentStats",
+    "analyze_training_balance",
+    
+    # Professional NLU - Entity Roles (Phase 5)
+    "EntityRoleResolver",
+    "ResolvedEntity",
+    "RoleDefinition",
+    "get_role_resolver",
 ]

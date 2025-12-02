@@ -1,0 +1,113 @@
+# Organism Entities
+# =================
+# Canonical organism names with aliases for entity extraction.
+
+version: "1.0"
+
+entities:
+  - entity: organism
+    description: "Biological organisms (species)"
+    
+    values:
+      # Mammals
+      - canonical: "Homo sapiens"
+        display: "Human"
+        aliases:
+          - human
+          - humans
+          - h. sapiens
+          - homo sapiens
+          - hg38
+          - hg19
+          - grch38
+          - grch37
+          
+      - canonical: "Mus musculus"
+        display: "Mouse"
+        aliases:
+          - mouse
+          - mice
+          - m. musculus
+          - mus musculus
+          - mm10
+          - mm39
+          - grcm39
+          - grcm38
+          
+      - canonical: "Rattus norvegicus"
+        display: "Rat"
+        aliases:
+          - rat
+          - rats
+          - r. norvegicus
+          - rattus norvegicus
+          - rn6
+          - rn7
+          
+      # Model organisms
+      - canonical: "Drosophila melanogaster"
+        display: "Fruit fly"
+        aliases:
+          - fly
+          - flies
+          - fruit fly
+          - drosophila
+          - d. melanogaster
+          - dm6
+          - dm3
+          
+      - canonical: "Caenorhabditis elegans"
+        display: "C. elegans"
+        aliases:
+          - worm
+          - worms
+          - c. elegans
+          - caenorhabditis elegans
+          - ce11
+          - ce10
+          
+      - canonical: "Danio rerio"
+        display: "Zebrafish"
+        aliases:
+          - zebrafish
+          - zebra fish
+          - d. rerio
+          - danio rerio
+          - grcz11
+          - danrer11
+          
+      - canonical: "Saccharomyces cerevisiae"
+        display: "Yeast"
+        aliases:
+          - yeast
+          - budding yeast
+          - s. cerevisiae
+          - saccharomyces cerevisiae
+          - saccer3
+          
+      # Plants
+      - canonical: "Arabidopsis thaliana"
+        display: "Arabidopsis"
+        aliases:
+          - arabidopsis
+          - a. thaliana
+          - arabidopsis thaliana
+          - tair10
+          
+      # Bacteria
+      - canonical: "Escherichia coli"
+        display: "E. coli"
+        aliases:
+          - e. coli
+          - ecoli
+          - escherichia coli
+          
+      # Primates
+      - canonical: "Macaca mulatta"
+        display: "Rhesus macaque"
+        aliases:
+          - macaque
+          - rhesus
+          - rhesus macaque
+          - m. mulatta
+          - rhemac10

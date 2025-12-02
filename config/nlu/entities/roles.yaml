@@ -1,0 +1,123 @@
+# Entity Role Definitions
+# =======================
+# Define semantic roles that entities can play in different contexts.
+# This enables more precise understanding of entity relationships.
+#
+# Version: 1.0
+
+roles:
+  # Location/Path Roles
+  - role: source
+    description: "Origin location for data transfer or comparison"
+    entity_types: ["file_path", "directory", "dataset_id"]
+    examples:
+      - "copy from [/data/input](source) to /data/output"
+      - "compare [GSE12345](source) with GSE67890"
+    
+  - role: destination
+    description: "Target location for data transfer or output"
+    entity_types: ["file_path", "directory"]
+    examples:
+      - "download to [/home/user/results](destination)"
+      - "save output in [output/](destination)"
+    
+  # Comparison Roles
+  - role: baseline
+    description: "Reference or control condition for comparison"
+    entity_types: ["condition", "sample_group", "time_point"]
+    examples:
+      - "compare treatment to [control](baseline)"
+      - "[0h](baseline) vs 24h"
+    
+  - role: target
+    description: "Experimental or test condition for comparison"
+    entity_types: ["condition", "sample_group", "time_point"]
+    examples:
+      - "compare [treatment](target) to control"
+      - "analyze [tumor](target) vs normal"
+
+  # Organism Context Roles
+  - role: query_organism
+    description: "The organism of interest in a cross-species query"
+    entity_types: ["organism"]
+    examples:
+      - "find [human](query_organism) homologs of mouse genes"
+      
+  - role: reference_organism
+    description: "The reference organism for comparison"
+    entity_types: ["organism"]
+    examples:
+      - "find human homologs of [mouse](reference_organism) genes"
+      - "map [rat](reference_organism) orthologs to human"
+
+  # Temporal Roles  
+  - role: time_start
+    description: "Start time point in a time series"
+    entity_types: ["time_point", "number"]
+    examples:
+      - "from [0 hours](time_start) to 48 hours"
+      
+  - role: time_end
+    description: "End time point in a time series"
+    entity_types: ["time_point", "number"]
+    examples:
+      - "from 0 hours to [48 hours](time_end)"
+
+  # Data Context Roles
+  - role: input_data
+    description: "Input data for analysis"
+    entity_types: ["file_path", "dataset_id", "data_type"]
+    examples:
+      - "analyze [raw/*.fastq.gz](input_data)"
+      
+  - role: output_data
+    description: "Output or result data"
+    entity_types: ["file_path", "data_format"]
+    examples:
+      - "generate [counts matrix](output_data)"
+
+# Role Disambiguation Rules
+# -------------------------
+# Rules to help determine which role an entity plays based on context.
+
+disambiguation:
+  - pattern: "from {entity} to"
+    assign_role: source
+    
+  - pattern: "to {entity}"
+    assign_role: destination
+    when_no_preceding: "from"
+    
+  - pattern: "{entity} vs"
+    assign_role: baseline
+    
+  - pattern: "vs {entity}"
+    assign_role: target
+    
+  - pattern: "compare {entity1} to {entity2}"
+    assign_roles:
+      entity1: target
+      entity2: baseline
+      
+  - pattern: "download {entity}"
+    assign_role: source
+    
+  - pattern: "save to {entity}"
+    assign_role: destination
+    
+  - pattern: "{entity} homologs of"
+    assign_role: query_organism
+    
+  - pattern: "homologs of {entity}"
+    assign_role: reference_organism
+
+# Role Constraints
+# ----------------
+# Define which roles are mutually exclusive or required together.
+
+constraints:
+  - exclusive: [source, destination]  # Same entity can't be both
+  - exclusive: [baseline, target]     # Same entity can't be both
+  - paired: [source, destination]     # If one exists, other likely does too
+  - paired: [baseline, target]        # If one exists, other likely does too
+  - paired: [time_start, time_end]    # Usually come together
