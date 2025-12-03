@@ -27,16 +27,28 @@ GENERATE_WORKFLOW_PATTERNS = [
 ]
 
 
-def generate_workflow_impl(description: str = None) -> ToolResult:
+def generate_workflow_impl(
+    description: str = None,
+    workflow_type: str = None,
+    pipeline_type: str = None,
+    **kwargs,
+) -> ToolResult:
     """
     Generate a workflow from a natural language description.
     
     Args:
         description: What the user wants to analyze
+        workflow_type: Type of workflow (rna-seq, chip-seq, etc.) - alternate parameter name
+        pipeline_type: Type of pipeline - alternate parameter name
+        **kwargs: Additional parameters (ignored)
         
     Returns:
         ToolResult with workflow generation status
     """
+    # Accept workflow_type or pipeline_type as aliases for description
+    if not description:
+        description = workflow_type or pipeline_type
+    
     if not description:
         return ToolResult(
             success=False,

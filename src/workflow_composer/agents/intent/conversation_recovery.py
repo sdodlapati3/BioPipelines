@@ -108,6 +108,18 @@ CLARIFICATION_TEMPLATES = {
         "Could you give me a bit more detail about what you'd like to do?",
     ],
     
+    "out_of_scope": [
+        "I'm a bioinformatics assistant specialized in workflows, data analysis, and pipeline management. "
+        "That request seems outside my expertise. Is there something related to bioinformatics I can help you with?",
+        "Sorry, I specialize in bioinformatics workflows and data analysis. "
+        "I can help you with things like RNA-seq analysis, data scanning, job management, and pipeline creation.",
+        "That's outside my area of expertise. I'm designed to help with bioinformatics tasks like:\n"
+        "• Creating analysis workflows (RNA-seq, ChIP-seq, etc.)\n"
+        "• Scanning and managing data\n"
+        "• Submitting and monitoring jobs\n"
+        "• Troubleshooting pipeline errors",
+    ],
+    
     "data": [
         "I'm not sure which data you're referring to. Could you specify:\n"
         "• A path (e.g., `/data/methylation`)\n"
@@ -564,6 +576,34 @@ class ConversationRecovery:
         """Detect the category of a query for appropriate templates."""
         query_lower = query.lower()
         
+        # Check for out-of-scope queries first
+        out_of_scope_indicators = [
+            # Entertainment
+            "movie", "film", "tv show", "series", "watch tonight", "netflix", "streaming",
+            "music", "song", "album", "artist", "band",
+            "game", "gaming", "video game",
+            # Food
+            "recipe", "cook", "restaurant", "food", "dinner", "lunch",
+            # Travel/Weather
+            "weather", "travel", "vacation", "flight", "hotel",
+            # Personal
+            "relationship", "dating", "friend",
+            # Sports
+            "sports", "football", "basketball", "soccer", "score",
+            # Shopping
+            "buy", "purchase", "amazon", "price",
+            # General knowledge unrelated to bioinformatics
+            "capital of", "president", "who is", "when was",
+        ]
+        
+        # Check if query is clearly out of scope
+        if any(term in query_lower for term in out_of_scope_indicators):
+            # But make sure it's not a bioinformatics context
+            bio_terms = ["gene", "protein", "sequence", "sample", "analysis", 
+                        "pipeline", "workflow", "fastq", "bam", "vcf", "bed"]
+            if not any(bio in query_lower for bio in bio_terms):
+                return "out_of_scope"
+        
         if any(word in query_lower for word in ["data", "file", "path", "directory", "folder"]):
             return "data"
         
@@ -574,6 +614,14 @@ class ConversationRecovery:
     
     def _generate_suggestions(self, query: str, category: str) -> List[str]:
         """Generate helpful suggestions based on query."""
+        if category == "out_of_scope":
+            return [
+                "Create an RNA-seq workflow",
+                "Scan my data folder",
+                "Search for human genome data",
+                "Show help",
+            ]
+        
         if category == "data":
             return [
                 "Scan local data",

@@ -626,6 +626,15 @@ INTENT_PATTERNS: List[Tuple[str, IntentType, Dict[str, int]]] = [
      IntentType.DIAGNOSE_ERROR, {}),
     (r"(?:what\s+went\s+wrong|why\s+did\s+it\s+fail|fix\s+this|help\s+me\s+fix)",
      IntentType.DIAGNOSE_ERROR, {}),
+    # ADDED: Broader troubleshooting patterns
+    (r"(?:my\s+)?(?:pipeline|workflow|job|run|script)\s+(?:failed|crashed|errored|broke|stopped|died)",
+     IntentType.DIAGNOSE_ERROR, {}),
+    (r"(?:got|getting|have|having|received?|seeing?)\s+(?:an?\s+)?(?:error|failure|exception|problem|issue)",
+     IntentType.DIAGNOSE_ERROR, {}),
+    (r"(?:it'?s?\s+)?(?:not\s+working|broken|failing|crashing|erroring)",
+     IntentType.DIAGNOSE_ERROR, {}),
+    (r"(?:error|failure|exception|problem|issue)\s+(?:with|in|during|when|while)",
+     IntentType.DIAGNOSE_ERROR, {}),
     (r"(?:try\s+to\s+)?(?:fix|recover|resolve)\s+(?:this|the)\s+(?:error|issue|problem)",
      IntentType.DIAGNOSE_RECOVER, {}),
     

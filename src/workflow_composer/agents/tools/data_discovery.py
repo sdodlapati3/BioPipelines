@@ -500,6 +500,8 @@ def _generate_smart_suggestions(input_folders: dict, data_types: set, total_inpu
 
 def _build_empty_folder_summary(scan_path: Path) -> str:
     """Build a folder structure summary when no FASTQ files found."""
+    from collections import defaultdict
+    
     lines = [f"📁 **Scanning**: `{scan_path}`\n"]
     lines.append("⚠️ **No FASTQ samples found**\n")
     

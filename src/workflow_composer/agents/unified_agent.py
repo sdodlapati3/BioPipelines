@@ -165,6 +165,7 @@ class ResponseType(Enum):
     NEEDS_APPROVAL = "needs_approval"
     PARTIAL = "partial"            # Multi-step, still in progress
     QUESTION = "question"          # Agent needs more info
+    INFO = "info"                  # Informational response (status, help, etc.)
 
 
 @dataclass
@@ -939,35 +940,53 @@ class UnifiedAgent:
                         parse_span.add_tag("confidence", intent_result.confidence)
                         parse_span.add_tag("method", intent_result.method)
                         parse_span.add_tag("llm_invoked", intent_result.llm_invoked)
+                        parse_span.add_tag("needs_clarification", intent_result.needs_clarification)
                     
                     logger.info(
                         f"IntentParser: intent={intent_name}, "
                         f"confidence={intent_result.confidence:.2f}, "
                         f"method={intent_result.method}, "
-                        f"llm={intent_result.llm_invoked}"
+                        f"llm={intent_result.llm_invoked}, "
+                        f"needs_clarification={intent_result.needs_clarification}"
                     )
                     
                     # Extract entities from result
                     extracted_entities = intent_result.entities if intent_result.entities else []
                     
                     # ============================================================
-                    # ENHANCED: Use ConversationRecovery for low confidence
+                    # ENHANCED: Handle clarification requests
                     # ============================================================
                     if intent_result.needs_clarification or intent_result.confidence < 0.35:
+                        # First, check if we have an explicit clarification prompt from the arbiter
+                        if intent_result.clarification_prompt:
+                            return AgentResponse(
+                                success=True,
+                                message=intent_result.clarification_prompt,
+                                response_type=ResponseType.QUESTION,
+                                task_type=task_type,
+                            )
+                        
                         # Use recovery system for intelligent clarification
                         if self.recovery:
-                            alternative_intents = []
-                            if hasattr(intent_result, 'all_intents') and intent_result.all_intents:
-                                alternative_intents = [
-                                    (i.name, c) for i, c in intent_result.all_intents[:3]
-                                ]
-                            
-                            recovery_response = self.recovery.handle_low_confidence(
-                                query=query,
-                                confidence=intent_result.confidence,
-                                detected_intent=intent_name,
-                                alternative_intents=alternative_intents,
-                            )
+                            # For high confidence + needs_clarification (out-of-scope queries),
+                            # create clarification directly instead of using handle_low_confidence
+                            if intent_result.confidence >= 0.5 and intent_result.needs_clarification:
+                                # This is likely an out-of-scope or vague query where LLM is certain
+                                # it doesn't know what to do
+                                recovery_response = self.recovery._create_clarification_response(query)
+                            else:
+                                alternative_intents = []
+                                if hasattr(intent_result, 'all_intents') and intent_result.all_intents:
+                                    alternative_intents = [
+                                        (i.name, c) for i, c in intent_result.all_intents[:3]
+                                    ]
+                                
+                                recovery_response = self.recovery.handle_low_confidence(
+                                    query=query,
+                                    confidence=intent_result.confidence,
+                                    detected_intent=intent_name,
+                                    alternative_intents=alternative_intents,
+                                )
                             
                             return AgentResponse(
                                 success=True,
@@ -980,7 +999,7 @@ class UnifiedAgent:
                             # Fallback to simple clarification
                             return AgentResponse(
                                 success=True,
-                                message=intent_result.clarification_prompt or "Could you please clarify your request?",
+                                message="Could you please clarify your request?",
                                 response_type=ResponseType.QUESTION,
                                 task_type=task_type,
                             )
@@ -1002,8 +1021,21 @@ class UnifiedAgent:
                     span.add_event("intent_fallback", {"error": str(e)})
                     logger.warning(f"IntentParser failed, falling back to HybridParser: {e}")
             
-            # Fallback to legacy hybrid parser if ensemble didn't work
-            if not detected_tool and self.query_parser:
+            # DEPRECATED: HybridParser fallback
+            # The UnifiedIntentParser with LLM arbiter is now the primary system.
+            # HybridParser was a legacy system that duplicated functionality.
+            # We disable it to avoid conflicting decisions.
+            # 
+            # If UnifiedIntentParser fails completely (exception), we still want
+            # some fallback, but only for catastrophic failures.
+            use_hybrid_fallback = (
+                not detected_tool and 
+                self.query_parser and 
+                intent_result is None  # Only if UnifiedIntentParser completely failed
+            )
+            
+            if use_hybrid_fallback:
+                logger.warning("Using legacy HybridParser fallback - UnifiedIntentParser failed")
                 try:
                     with tracer.start_span("hybrid_parse") as parse_span:
                         parse_result = self.query_parser.parse(query)

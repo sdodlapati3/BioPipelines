@@ -5,10 +5,12 @@ Base Types for Agent Tools
 Core types and enums used across all tool modules.
 """
 
+from __future__ import annotations  # Enable modern type hints for Python 3.9
+
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 

@@ -71,6 +71,8 @@ class ArbiterResult:
     method: str  # "unanimous", "llm_arbiter", "majority_vote", "fallback"
     votes: List[ParserVote] = field(default_factory=list)
     llm_invoked: bool = False
+    needs_clarification: bool = False
+    clarification_prompt: str = ""
     
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -80,6 +82,8 @@ class ArbiterResult:
             "method": self.method,
             "votes": [(v.parser_name, v.intent, v.confidence) for v in self.votes],
             "llm_invoked": self.llm_invoked,
+            "needs_clarification": self.needs_clarification,
+            "clarification_prompt": self.clarification_prompt,
         }
 
 
@@ -148,9 +152,13 @@ INSTRUCTIONS:
 3. Look for implicit intent (e.g., "lung cancer RNA data" implies DATA_SEARCH)
 4. If the user says "not X, but Y" - focus on Y
 5. Consider the context and entities mentioned
+6. If the query is too vague to determine intent (e.g., "analyze this", "run it"), return:
+   - intent: "META_UNKNOWN"
+   - needs_clarification: true
+   - clarification_prompt: A helpful question asking what they want
 
 Respond with ONLY valid JSON:
-{{"intent": "INTENT_NAME", "confidence": 0.0-1.0, "reasoning": "brief explanation"}}"""
+{{"intent": "INTENT_NAME", "confidence": 0.0-1.0, "reasoning": "brief explanation", "needs_clarification": false, "clarification_prompt": null}}"""
 
     # Available intents (subset for prompt - avoid overwhelming LLM)
     INTENT_DESCRIPTIONS = {
@@ -411,6 +419,14 @@ Respond with ONLY valid JSON:
             intent = data.get("intent", "META_UNKNOWN")
             confidence = float(data.get("confidence", 0.8))
             reasoning = data.get("reasoning", "LLM arbitration")
+            needs_clarification = data.get("needs_clarification", False)
+            clarification_prompt = data.get("clarification_prompt", "")
+            
+            # If LLM says META_UNKNOWN or very low confidence, needs clarification
+            if intent == "META_UNKNOWN" or confidence < 0.4:
+                needs_clarification = True
+                if not clarification_prompt:
+                    clarification_prompt = "I'm not sure what you'd like me to do. Could you please be more specific?"
             
             return ArbiterResult(
                 final_intent=intent,
@@ -418,6 +434,8 @@ Respond with ONLY valid JSON:
                 reasoning=reasoning,
                 method="llm_arbiter",
                 votes=votes,
+                needs_clarification=needs_clarification,
+                clarification_prompt=clarification_prompt,
                 llm_invoked=True,
             )
             

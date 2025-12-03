@@ -111,6 +111,8 @@ class UnifiedParseResult:
             llm_invoked=arbiter_result.llm_invoked,
             reasoning=arbiter_result.reasoning,
             method=arbiter_result.method,
+            needs_clarification=arbiter_result.needs_clarification,
+            clarification_prompt=arbiter_result.clarification_prompt,
         )
     
     @classmethod
@@ -847,13 +849,30 @@ class UnifiedIntentParser:
             
             # Step 3: Determine if we need LLM arbiter
             # Use arbiter if:
+            # - Query is too vague/ambiguous (checked FIRST, overrides confidence)
             # - Ensemble confidence is low (<0.5)
             # - Ensemble method is not "unanimous" (close race)
             # - Cross-category disagreement between pattern and semantic
+            # - Pattern returns META_UNKNOWN but semantic has a confident match
             needs_arbiter = False
+            pattern_failed = (
+                pattern_result is None or 
+                pattern_result.primary_intent == IntentType.META_UNKNOWN or
+                pattern_result.confidence < 0.1
+            )
             
-            if ensemble_conf < 0.5:
+            # CRITICAL: Check for vagueness FIRST - even high-confidence matches
+            # on vague queries like "run it" should trigger clarification
+            if self._is_too_vague(query, winner_intent, ensemble_conf):
+                logger.debug(f"Query too vague for safe execution: '{query}'")
+                needs_arbiter = True
+            elif ensemble_conf < 0.5:
                 logger.debug(f"Low ensemble confidence: {ensemble_conf:.3f}")
+                needs_arbiter = True
+            elif pattern_failed and semantic_result and semantic_result[1] > 0.5:
+                # CRITICAL FIX: Pattern failed but semantic is confident
+                # This can lead to wrong decisions - let LLM verify
+                logger.debug(f"Pattern failed but semantic confident: {semantic_result}")
                 needs_arbiter = True
             elif vote_method != "unanimous":
                 # Check if top 2 are from different categories
@@ -866,6 +885,10 @@ class UnifiedIntentParser:
                             f"Close cross-category race: {sorted_scores[0]} vs {sorted_scores[1]}"
                         )
                         needs_arbiter = True
+            
+            # Check for vague/ambiguous queries that need clarification
+            if not needs_arbiter:
+                needs_arbiter = self._is_too_vague(query, winner_intent, ensemble_conf)
             
             # Also check for complexity indicators
             if not needs_arbiter:
@@ -946,6 +969,87 @@ class UnifiedIntentParser:
             if any(word in query_lower for word in words):
                 logger.debug(f"Complexity indicator ({indicator_type}) detected")
                 return True
+        
+        return False
+    
+    def _is_too_vague(self, query: str, winner_intent: str, confidence: float) -> bool:
+        """
+        Check if query is too vague to safely execute a tool.
+        
+        Vague queries should trigger LLM arbitration which can return
+        META_UNKNOWN with needs_clarification=True.
+        
+        Examples of vague queries:
+        - "analyze this" (what? where? - no clear action)
+        - "do the thing" (what thing?)
+        - "process" (process what?)
+        
+        NOT vague (valid contextual commands):
+        - "run it" - contextual reference to last workflow/job
+        - "submit it" - same
+        - "show it" - show last result
+        - "cancel it" - cancel running job
+        """
+        query_lower = query.lower().strip()
+        words = query_lower.split()
+        
+        # Very short queries (1-2 words) are often vague
+        if len(words) <= 2:
+            # Clear short commands that are NOT vague
+            clear_short_commands = {
+                "help", "status", "stop", "cancel", "yes", "no", "ok",
+                "list jobs", "show help", "scan data", "list workflows",
+            }
+            
+            # Contextual commands with pronouns - these are VALID if we have context
+            # "run it", "submit it", "show it", "cancel it", "check it"
+            contextual_action_commands = {
+                "run it", "run this", "execute it", "submit it", "start it",
+                "show it", "show this", "display it", "view it",
+                "cancel it", "stop it", "kill it", "abort it",
+                "check it", "check status", "check this",
+                "delete it", "remove it",
+                "download it", "save it",
+            }
+            
+            if query_lower in clear_short_commands or query_lower in contextual_action_commands:
+                return False  # Not vague - valid command
+            
+            # Check if it matches contextual action pattern (verb + pronoun)
+            action_verbs = {"run", "execute", "submit", "start", "show", "display", 
+                           "cancel", "stop", "check", "delete", "download", "save"}
+            pronouns = {"it", "this", "that"}
+            if len(words) == 2 and words[0] in action_verbs and words[1] in pronouns:
+                logger.debug(f"Contextual command detected: '{query}'")
+                return False  # Valid contextual command
+            
+            # Everything else that's 1-2 words and not in our whitelist is vague
+            logger.debug(f"Query too short/vague: '{query}' ({len(words)} words)")
+            return True
+        
+        # Check for vague/ambiguous words without sufficient context
+        vague_patterns = [
+            "this", "that", "it", "them", "those", "the thing",
+            "something", "anything", "whatever",
+        ]
+        
+        has_vague_reference = any(vague in query_lower for vague in vague_patterns)
+        lacks_specifics = not any(
+            term in query_lower for term in [
+                # Data terms
+                "data", "file", "folder", "sample", "fastq", "bam",
+                # Workflow terms  
+                "rna", "chip", "atac", "methylation", "workflow", "pipeline",
+                # Job terms
+                "job", "slurm", "queue",
+                # Specific actions
+                "download", "search", "create", "generate", "scan",
+            ]
+        )
+        
+        if has_vague_reference and lacks_specifics:
+            logger.debug(f"Vague reference without specifics: '{query}'")
+            return True
         
         return False
     
