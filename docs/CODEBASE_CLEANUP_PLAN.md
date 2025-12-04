@@ -239,16 +239,109 @@ grep -r "web/archive" . --include="*.py"
 
 ---
 
+## Task 8: Parser Architecture Redundancy (CRITICAL)
+
+### Problem
+**7+ parser classes exist with significant overlap**, causing:
+1. Confusion about which parser is authoritative
+2. Complex fallback chains that obscure failures
+3. Inconsistent pattern coverage (some intents only in some parsers)
+4. Log messages like "Parallel parsing failed", "Parse error", "fallback to HybridParser"
+
+### Current Parser Inventory
+
+| File | Class | Lines | Purpose | Status |
+|------|-------|-------|---------|--------|
+| `core/query_parser.py:284` | IntentParser | ~200 | Legacy LLM-based | ⚠️ Legacy |
+| `core/query_parser_ensemble.py:439` | EnsembleIntentParser | ~300 | Legacy ensemble | ⚠️ Legacy |
+| `core/model_service_manager.py:452` | AdaptiveIntentParser | ~150 | Adaptive routing | ⚠️ Legacy |
+| `agents/intent/parser.py:1195` | IntentParser | ~800 | Pattern-based | ✅ Active |
+| `agents/intent/semantic.py:978` | HybridQueryParser | ~400 | Hybrid approach | ⚠️ Fallback Only |
+| `agents/intent/unified_parser.py:136` | UnifiedIntentParser | ~1100 | **Main orchestrator** | ✅ **Recommended** |
+| `agents/intent/arbiter.py:590` | SimpleArbiterParser | ~200 | Internal eval | 🔧 Internal |
+| `agents/intent/learning.py:802` | LearningHybridParser | ~300 | Experimental | 🧪 Experimental |
+| `data/discovery/query_parser.py:77` | QueryParser | ~200 | Data domain | ✅ Domain-specific |
+
+### Current Integration Flow
+
+```
+Frontend (web/app.py)
+    ↓ bp.chat() / bp.chat_stream()
+BioPipelines Facade (facade.py)
+    ↓ chat_agent.process_message()
+ChatAgent (intent/chat_agent.py)
+    ↓ _is_tool_query() check → _execute_via_unified_agent_sync()
+UnifiedAgent (unified_agent.py)
+    ↓ process_query()
+    ↓ self.intent_parser.parse() → UnifiedIntentParser [PRIMARY]
+    ↓ (if None) → self.query_parser.parse() → HybridQueryParser [FALLBACK]
+```
+
+### ✅ Verification Results
+- [x] `UnifiedIntentParser` is the PRIMARY parser used by `UnifiedAgent`
+- [x] `HybridQueryParser` is only used as FALLBACK when primary returns `None`
+- [x] `IntentParser` (agents/intent/parser.py) is used INTERNALLY by `UnifiedIntentParser`
+- [x] Legacy `core/*.py` parsers are NOT imported by current agent system
+- [x] `ChatAgent` routes tool queries to `UnifiedAgent` (correct path)
+- [x] Parse failures cascade through multiple fallback layers, making debugging hard
+
+### Root Cause of Recent Failure
+The query "show me details of methylation data" failed because:
+1. `DATA_DESCRIBE` intent had NO regex patterns in `IntentParser`
+2. `UnifiedIntentParser` couldn't match any intent
+3. Fallback to `HybridQueryParser` produced confusing result
+4. Query was routed to ENCODE API instead of `describe_files` tool
+
+### Proposed Consolidation Plan
+
+**Phase 1: Pattern Coverage (Immediate)**
+- ✅ Add missing `DATA_DESCRIBE` patterns to `parser.py` [DONE]
+- ✅ Add `DESCRIBE_FILES_PATTERNS` to `data_discovery.py` [DONE]
+- [ ] Audit ALL `IntentType` enums vs pattern coverage
+- [ ] Add patterns for any missing intents
+
+**Phase 2: Deprecate Legacy Parsers (Next Release)**
+- [ ] Add deprecation warnings to `core/query_parser.py`
+- [ ] Add deprecation warnings to `core/query_parser_ensemble.py`
+- [ ] Add deprecation warnings to `core/model_service_manager.py` AdaptiveIntentParser
+- [ ] Update any imports still using legacy parsers
+
+**Phase 3: Simplify Fallback Chain (Future)**
+- [ ] Remove `HybridQueryParser` fallback from `UnifiedAgent`
+- [ ] Make `UnifiedIntentParser` the ONLY parser
+- [ ] Improve `UnifiedIntentParser` error handling instead of fallbacks
+- [ ] Add better logging for parse failures
+
+**Phase 4: Remove Legacy Code (Major Release)**
+- [ ] Delete `core/query_parser.py`
+- [ ] Delete `core/query_parser_ensemble.py`  
+- [ ] Remove AdaptiveIntentParser from `core/model_service_manager.py`
+- [ ] Delete `HybridQueryParser` from `semantic.py`
+
+### Architecture Target State
+
+```
+Frontend → BioPipelines → ChatAgent → UnifiedAgent
+                                          ↓
+                                    UnifiedIntentParser (ONLY parser)
+                                          ↓
+                              [Uses IntentParser patterns internally]
+                                          ↓
+                                    Tool Execution
+```
+
+---
+
 ## Appendix: Files to Review
 
 ### Definitely Remove (After Verification)
-- `web/archive/api.py`
-- `web/archive/app.py`
-- `web/archive/result_browser.py`
-- `web/archive/unified_workspace.py`
+- ✅ `web/archive/api.py` [REMOVED]
+- ✅ `web/archive/app.py` [REMOVED]
+- ✅ `web/archive/result_browser.py` [REMOVED]
+- ✅ `web/archive/unified_workspace.py` [REMOVED]
 
 ### Possibly Rename
-- `agents/intent/arbiter.py` class `UnifiedIntentParser` → `ArbiterIntentParser`
+- ✅ `agents/intent/arbiter.py` class `UnifiedIntentParser` → `SimpleArbiterParser` [DONE]
 
 ### Keep But Document
 - `llm/*.py` legacy adapters
@@ -258,3 +351,8 @@ grep -r "web/archive" . --include="*.py"
 
 ### Keep But Add Warnings
 - `agents/tools/base.py` TOOL_PATTERNS
+
+### Parser Files - Future Cleanup
+- `core/query_parser.py` - Add deprecation, then delete
+- `core/query_parser_ensemble.py` - Add deprecation, then delete
+- `agents/intent/semantic.py` HybridQueryParser - Remove after consolidation

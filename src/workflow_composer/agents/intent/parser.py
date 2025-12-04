@@ -361,6 +361,28 @@ INTENT_PATTERNS: List[Tuple[str, IntentType, Dict[str, int]]] = [
      IntentType.DATA_SCAN, {"query": 1}),
     
     # =========================================================================
+    # DATA DESCRIBE - Show details about local data (must come before DATABASE SEARCH)
+    # =========================================================================
+    # "show me details of methylation data" / "show details of the RNA-seq files"
+    (r"(?:show|give)\s+(?:me\s+)?(?:the\s+)?details?\s+(?:of|for|about)\s+(?:the\s+)?(?:my\s+)?(.+?)(?:\s+data|\s+files?|\s+samples?)?$",
+     IntentType.DATA_DESCRIBE, {"data_type": 1}),
+    # "describe methylation data" / "describe my RNA-seq files"
+    (r"describe\s+(?:the\s+)?(?:my\s+)?(.+?)(?:\s+data|\s+files?|\s+samples?)?$",
+     IntentType.DATA_DESCRIBE, {"data_type": 1}),
+    # "what's in the methylation data" / "what is in the ChIP-seq files"
+    (r"what(?:'s|\s+is)\s+in\s+(?:the\s+)?(?:my\s+)?(.+?)(?:\s+data|\s+files?|\s+samples?)?$",
+     IntentType.DATA_DESCRIBE, {"data_type": 1}),
+    # "tell me about the methylation data" / "info about RNA-seq"
+    (r"(?:tell\s+me\s+about|info(?:rmation)?\s+(?:about|on)|more\s+(?:info|details?)\s+(?:on|about))\s+(?:the\s+)?(?:my\s+)?(.+?)(?:\s+data|\s+files?)?$",
+     IntentType.DATA_DESCRIBE, {"data_type": 1}),
+    # "get details for GSE12345" / "show info for ENCSR000ABC"
+    (r"(?:get|show|display)\s+(?:the\s+)?(?:details?|info(?:rmation)?|metadata)\s+(?:for|of|about)\s+([A-Z]+\d+[A-Z0-9]*)",
+     IntentType.DATA_DESCRIBE, {"dataset_id": 1}),
+    # "inspect the data" / "examine my files"
+    (r"(?:inspect|examine|analyze|summarize)\s+(?:the\s+)?(?:my\s+)?(?:local\s+)?(.+?)(?:\s+data|\s+files?)?$",
+     IntentType.DATA_DESCRIBE, {"data_type": 1}),
+    
+    # =========================================================================
     # DATABASE SEARCH
     # =========================================================================
     # Generic "Search for X" - should match before more specific patterns

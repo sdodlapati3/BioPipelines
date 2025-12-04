@@ -1226,6 +1226,11 @@ DESCRIBE_FILES_PATTERNS = [
     r"(?:describe|inspect|examine|analyze|check)\s+(?:the\s+)?(?:files?|data)\s+(?:in|at|from)\s+['\"]?([\/~][^\s'\"\?]+)['\"]?",
     r"(?:give me\s+)?(?:details?|info|information|summary|stats|statistics|metadata)\s+(?:of|about|for)\s+(?:the\s+)?(?:files?|data)\s*(?:in|at|from)?\s*['\"]?([\/~][^\s'\"\?]+)?['\"]?",
     r"(?:what(?:'s| is| are))\s+(?:in\s+)?(?:these|the|those)\s+(?:files?|data\s+files?)",
+    # New patterns for data-type specific queries
+    r"(?:show|give)\s+(?:me\s+)?(?:the\s+)?details?\s+(?:of|for|about)\s+(?:the\s+)?(?:my\s+)?(methylation|rna[_-]?seq|chip[_-]?seq|atac[_-]?seq|hi[_-]?c|wgs|wes)(?:\s+data|\s+files?)?",
+    r"describe\s+(?:the\s+)?(?:my\s+)?(methylation|rna[_-]?seq|chip[_-]?seq|atac[_-]?seq|hi[_-]?c|wgs|wes)(?:\s+data|\s+files?)?",
+    r"(?:tell\s+me\s+about|info\s+(?:about|on))\s+(?:the\s+)?(?:my\s+)?(methylation|rna[_-]?seq|chip[_-]?seq|atac[_-]?seq|hi[_-]?c)(?:\s+data)?",
+    r"(?:more\s+)?(?:info|details?)\s+(?:on|about)\s+(?:the\s+)?(methylation|rna[_-]?seq|chip[_-]?seq|atac[_-]?seq)(?:\s+data)?",
 ]
 
 
