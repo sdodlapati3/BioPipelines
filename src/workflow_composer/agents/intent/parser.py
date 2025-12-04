@@ -110,6 +110,7 @@ class IntentType(Enum):
     META_UNDO = auto()            # Undo last action
     META_GREETING = auto()        # Hello/greeting
     META_THANKS = auto()          # Thank you
+    META_FAREWELL = auto()        # Goodbye/farewell
     META_UNKNOWN = auto()         # Cannot determine intent
     
     # Context-Aware Intents
@@ -268,7 +269,30 @@ INTENT_PATTERNS: List[Tuple[str, IntentType, Dict[str, int]]] = [
     
     # =========================================================================
     # EDUCATION - must come before workflow creation to catch "how does X work"
+    # Question words should trigger EDUCATION, not action intents
     # =========================================================================
+    # EDUCATION_HELP patterns - "How do I X?" is asking for help, not action
+    (r"how\s+(?:do|can|should)\s+i\s+(?:create|make|build|generate|run|start)\s+(?:a\s+)?(.+?)(?:\?|$)",
+     IntentType.EDUCATION_HELP, {"topic": 1}),
+    (r"how\s+(?:do|can|should)\s+i\s+(.+?)(?:\?|$)",
+     IntentType.EDUCATION_HELP, {"topic": 1}),
+    (r"how\s+(?:do|can|should)\s+(?:we|you)\s+(.+?)(?:\?|$)",
+     IntentType.EDUCATION_HELP, {"topic": 1}),
+    # "can you show me how to X" / "help me learn how to X"
+    (r"(?:can\s+you\s+)?(?:show|teach|explain)\s+(?:me\s+)?how\s+to\s+(.+?)(?:\?|$)",
+     IntentType.EDUCATION_HELP, {"topic": 1}),
+    # "what are the best practices for X" - asking about practices, not doing X
+    (r"what\s+(?:are|is)\s+(?:the\s+)?(?:best\s+)?(?:practice|way|approach|method)s?\s+(?:for|to)\s+(.+?)(?:\?|$)",
+     IntentType.EDUCATION_EXPLAIN, {"topic": 1}),
+    # "what is X" / "what are X" - definitional questions
+    (r"what\s+(?:is|are)\s+(?:a\s+|an\s+)?(.+?)(?:\?|$)",
+     IntentType.EDUCATION_EXPLAIN, {"concept": 1}),
+    # "can you explain X" / "explain X to me"
+    (r"(?:can\s+you\s+)?explain\s+(?:what\s+)?(.+?)(?:\s+to\s+me)?(?:\?|$)",
+     IntentType.EDUCATION_EXPLAIN, {"concept": 1}),
+    # "tell me about X"
+    (r"tell\s+me\s+(?:about|more\s+about)\s+(.+?)(?:\?|$)",
+     IntentType.EDUCATION_EXPLAIN, {"topic": 1}),
     # Tool recommendation questions - must capture full topic after "for"
     (r"what\s+tools?\s+(?:should|would|do)\s+(?:i|we|you)?\s*(?:use|recommend|need|suggest)\s+for\s+(.+?)(?:\?|$)",
      IntentType.EDUCATION_EXPLAIN, {"topic": 1}),
@@ -363,6 +387,16 @@ INTENT_PATTERNS: List[Tuple[str, IntentType, Dict[str, int]]] = [
     # =========================================================================
     # DATA DESCRIBE - Show details about local data (must come before DATABASE SEARCH)
     # =========================================================================
+    # "how many samples/files are there" - counting is descriptive NOT scanning
+    (r"how\s+many\s+(?:samples?|files?|datasets?)(?:\s+(?:are|do)\s+(?:there|we\s+have))?",
+     IntentType.DATA_DESCRIBE, {}),
+    # "count the number of X files" / "count the FASTQ files"
+    (r"count\s+(?:the\s+)?(?:number\s+of\s+)?(?:\w+\s+)?(?:samples?|files?|datasets?|reads?)",
+     IntentType.DATA_DESCRIBE, {}),
+    (r"(?:number\s+of|total)\s+(?:the\s+)?(?:\w+\s+)?(?:samples?|files?|datasets?|reads?)",
+     IntentType.DATA_DESCRIBE, {}),
+    (r"what(?:'s|\s+is)\s+(?:the\s+)?(?:total\s+)?(?:count|number|size)(?:\s+of\s+(?:the\s+)?(?:data|files?|samples?))?",
+     IntentType.DATA_DESCRIBE, {}),
     # "show me details of methylation data" / "show details of the RNA-seq files"
     (r"(?:show|give)\s+(?:me\s+)?(?:the\s+)?details?\s+(?:of|for|about)\s+(?:the\s+)?(?:my\s+)?(.+?)(?:\s+data|\s+files?|\s+samples?)?$",
      IntentType.DATA_DESCRIBE, {"data_type": 1}),
@@ -381,6 +415,22 @@ INTENT_PATTERNS: List[Tuple[str, IntentType, Dict[str, int]]] = [
     # "inspect the data" / "examine my files"
     (r"(?:inspect|examine|analyze|summarize)\s+(?:the\s+)?(?:my\s+)?(?:local\s+)?(.+?)(?:\s+data|\s+files?)?$",
      IntentType.DATA_DESCRIBE, {"data_type": 1}),
+    
+    # =========================================================================
+    # REFERENCE_DOWNLOAD - Download reference genomes/indices (BEFORE DATA_DOWNLOAD)
+    # =========================================================================
+    # "download the reference genome" / "get the human reference genome"
+    (r"(?:download|get|fetch)\s+(?:the\s+)?(?:(?:human|mouse|rat|zebrafish)\s+)?reference\s+(?:genome|annotation|index)",
+     IntentType.REFERENCE_DOWNLOAD, {}),
+    # "download reference genome for me"
+    (r"(?:download|get|fetch)\s+(?:the\s+)?reference\s+genome(?:\s+for\s+(?:me|us))?",
+     IntentType.REFERENCE_DOWNLOAD, {}),
+    # "get hg38" / "download mm10" / "fetch GRCh38"
+    (r"(?:download|get|fetch)\s+(?:the\s+)?(hg38|hg19|mm10|mm9|GRCh38|GRCh37|GRCm39|GRCm38)(?:\s+(?:genome|reference|index))?",
+     IntentType.REFERENCE_DOWNLOAD, {"reference": 1}),
+    # "download the human genome"
+    (r"(?:download|get|fetch)\s+(?:the\s+)?(human|mouse|rat|zebrafish)\s+(?:genome|reference)",
+     IntentType.REFERENCE_DOWNLOAD, {"organism": 1}),
     
     # =========================================================================
     # DATABASE SEARCH
@@ -707,14 +757,31 @@ INTENT_PATTERNS: List[Tuple[str, IntentType, Dict[str, int]]] = [
      IntentType.JOB_WATCH, {"job_id": 1}),
     (r"monitor\s+(?:my\s+)?(?:the\s+)?(?:job|run|pipeline|analysis|workflow)",
      IntentType.JOB_WATCH, {}),
+    # Watch with notification intent
+    (r"(?:watch|monitor)\s+(?:job\s+)?(\d+)\s+(?:and\s+)?(?:notify|alert|tell)\s+me",
+     IntentType.JOB_WATCH, {"job_id": 1}),
+    (r"(?:notify|alert|tell)\s+me\s+when\s+(?:job\s+)?(\d+)\s+(?:is\s+)?(?:done|finished|complete)",
+     IntentType.JOB_WATCH, {"job_id": 1}),
+    (r"(?:watch|monitor)\s+(?:until|till)\s+(?:completion|done|finished)",
+     IntentType.JOB_WATCH, {}),
     
-    # Resubmit/Retry
+    # Resubmit/Retry - expanded patterns
     (r"(?:resubmit|retry|rerun|restart)\s+(?:the\s+)?(?:failed\s+)?(?:job|run|analysis)(?:\s+(\d+))?",
      IntentType.JOB_RESUBMIT, {"job_id": 1}),
     (r"(?:try\s+)?(?:the\s+)?(?:job|run)(?:\s+(\d+))?\s+again",
      IntentType.JOB_RESUBMIT, {"job_id": 1}),
     (r"(?:resubmit|retry|rerun)\s+(?:failed\s+)?(?:job|run)",
      IntentType.JOB_RESUBMIT, {}),
+    # "fix it and resubmit" / "resubmit with more memory"
+    (r"(?:fix\s+(?:it|this)\s+(?:and\s+)?)?(?:resubmit|retry|rerun)(?:\s+(?:it|this))?",
+     IntentType.JOB_RESUBMIT, {}),
+    (r"(?:resubmit|retry|rerun)\s+(?:it\s+)?with\s+(?:more\s+)?(.+)",
+     IntentType.JOB_RESUBMIT, {"resource": 1}),
+    (r"it\s+failed\.?\s+(?:resubmit|retry|rerun)(?:\s+(?:it|with)\s+(.+))?",
+     IntentType.JOB_RESUBMIT, {"resource": 1}),
+    # Run again patterns
+    (r"run\s+(?:it\s+)?again(?:\s+with\s+(.+))?",
+     IntentType.JOB_RESUBMIT, {"resource": 1}),
     
     # Diagnostics
     (r"(?:diagnose|debug|troubleshoot|analyze)\s+(?:this\s+)?(?:error|failure|problem)",
@@ -812,9 +879,18 @@ INTENT_PATTERNS: List[Tuple[str, IntentType, Dict[str, int]]] = [
     # "use X instead" / "switch to X"
     (r"(?:use|switch\s+to)\s+(\w+[-\w]*)\s+instead",
      IntentType.WORKFLOW_MODIFY, {"new_tool": 1}),
-    # "add X step" / "add X to the workflow"  
-    (r"(?:also\s+)?add\s+(.+?)(?:\s+to\s+(?:the\s+)?(?:workflow|pipeline))?$",
+    # "add X step" / "add X to the workflow" / "add a quality control step at the beginning"  
+    (r"(?:also\s+)?add\s+(?:a\s+)?(.+?)(?:\s+step)?(?:\s+(?:to|at)\s+(?:the\s+)?(?:workflow|pipeline|beginning|end))?$",
      IntentType.WORKFLOW_MODIFY, {"add_step": 1}),
+    # "insert X step before/after Y"
+    (r"insert\s+(?:a\s+)?(.+?)(?:\s+step)?(?:\s+(?:before|after)\s+(.+))?",
+     IntentType.WORKFLOW_MODIFY, {"add_step": 1, "position": 2}),
+    # "remove X step" / "delete the X step"
+    (r"(?:remove|delete)\s+(?:the\s+)?(.+?)(?:\s+step)?(?:\s+from\s+(?:the\s+)?(?:workflow|pipeline))?",
+     IntentType.WORKFLOW_MODIFY, {"remove_step": 1}),
+    # "replace X with Y" / "substitute X for Y"
+    (r"(?:replace|substitute)\s+(.+?)\s+(?:with|for)\s+(.+)",
+     IntentType.WORKFLOW_MODIFY, {"old_step": 1, "new_step": 2}),
     # "what aligner/tool did you use" - workflow describe
     (r"what\s+(?:aligner|tool|version|step)\s+(?:did\s+you|are\s+you)\s+(?:use|using)",
      IntentType.WORKFLOW_DESCRIBE, {}),
@@ -856,10 +932,14 @@ INTENT_PATTERNS: List[Tuple[str, IntentType, Dict[str, int]]] = [
     # "compare the results" / "compare datasets"
     (r"compare\s+(?:the\s+)?(?:quality\s+of\s+)?(?:results?|datasets?|data)",
      IntentType.DATA_COMPARE, {}),
-    # "filter to only" / "filter datasets"
+    # "filter to only" / "filter datasets" / "filter these results to brain"
     (r"filter\s+(?:to\s+)?(?:only\s+)?(?:datasets?|results?|those)",
      IntentType.DATA_FILTER, {}),
+    (r"filter\s+(?:the|these)?\s*(?:results?|data|datasets?|samples?)",
+     IntentType.DATA_FILTER, {}),
     (r"(?:only\s+)?(?:show|keep)\s+(?:datasets?|results?)\s+(?:with|where|that)",
+     IntentType.DATA_FILTER, {}),
+    (r"(?:select|subset)\s+(?:only\s+)?(?:the\s+)?(?:samples?|data|results?)",
      IntentType.DATA_FILTER, {}),
     # "verify the download" / "check the data"
     (r"(?:verify|validate|check)\s+(?:the\s+)?(?:downloads?|data)(?:\s+(?:completed|finished|successfully))?",
@@ -972,6 +1052,15 @@ INTENT_PATTERNS: List[Tuple[str, IntentType, Dict[str, int]]] = [
      IntentType.META_GREETING, {}),
     (r"^(?:thanks?|thank\s+you|thx|ty)!?$",
      IntentType.META_THANKS, {}),
+    # META_FAREWELL patterns
+    (r"^(?:bye|goodbye|see\s+ya|later|cya|farewell)!?$",
+     IntentType.META_FAREWELL, {}),
+    (r"(?:thanks?|thank\s+you),?\s+(?:bye|goodbye|that'?s?\s+all|i'?m?\s+done)",
+     IntentType.META_FAREWELL, {}),
+    (r"(?:that'?s?|this\s+is)\s+(?:all|everything|it)(?:\s+i\s+need)?!?$",
+     IntentType.META_FAREWELL, {}),
+    (r"(?:i'?m?|we(?:'re)?)\s+(?:done|finished|all\s+set)(?:\s+(?:for\s+now|here))?!?$",
+     IntentType.META_FAREWELL, {}),
     (r"(?:undo|go\s+back|revert)\s+(?:that|last|previous)",
      IntentType.META_UNDO, {}),
     
@@ -1026,7 +1115,7 @@ class EntityPatterns:
     ORGANISMS = {
         "human": ["human", "homo sapiens", "hs", "hg38", "hg19", "grch38", "grch37"],
         "mouse": ["mouse", "mus musculus", "mm", "mm10", "mm9", "grcm39", "grcm38"],
-        "rat": ["rat", "rattus norvegicus", "rn", "rn6", "rn7"],
+        "rat": ["rat", "rattus norvegicus", "rn6", "rn7"],  # Removed 'rn' to avoid matching 'RNA' -> 'RN'
         "zebrafish": ["zebrafish", "danio rerio", "dr", "grcz11"],
         "fly": ["fly", "drosophila", "drosophila melanogaster", "dm6"],
         "worm": ["worm", "c elegans", "caenorhabditis elegans", "ce11"],

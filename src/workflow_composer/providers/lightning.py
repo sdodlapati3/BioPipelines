@@ -6,6 +6,10 @@ FREE tier with 30M tokens/month.
 Supports multiple models through unified API.
 
 Uses OpenAI-compatible endpoint for reliability.
+
+⚠️ STATUS (Dec 2025): Lightning.ai API returns empty responses (HTTP 200, 0 bytes).
+   This provider is disabled in registry.py until the issue is resolved.
+   Use alternative providers (Gemini, Cerebras, Groq, OpenRouter) instead.
 """
 
 import os
@@ -22,8 +26,10 @@ class LightningProvider(BaseProvider):
     """
     Provider for Lightning.ai API.
     
+    ⚠️ CURRENTLY BROKEN: API returns empty responses (HTTP 200, 0 bytes) for all models.
+       Disabled in registry.py until fixed.
+    
     Lightning.ai offers 30M FREE tokens/month with access to many models.
-    This is the recommended default provider for development.
     
     Uses OpenAI-compatible API endpoint for reliability.
     
@@ -75,20 +81,42 @@ class LightningProvider(BaseProvider):
             self._client = None
     
     def is_available(self) -> bool:
-        """Check if Lightning.ai is configured and has credits."""
+        """Check if Lightning.ai is configured and working.
+        
+        NOTE: As of Dec 2025, Lightning.ai API returns empty responses.
+        This method will return False to prevent usage.
+        """
         if not self.api_key:
             return False
         
-        # Check if the models endpoint is reachable
+        # Test with a real request to check if API is working
         try:
             import requests
-            resp = requests.get(
-                f"{self.base_url}/models",
-                headers={"Authorization": f"Bearer {self.api_key}"},
-                timeout=5,
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            }
+            payload = {
+                "model": self.default_model,
+                "messages": [{"role": "user", "content": "test"}],
+                "max_tokens": 5,
+            }
+            resp = requests.post(
+                f"{self.base_url}/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=10,
             )
-            return resp.status_code == 200
-        except Exception:
+            # Check if response has actual content (not empty)
+            if resp.status_code == 200 and len(resp.content) == 0:
+                logger.warning(
+                    "Lightning.ai API returns empty responses (HTTP 200, 0 bytes). "
+                    "Provider is non-functional. Using fallback providers instead."
+                )
+                return False
+            return resp.status_code == 200 and len(resp.content) > 0
+        except Exception as e:
+            logger.debug(f"Lightning.ai availability check failed: {e}")
             return False
     
     def complete(

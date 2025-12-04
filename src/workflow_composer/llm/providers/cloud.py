@@ -131,9 +131,39 @@ CLOUD_MODELS = {
         cost_per_1k_input=0.00125,
         cost_per_1k_output=0.005,
     ),
+    
+    # Lightning.ai open source models (very cheap!)
+    "llama-3.3-70b": CloudModel(
+        id="lightning-ai/llama-3.3-70b",
+        name="Llama 3.3 70B",
+        provider="lightning-ai",
+        capabilities=[ModelCapability.CODING, ModelCapability.GENERAL, ModelCapability.CHAT],
+        context_length=128000,
+        cost_per_1k_input=0.000075,  # $0.075 per million tokens
+        cost_per_1k_output=0.000075,
+    ),
+    "deepseek-v3": CloudModel(
+        id="lightning-ai/DeepSeek-V3.1",
+        name="DeepSeek V3.1",
+        provider="lightning-ai",
+        capabilities=[ModelCapability.CODING, ModelCapability.GENERAL],
+        context_length=128000,
+        cost_per_1k_input=0.00008,
+        cost_per_1k_output=0.000275,
+    ),
+    "gpt-oss-20b": CloudModel(
+        id="lightning-ai/gpt-oss-20b",
+        name="GPT-OSS 20B",
+        provider="lightning-ai",
+        capabilities=[ModelCapability.GENERAL, ModelCapability.CHAT],
+        context_length=32000,
+        cost_per_1k_input=0.0000125,  # Cheapest!
+        cost_per_1k_output=0.00005,
+    ),
 }
 
-DEFAULT_MODEL = "gpt-4o-mini"
+# Use Llama 3.3 as default - it's cheap and good quality
+DEFAULT_MODEL = "llama-3.3-70b"
 
 
 # =============================================================================
@@ -142,51 +172,100 @@ DEFAULT_MODEL = "gpt-4o-mini"
 
 class LightningBackend:
     """
-    Lightning.ai unified API backend.
+    Lightning.ai unified API backend using Lightning SDK.
     
     Provides access to multiple cloud models through a single interface.
+    Uses the official `lightning_sdk` package for API access.
+    
+    Note: Requires a Lightning.ai account with credits/tokens transferred to a teamspace.
+    
+    Environment variables:
+        LIGHTNING_API_KEY: Your Lightning.ai API key
+        LIGHTNING_CLOUD_PROJECT_ID: Your teamspace project ID (required for billing)
+        LIGHTNING_TEAMSPACE: Optional teamspace name (format: owner/teamspace)
     """
     
-    def __init__(self, api_key: Optional[str] = None):
-        self._api_key = api_key or os.getenv("LIGHTNING_API_KEY")
-        self._client = None
-        self._available = None
+    # Model name mapping from our short names to Lightning.ai names
+    MODEL_MAPPING = {
+        "gpt-4o": "openai/gpt-4o",
+        "gpt-4o-mini": "openai/gpt-4o-mini",  # May not exist, fallback to gpt-4o
+        "gpt-4-turbo": "openai/gpt-4-turbo",
+        "gpt-4": "openai/gpt-4",
+        "gpt-3.5-turbo": "openai/gpt-3.5-turbo",
+        "claude-3-5-sonnet": "anthropic/claude-3-5-sonnet-20240620",
+        "claude-3-opus": "anthropic/claude-3-opus-20240229",
+        "claude-3-haiku": "anthropic/claude-haiku-4-5-20251001",
+        "gemini-1.5-pro": "google/gemini-2.5-pro",
+        "gemini-1.5-flash": "google/gemini-2.5-flash",
+        # Open source models (cheapest)
+        "llama-3.3-70b": "lightning-ai/llama-3.3-70b",
+        "deepseek-v3": "lightning-ai/DeepSeek-V3.1",
+        "gpt-oss-20b": "lightning-ai/gpt-oss-20b",
+    }
     
-    def _get_client(self):
-        """Lazy load Lightning client."""
-        if self._client is None and self._api_key:
-            try:
-                # Try to import Lightning AI client
-                # This is a placeholder - actual import depends on Lightning.ai SDK
-                from ..lightning_adapter import LightningAdapter
-                self._client = LightningAdapter(api_key=self._api_key)
-            except ImportError:
-                logger.debug("Lightning adapter not available, using fallback")
-                self._client = False
-            except Exception as e:
-                logger.debug(f"Failed to initialize Lightning client: {e}")
-                self._client = False
-        return self._client if self._client else None
+    # Default teamspace configuration
+    DEFAULT_PROJECT_ID = "01kaxz1hwyd45svtm0ykbnv0ys"  # sdodl001/default-teamspace
+    DEFAULT_TEAMSPACE = "sdodl001/default-teamspace"
+    
+    def __init__(self, api_key: Optional[str] = None, teamspace: Optional[str] = None):
+        self._api_key = api_key or os.getenv("LIGHTNING_API_KEY")
+        self._teamspace = teamspace or os.getenv("LIGHTNING_TEAMSPACE", self.DEFAULT_TEAMSPACE)
+        self._project_id = os.getenv("LIGHTNING_CLOUD_PROJECT_ID", self.DEFAULT_PROJECT_ID)
+        self._clients: Dict[str, Any] = {}  # Cache clients per model
+        self._available = None
+        self._last_error = None
+        
+        # Set project ID in environment for SDK
+        if self._project_id:
+            os.environ["LIGHTNING_CLOUD_PROJECT_ID"] = self._project_id
+    
+    def _get_client(self, model: Optional[str] = None):
+        """Get or create Lightning SDK LLM client for a model."""
+        # Map model name to Lightning.ai format
+        lightning_model = self.MODEL_MAPPING.get(model, model) if model else "openai/gpt-4o"
+        
+        # Return cached client if available
+        if lightning_model in self._clients:
+            return self._clients[lightning_model]
+        
+        try:
+            from lightning_sdk.llm import LLM
+            
+            client = LLM(name=lightning_model, teamspace=self._teamspace)
+            self._clients[lightning_model] = client
+            return client
+        except ImportError:
+            logger.debug("lightning_sdk not installed. Install with: pip install lightning-sdk")
+            self._last_error = "lightning_sdk package not installed"
+            return None
+        except Exception as e:
+            logger.debug(f"Failed to initialize Lightning SDK client: {e}")
+            self._last_error = str(e)
+            return None
     
     def is_available(self) -> bool:
         """Check if Lightning.ai is available."""
         if self._available is not None:
             return self._available
         
-        if not self._api_key:
-            self._available = False
-            return False
-        
-        client = self._get_client()
-        if client:
-            try:
-                self._available = client.is_available()
-            except Exception:
+        # Check if lightning_sdk is installed and credentials exist
+        try:
+            from lightning_sdk.llm import LLM
+            # Check if we have the project ID set
+            if not self._project_id:
                 self._available = False
-        else:
+                self._last_error = "LIGHTNING_CLOUD_PROJECT_ID not set"
+                return False
+            self._available = True
+        except ImportError:
             self._available = False
+            self._last_error = "lightning_sdk not installed"
         
         return self._available
+    
+    def get_last_error(self) -> Optional[str]:
+        """Get the last error message."""
+        return self._last_error
     
     async def complete(
         self,
@@ -196,46 +275,74 @@ class LightningBackend:
         max_tokens: int = 4096,
         **kwargs,
     ) -> ProviderResponse:
-        """Complete using Lightning.ai."""
-        client = self._get_client()
+        """Complete using Lightning.ai SDK."""
+        client = self._get_client(model)
         if not client:
-            raise ProviderUnavailableError("lightning", "Client not initialized")
+            raise ProviderUnavailableError("lightning", 
+                f"Lightning SDK client not initialized: {self._last_error or 'Unknown error'}")
         
         # Get model metadata for cost tracking
         model_meta = CLOUD_MODELS.get(model)
         
         start = time.time()
         
-        # Run in thread pool if sync
-        loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(
-            None,
-            lambda: client.complete(
-                prompt=prompt,
-                model=model,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                **kwargs
+        try:
+            # Run sync API in thread pool
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: client.chat(prompt)
             )
-        )
-        
-        latency = (time.time() - start) * 1000
-        tokens = getattr(response, 'tokens_used', 0)
-        
-        # Calculate cost
-        cost = 0.0
-        if model_meta and tokens:
-            cost = (tokens / 1000) * model_meta.avg_cost_per_1k
-        
-        return ProviderResponse(
-            content=response.content if hasattr(response, 'content') else str(response),
-            model=model,
-            provider="lightning",
-            provider_type=ProviderType.CLOUD,
-            tokens_used=tokens,
-            latency_ms=latency,
-            cost=cost,
-        )
+            
+            latency = (time.time() - start) * 1000
+            
+            # Response from SDK chat is a string
+            content = response if isinstance(response, str) else str(response)
+            
+            # Estimate tokens (rough estimate)
+            tokens = len(prompt.split()) + len(content.split())
+            
+            # Calculate cost
+            cost = 0.0
+            if model_meta and tokens:
+                cost = (tokens / 1000) * model_meta.avg_cost_per_1k
+            
+            return ProviderResponse(
+                content=content,
+                model=model,
+                provider="lightning",
+                provider_type=ProviderType.CLOUD,
+                tokens_used=tokens,
+                latency_ms=latency,
+                cost=cost,
+            )
+            
+        except Exception as e:
+            self._last_error = str(e)
+            # Check for common errors - look in the full error chain
+            error_msg = str(e).lower()
+            
+            # Also check if litai logged anything about insufficient balance
+            # The SDK logs this but doesn't always include it in the exception
+            import sys
+            if hasattr(sys, '_lightning_last_error'):
+                error_msg += " " + sys._lightning_last_error.lower()
+            
+            if "insufficient balance" in error_msg or "balance" in error_msg:
+                raise ProviderUnavailableError("lightning", 
+                    "💰 Insufficient balance. Please add credits to your Lightning.ai account:\n"
+                    "   1. Go to https://lightning.ai/settings/billing\n"
+                    "   2. Add credits or activate your free tier\n"
+                    "   3. The 30M free tokens may need to be claimed first")
+            elif "model" in error_msg and "not found" in error_msg:
+                raise ModelNotFoundError(model, "lightning")
+            elif "failed after" in error_msg:
+                # LitAI exhausted retries - likely billing issue
+                raise ProviderUnavailableError("lightning", 
+                    "💰 Lightning.ai API failed after retries. Most common cause: insufficient balance.\n"
+                    "   Please check your account at https://lightning.ai/settings/billing")
+            else:
+                raise ProviderUnavailableError("lightning", f"LitAI error: {e}")
 
 
 # =============================================================================

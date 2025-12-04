@@ -163,6 +163,9 @@ DEFAULT_PROVIDERS: Dict[str, ProviderConfig] = {
         ],
         free_tier=True,
         rate_limit="100/min",
+        # DISABLED: API returns empty responses (status 200, 0 bytes) as of Dec 2025
+        # Re-enable when Lightning.ai fixes their API or account is verified
+        enabled=False,
     ),
     "github_models": ProviderConfig(
         id="github_models",
