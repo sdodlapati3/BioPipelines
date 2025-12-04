@@ -590,8 +590,20 @@ class HTMLReportGenerator:
             </div>
             """
         
-        # Generate final HTML
-        return self.template.format(
+        # Generate final HTML - use Template for safe substitution
+        from string import Template
+        
+        # Replace format placeholders with Template style
+        template_str = self.template.replace("{run_id}", "$run_id")
+        template_str = template_str.replace("{timestamp}", "$timestamp")
+        template_str = template_str.replace("{summary_cards}", "$summary_cards")
+        template_str = template_str.replace("{metric_bars}", "$metric_bars")
+        template_str = template_str.replace("{category_section}", "$category_section")
+        template_str = template_str.replace("{difficulty_section}", "$difficulty_section")
+        template_str = template_str.replace("{failures_section}", "$failures_section")
+        
+        template = Template(template_str)
+        return template.safe_substitute(
             run_id=summary.get("run_id", "Unknown"),
             timestamp=summary.get("timestamp", datetime.now().isoformat()),
             summary_cards="\n".join(summary_cards),

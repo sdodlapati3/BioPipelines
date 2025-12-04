@@ -48,18 +48,18 @@ except ImportError:
 # Synthetic test generation
 try:
     from .synthetic_test_generator import (
-        TemplateGenerator,
-        LLMGenerator,
-        ConversationGenerator,
-        DataAugmentor,
-        ChallengeGenerator,
+        SyntheticTestGenerator,
+        GeneratedTest,
+        inject_typo,
+        inject_case_variation,
+        add_filler_words,
     )
 except ImportError:
-    TemplateGenerator = None
-    LLMGenerator = None
-    ConversationGenerator = None
-    DataAugmentor = None
-    ChallengeGenerator = None
+    SyntheticTestGenerator = None
+    GeneratedTest = None
+    inject_typo = None
+    inject_case_variation = None
+    add_filler_words = None
 
 # Adversarial testing
 try:
@@ -97,11 +97,11 @@ __all__ = [
     # Historical tracking
     "HistoricalTracker",
     # Synthetic generation
-    "TemplateGenerator",
-    "LLMGenerator",
-    "ConversationGenerator",
-    "DataAugmentor",
-    "ChallengeGenerator",
+    "SyntheticTestGenerator",
+    "GeneratedTest",
+    "inject_typo",
+    "inject_case_variation",
+    "add_filler_words",
     # Adversarial testing
     "AdversarialTest",
     "AdversarialTestRunner",

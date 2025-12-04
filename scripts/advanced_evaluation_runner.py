@@ -176,16 +176,16 @@ class AdvancedEvaluationRunner:
     def _load_default_parser(self):
         """Load the default parser."""
         try:
-            from biopipe.chat.nlu.parser import UnifiedNLUParser
-            self.parser = UnifiedNLUParser()
-            logger.info("Loaded UnifiedNLUParser")
+            from workflow_composer.agents.intent.unified_parser import UnifiedIntentParser
+            self.parser = UnifiedIntentParser()
+            logger.info("Loaded UnifiedIntentParser")
         except ImportError:
             try:
-                from biopipe.nlu.parser import UnifiedNLUParser
-                self.parser = UnifiedNLUParser()
-                logger.info("Loaded UnifiedNLUParser from alternate location")
+                from workflow_composer.agents.intent.parser import IntentParser
+                self.parser = IntentParser()
+                logger.info("Loaded IntentParser")
             except ImportError:
-                logger.warning("Could not load UnifiedNLUParser, using mock")
+                logger.warning("Could not load parser, using mock")
                 self.parser = self._create_mock_parser()
     
     def _create_mock_parser(self):
@@ -287,28 +287,27 @@ class AdvancedEvaluationRunner:
         
         # Load from comprehensive test data
         try:
-            from scripts.comprehensive_test_data import get_all_test_conversations
+            from evaluation.comprehensive_test_data import get_all_conversations
             
-            conversations = get_all_test_conversations()
-            for category, convs in conversations.items():
-                for conv in convs:
-                    for i, turn in enumerate(conv.get("turns", [])):
-                        test = TestCase(
-                            id=f"{category}_{conv.get('id', 'unknown')}_{i}",
-                            query=turn.get("user", ""),
-                            expected_intent=turn.get("expected_intent", "META_UNKNOWN"),
-                            expected_entities=turn.get("expected_entities", {}),
-                            context=[t.get("user", "") for t in conv.get("turns", [])[:i]],
-                            category=category,
-                            difficulty=conv.get("difficulty", 1),
-                            tags=conv.get("tags", [])
-                        )
-                        self.test_cases.append(test)
+            conversations = get_all_conversations()
+            for conv in conversations:
+                for i, turn in enumerate(conv.turns):
+                    test = TestCase(
+                        id=f"{conv.category.value}_{conv.id}_{i}",
+                        query=turn.query,
+                        expected_intent=turn.expected_intent,
+                        expected_entities=turn.expected_entities or {},
+                        context=[t.query for t in conv.turns[:i]],
+                        category=conv.category.value,
+                        difficulty={"easy": 1, "medium": 2, "hard": 3}.get(conv.difficulty, 2),
+                        tags=conv.tags or []
+                    )
+                    self.test_cases.append(test)
             
             logger.info(f"Loaded {len(self.test_cases)} test cases from comprehensive data")
             
-        except ImportError:
-            logger.warning("Could not load comprehensive test data")
+        except ImportError as e:
+            logger.warning(f"Could not load comprehensive test data: {e}")
         
         # Load adversarial tests if enabled
         if self.enable_adversarial:
@@ -341,6 +340,8 @@ class AdvancedEvaluationRunner:
         start_time = time.time()
         error = None
         result = None
+        actual_intent = ""
+        actual_entities = {}
         
         try:
             # Parse query
@@ -349,9 +350,28 @@ class AdvancedEvaluationRunner:
             else:
                 result = self.parser(test.query)
             
-            actual_intent = result.get("intent", "")
-            actual_entities = result.get("entities", {})
-            
+            # Handle different result types
+            if result is None:
+                actual_intent = "META_UNKNOWN"
+                actual_entities = {}
+            elif hasattr(result, "primary_intent"):
+                # UnifiedParseResult from unified_parser
+                actual_intent = str(result.primary_intent.name) if hasattr(result.primary_intent, "name") else str(result.primary_intent)
+                # Extract entities
+                if hasattr(result, "entities") and result.entities:
+                    actual_entities = {
+                        str(e.type.name) if hasattr(e.type, "name") else str(e.type): e.value 
+                        for e in result.entities
+                    }
+                elif hasattr(result, "slots"):
+                    actual_entities = result.slots or {}
+            elif hasattr(result, "get"):
+                # Dict-like result
+                actual_intent = result.get("intent", "")
+                actual_entities = result.get("entities", {})
+            else:
+                actual_intent = str(result)
+                
         except Exception as e:
             error = str(e)
             actual_intent = ""
@@ -370,26 +390,29 @@ class AdvancedEvaluationRunner:
             # Intent accuracy
             if "intent" in self.metrics:
                 try:
-                    intent_score = self.metrics["intent"].score(
+                    metric_result = self.metrics["intent"].score(
                         test.expected_intent, actual_intent
                     )
+                    # Handle MetricScore object
+                    intent_score = metric_result.score if hasattr(metric_result, "score") else float(metric_result)
                 except Exception as e:
                     logger.debug(f"Intent metric error: {e}")
             
             # Entity F1
             if "entity" in self.metrics:
                 try:
-                    entity_score = self.metrics["entity"].score(
+                    metric_result = self.metrics["entity"].score(
                         test.expected_entities, actual_entities
                     )
+                    entity_score = metric_result.score if hasattr(metric_result, "score") else float(metric_result)
                 except Exception as e:
                     logger.debug(f"Entity metric error: {e}")
             
             # Tool accuracy (if applicable)
-            if "tool" in self.metrics and result.get("tools"):
+            if "tool" in self.metrics:
                 try:
-                    # Compute tool accuracy if we have expected tools
-                    tool_score = 1.0 if result.get("tools") else 0.5
+                    has_tools = (hasattr(result, "tools") and result.tools) if result else False
+                    tool_score = 1.0 if has_tools else 0.5
                 except Exception as e:
                     logger.debug(f"Tool metric error: {e}")
             else:
@@ -398,18 +421,21 @@ class AdvancedEvaluationRunner:
             # Semantic similarity
             if "semantic" in self.metrics:
                 try:
-                    semantic_score = self.metrics["semantic"].score(
-                        test.query, result.get("response", actual_intent)
+                    response = getattr(result, "response", actual_intent) if result else actual_intent
+                    metric_result = self.metrics["semantic"].score(
+                        test.query, str(response)
                     )
+                    semantic_score = metric_result.score if hasattr(metric_result, "score") else float(metric_result)
                 except Exception as e:
                     logger.debug(f"Semantic metric error: {e}")
             
             # LLM quality
             if "llm" in self.metrics:
                 try:
+                    response = getattr(result, "response", "") if result else ""
                     llm_score = self.metrics["llm"].score(
                         query=test.query,
-                        response=result.get("response", ""),
+                        response=str(response),
                         expected_intent=test.expected_intent
                     )
                 except Exception as e:
@@ -625,28 +651,42 @@ class AdvancedEvaluationRunner:
     def _record_to_history(self, summary: EvaluationSummary):
         """Record results to historical tracker."""
         try:
-            # Record the evaluation run
-            self.tracker.record_evaluation(
-                run_id=summary.run_id,
-                metrics={
-                    "overall_accuracy": summary.overall_accuracy,
-                    "intent_accuracy": summary.intent_accuracy,
-                    "entity_f1": summary.entity_f1,
-                    "tool_accuracy": summary.tool_accuracy,
-                    "semantic_similarity": summary.semantic_similarity,
-                    "pass_rate": summary.passed_tests / summary.total_tests if summary.total_tests > 0 else 0
+            # Build report dict in the format expected by save_run
+            report = {
+                "timestamp": summary.timestamp,
+                "total_tests": summary.total_tests,
+                "overall_intent_accuracy": summary.intent_accuracy,
+                "overall_entity_f1": summary.entity_f1,
+                "overall_tool_accuracy": summary.tool_accuracy,
+                "overall_avg_latency_ms": summary.avg_time_per_test_ms,
+                "overall_llm_usage_rate": 0.0,
+                "category_metrics": {
+                    cat: {
+                        "intent_accuracy": data.get("avg_intent", 0.0),
+                        "entity_f1_avg": data.get("avg_entity", 0.0),
+                        "tool_accuracy": 0.0,
+                        "total_tests": data.get("passed", 0) + data.get("failed", 0),
+                        "error_count": data.get("failed", 0),
+                    }
+                    for cat, data in summary.by_category.items()
                 },
-                category_results=summary.by_category,
-                failures=[
+                "test_results": [
                     {
                         "test_id": r.test_id,
+                        "category": r.category,
+                        "query": r.query,
                         "expected_intent": r.expected_intent,
                         "actual_intent": r.actual_intent,
-                        "error": r.error
+                        "intent_correct": r.passed,
+                        "entity_f1": r.entity_f1,
+                        "parse_time_ms": r.elapsed_ms,
                     }
-                    for r in self.results if not r.passed
-                ]
-            )
+                    for r in self.results
+                ],
+                "regressions": []
+            }
+            
+            self.tracker.save_run(report)
             logger.info(f"Recorded results to historical tracker: {summary.run_id}")
             
         except Exception as e:
@@ -687,8 +727,13 @@ class AdvancedEvaluationRunner:
         # Overall results
         print(f"\n📊 OVERALL RESULTS")
         print(f"   Total Tests: {summary.total_tests}")
-        print(f"   Passed: {summary.passed_tests} ({summary.passed_tests/summary.total_tests*100:.1f}%)")
-        print(f"   Failed: {summary.failed_tests} ({summary.failed_tests/summary.total_tests*100:.1f}%)")
+        if summary.total_tests > 0:
+            print(f"   Passed: {summary.passed_tests} ({summary.passed_tests/summary.total_tests*100:.1f}%)")
+            print(f"   Failed: {summary.failed_tests} ({summary.failed_tests/summary.total_tests*100:.1f}%)")
+        else:
+            print(f"   Passed: 0 (N/A)")
+            print(f"   Failed: 0 (N/A)")
+            print(f"\n⚠️  No tests were loaded or run. Check test data paths.")
         
         # Metrics
         print(f"\n📈 METRICS")

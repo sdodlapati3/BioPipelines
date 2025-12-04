@@ -81,7 +81,12 @@ class HistoricalTracker:
     """SQLite-based historical tracking for evaluation metrics."""
     
     def __init__(self, db_path: Optional[Path] = None):
-        self.db_path = db_path or DB_PATH
+        if db_path is None:
+            self.db_path = DB_PATH
+        elif isinstance(db_path, str):
+            self.db_path = Path(db_path)
+        else:
+            self.db_path = db_path
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
     
