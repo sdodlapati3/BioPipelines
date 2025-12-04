@@ -915,29 +915,216 @@ reports/evaluation/
 
 ---
 
+## 11. Advanced Evaluation Components (v2.0)
+
+The following advanced components were added to address the limitations identified in the critical evaluation:
+
+### 11.1 Enhanced Metrics (`tests/evaluation/enhanced_metrics.py`)
+
+Advanced metrics beyond simple exact matching:
+
+```python
+# Available Metrics
+IntentAccuracyMetric   # With intent equivalence mapping
+EntityF1Metric         # With bioinformatics synonym matching  
+ToolAccuracyMetric     # Tool selection accuracy
+LLMResponseQualityMetric  # G-Eval style LLM-as-judge
+SemanticSimilarityMetric  # Embedding-based similarity
+```
+
+**Intent Equivalence Example:**
+```python
+EQUIVALENTS = {
+    "DATA_SEARCH": ["DATA_DISCOVERY", "FIND_DATA", "SEARCH_DATA"],
+    "WORKFLOW_CREATE": ["WORKFLOW_GENERATE", "CREATE_WORKFLOW", "GENERATE_PIPELINE"],
+}
+```
+
+**Entity Synonyms Example:**
+```python
+SYNONYMS = {
+    "rna-seq": ["rnaseq", "rna_seq", "rna sequencing", "transcriptomics"],
+    "chip-seq": ["chipseq", "chip_seq", "chromatin immunoprecipitation"],
+}
+```
+
+### 11.2 Historical Tracker (`tests/evaluation/historical_tracker.py`)
+
+SQLite-backed trend tracking across evaluation runs:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    HISTORICAL DATABASE                           │
+├─────────────────────────────────────────────────────────────────┤
+│  evaluation_runs                                                 │
+│  ├── run_id (PRIMARY KEY)                                       │
+│  ├── timestamp                                                   │
+│  ├── overall_accuracy, intent_accuracy, entity_f1               │
+│  └── total_tests, passed_tests, failed_tests                    │
+├─────────────────────────────────────────────────────────────────┤
+│  category_results                                                │
+│  ├── run_id (FOREIGN KEY)                                       │
+│  ├── category                                                    │
+│  ├── passed, failed                                              │
+│  └── avg_intent_accuracy, avg_entity_f1                         │
+├─────────────────────────────────────────────────────────────────┤
+│  failures                                                        │
+│  ├── run_id (FOREIGN KEY)                                       │
+│  ├── test_id, expected_intent, actual_intent                    │
+│  └── error_message, failure_count                               │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Usage:**
+```bash
+make trends                    # Show 30-day trends
+make compare-runs RUN1=... RUN2=...  # Compare runs
+```
+
+### 11.3 Synthetic Test Generator (`tests/evaluation/synthetic_test_generator.py`)
+
+Multiple strategies for generating diverse test cases:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│               SYNTHETIC GENERATION PIPELINE                      │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  TemplateGenerator          LLMGenerator                         │
+│  ├── 20+ templates/cat     ├── GPT-4 paraphrasing               │
+│  ├── Variable slots        ├── Ollama local option              │
+│  └── Random filling        └── Batch generation                 │
+│           │                         │                            │
+│           └──────────┬──────────────┘                            │
+│                      ▼                                           │
+│           ┌─────────────────┐                                    │
+│           │  DataAugmentor  │                                    │
+│           ├─────────────────┤                                    │
+│           │ • Typo injection (5-10%)                             │
+│           │ • Case variations                                    │
+│           │ • Word swap noise                                    │
+│           │ • Synonym substitution                               │
+│           └─────────────────┘                                    │
+│                      │                                           │
+│                      ▼                                           │
+│           ┌─────────────────┐                                    │
+│           │ ChallengeGenerator │                                 │
+│           ├─────────────────┤                                    │
+│           │ Tier 1: Basic single-intent                          │
+│           │ Tier 2: Basic + entities                             │
+│           │ Tier 3: Context-dependent                            │
+│           │ Tier 4: Multi-turn + coreference                     │
+│           │ Tier 5: Expert complex                               │
+│           └─────────────────┘                                    │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 11.4 Adversarial Tests (`tests/evaluation/adversarial_tests.py`)
+
+Security and robustness testing:
+
+| Category | Examples | Risk Level |
+|----------|----------|------------|
+| `empty_input` | "", whitespace only | Low |
+| `length` | 10K characters, extreme repetition | Medium |
+| `prompt_injection` | "Ignore instructions", role override | High |
+| `special_chars` | SQL injection, XSS attempts | Medium |
+| `unicode` | RTL override, zero-width chars | Medium |
+| `semantic` | Contradictions, impossible requests | Low |
+| `context_manipulation` | False history claims | High |
+| `resource_exhaustion` | Regex DoS, memory exhaustion | Medium |
+
+**Running Adversarial Tests:**
+```bash
+make test-adversarial
+python scripts/advanced_evaluation_runner.py --adversarial
+```
+
+### 11.5 Advanced Evaluation Runner (`scripts/advanced_evaluation_runner.py`)
+
+Integrates all components into a unified runner:
+
+```python
+runner = AdvancedEvaluationRunner(
+    enable_llm_judge=True,      # LLM-as-judge evaluation
+    enable_semantic=True,        # Semantic similarity
+    enable_historical=True,      # Historical tracking
+    enable_adversarial=True,     # Include adversarial tests
+)
+
+summary = runner.run_evaluation(
+    category_filter="data_discovery",  # Focus on category
+    difficulty_filter=3,               # Max tier
+    focus_failures=True,               # Prioritize failures
+)
+```
+
+### 11.6 Metrics Dashboard (`scripts/metrics_dashboard.py`)
+
+Terminal and HTML visualization:
+
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│                           EVALUATION DASHBOARD                              │
+├────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  📊 OVERALL STATISTICS                                                      │
+│    Total Tests:  247                                                        │
+│    Passed:       221 (89.5%)                                               │
+│    Failed:       26 (10.5%)                                                │
+│                                                                             │
+│  📈 METRICS                                                                 │
+│    ✓ Overall Accuracy     [████████████████████████████████████████] 89.5%  │
+│    ✓ Intent Accuracy      [███████████████████████████████████████░] 92.3%  │
+│    ! Entity F1            [███████████████████████████████░░░░░░░░░] 78.2%  │
+│    ✓ Tool Accuracy        [████████████████████████████████████████] 95.0%  │
+│                                                                             │
+│  📊 BY DIFFICULTY                                                           │
+│    Tier 1: [██████████] 100% (25/25)                                       │
+│    Tier 2: [█████████░]  95% (38/40)                                       │
+│    Tier 3: [████████░░]  85% (51/60)                                       │
+│    Tier 4: [██████░░░░]  72% (43/60)                                       │
+│    Tier 5: [█████░░░░░]  68% (42/62)                                       │
+│                                                                             │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Commands:**
+```bash
+make dashboard                           # Terminal dashboard
+make report                              # Generate HTML report
+python scripts/metrics_dashboard.py --html-report output.html
+```
+
+---
+
 ## Appendix A: Quick Reference Commands
 
 ```bash
-# Run quick tests (CI mode)
-make test
-python scripts/ci_test.py --quick
+# Basic Testing
+make test                              # Quick tests
+make test-full                         # Full evaluation
+make test-advanced                     # Advanced with all features
 
-# Run full evaluation
-make evaluate
-python scripts/unified_evaluation_runner.py
+# Advanced Testing
+make test-adversarial                  # Security tests
+make test-category CATEGORY=workflow   # Category focus
+make test-tier TIER=3                  # Difficulty focus
+make test-failures                     # Previously failed tests
 
-# Analyze errors
-make analyze
-python scripts/error_pattern_analyzer.py
+# Analysis & Visualization
+make analyze                           # Error pattern analysis
+make dashboard                         # Terminal dashboard
+make trends                            # Historical trends
+make report                            # HTML report
 
-# Create baseline
-make baseline
-python scripts/ci_test.py --create-baseline
+# Comparisons
+make compare-runs RUN1=eval_... RUN2=eval_...
 
-# Run specific category
-make test-category CATEGORY=data_discovery
-python scripts/unified_evaluation_runner.py --category data_discovery
-```
+# CI/CD
+make ci                                # Quick CI
+make ci-full                           # Full CI with advanced
 
 ## Appendix B: File Locations
 
@@ -945,12 +1132,20 @@ python scripts/unified_evaluation_runner.py --category data_discovery
 BioPipelines/
 ├── tests/
 │   └── evaluation/
-│       ├── comprehensive_test_data.py    # Test conversations
-│       ├── conversation_generator.py     # Synthetic generation
+│       ├── __init__.py                   # Module exports
+│       ├── comprehensive_test_data.py    # Test conversations (legacy)
+│       ├── conversation_test_suite.py    # Basic evaluator
+│       ├── enhanced_metrics.py           # Advanced metrics [NEW]
+│       ├── historical_tracker.py         # SQLite trend tracking [NEW]
+│       ├── synthetic_test_generator.py   # Test generation [NEW]
+│       ├── adversarial_tests.py          # Security tests [NEW]
 │       ├── experiment_runner.py          # DB-backed runner
 │       └── lifecycle_conversations.py    # Complex scenarios
 ├── scripts/
+│   ├── comprehensive_test_data.py        # Test data (110+ tests)
 │   ├── unified_evaluation_runner.py      # Main evaluator
+│   ├── advanced_evaluation_runner.py     # Advanced evaluator [NEW]
+│   ├── metrics_dashboard.py              # Dashboard & HTML [NEW]
 │   ├── error_pattern_analyzer.py         # Failure analysis
 │   └── ci_test.py                        # CI runner
 ├── reports/
@@ -959,13 +1154,19 @@ BioPipelines/
 │       ├── evaluation_*.json             # Run results
 │       ├── report_*.html                 # HTML reports
 │       └── error_analysis_*.md           # Analysis reports
+│   └── evaluations/                      # Advanced runner output [NEW]
+│       ├── eval_*_summary.json           # Run summaries
+│       ├── eval_*_details.json           # Detailed results
+│       └── eval_*_failures.json          # Failure lists
+├── data/
+│   └── evaluation_history.db             # Historical database [NEW]
 ├── .github/
 │   └── workflows/
 │       └── chat-agent-evaluation.yml     # CI workflow
 ├── docs/
 │   ├── TESTING_GUIDE.md                  # User guide
 │   └── TEST_SUITE_ARCHITECTURE.md        # This document
-└── Makefile                              # Convenience commands
+└── Makefile                              # Convenience commands (expanded)
 ```
 
 ## Appendix C: Metric Definitions Summary
@@ -979,9 +1180,20 @@ BioPipelines/
 | Tool Accuracy | Correct / Total | 0-1 | ≥ 0.90 |
 | Parse Latency | ms | 0-∞ | ≤ 500ms |
 | LLM Usage Rate | LLM calls / Total | 0-1 | ≤ 0.15 |
+| Semantic Similarity | Cosine(embed1, embed2) | 0-1 | ≥ 0.70 |
+| LLM Quality (G-Eval) | Weighted avg of criteria | 1-5 | ≥ 3.5 |
 
 ---
 
-*Document Version: 1.0*
+## Appendix D: Version History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0 | 2025-12-04 | Initial documentation |
+| 2.0 | 2025-12-04 | Added advanced components (Section 11) |
+
+---
+
+*Document Version: 2.0*
 *Last Updated: December 4, 2025*
 *Author: BioPipelines Development Team*
