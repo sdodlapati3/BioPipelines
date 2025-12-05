@@ -2,24 +2,28 @@
 ## BioPipelines Multi-Model Orchestration Enhancement
 
 **Created:** December 5, 2025  
-**Status:** Planning  
+**Updated:** December 5, 2025 (v2.0 - Post Peer Review)  
+**Status:** Planning (Revised After ChatGPT Peer Review)  
 **Priority:** High  
-**Estimated Effort:** 5-10 days (phased)
+**Estimated Effort:** ~3 weeks (simplified from 5-10 days after refinement)
 
 ---
 
 ## Table of Contents
 
 1. [Executive Summary](#executive-summary)
-2. [Current State Analysis](#current-state-analysis)
-3. [Gap Analysis](#gap-analysis)
-4. [Proposed Architecture](#proposed-architecture)
-5. [Implementation Phases](#implementation-phases)
-6. [Detailed Component Specifications](#detailed-component-specifications)
-7. [Integration Points](#integration-points)
-8. [Testing Strategy](#testing-strategy)
-9. [Risk Assessment](#risk-assessment)
-10. [Research Topics for Further Exploration](#research-topics-for-further-exploration)
+2. [Peer Review & Refined Strategy](#peer-review--refined-strategy) ← **NEW**
+3. [Current State Analysis](#current-state-analysis)
+4. [Gap Analysis (Revised)](#gap-analysis-revised-after-peer-review)
+5. [Proposed Architecture](#proposed-architecture) (reference only)
+6. [Implementation Phases](#implementation-phases) (reference only)
+7. [Detailed Component Specifications](#detailed-component-specifications)
+8. [Integration Points](#integration-points)
+9. [Testing Strategy](#testing-strategy)
+10. [Risk Assessment](#risk-assessment)
+11. [Research Topics for Further Exploration](#research-topics-for-further-exploration)
+12. [Implementation Timeline (Revised)](#implementation-timeline-revised) ← **UPDATED**
+13. [Peer Review Synthesis](#appendix-peer-review-synthesis) ← **NEW**
 
 ---
 
@@ -45,6 +49,181 @@ Implement a **dynamic strategy selection system** that:
 | Profile switching | Zero code changes required |
 | Fallback reliability | 99.9% request success rate |
 | New profile creation | < 30 minutes by non-developer |
+
+---
+
+## Peer Review Integration & Refined Strategy
+
+> **Review Date:** December 5, 2025  
+> **Reviewer:** ChatGPT (GPT-4o)  
+> **Synthesis:** Claude (Opus 4.5)
+
+### Key Insight: Avoid Over-Engineering
+
+The original plan proposed 4 new major components (ResourceDetector, StrategyProfile, StrategySelector, UnifiedRouter) as a parallel routing stack. The peer review correctly identified this as **scope creep for a 1-2 person team**.
+
+### Adopted Recommendations
+
+| Recommendation | Source | Action |
+|---------------|--------|--------|
+| Extend existing components, don't duplicate | ChatGPT | ✅ **Adopt** - Integrate into `ModelOrchestrator` + `TaskRouter` |
+| 3-4 vLLM servers, not 10 specialized models | ChatGPT | ✅ **Adopt** - Generalist + Coder + Math + Embeddings |
+| Static long-running vLLM (not dynamic SLURM) | ChatGPT | ✅ **Adopt** - Interactive use needs persistent servers |
+| Skip Semantic Router (have UnifiedIntentParser) | ChatGPT | ⚠️ **Partial** - Skip for now, revisit for tool routing |
+| LiteLLM as optional provider, not full migration | ChatGPT | ✅ **Adopt** - Add as `LiteLLMProvider` option |
+| 2-stage routing (Task → Complexity) | ChatGPT | ✅ **Adopt** - Only for CODE_GEN, BIOMEDICAL |
+| Add `allow_cloud` data governance flag | ChatGPT | ✅ **Adopt** - Critical for university PHI concerns |
+| Debug routing logs | ChatGPT | ✅ **Adopt** - Essential for troubleshooting |
+
+### Refined Recommendations (Claude's Additions)
+
+| Recommendation | Rationale |
+|---------------|-----------|
+| Keep embeddings server (BGE-M3) | ChatGPT suggested 3 models; we need 4 including embeddings for RAG |
+| Use Qwen2.5-Math-7B over Phi-3.5-mini | Significantly better math benchmarks; fits T4 with INT8 |
+| RouteLLM for Phase 2 | 85% cost savings too significant to ignore; add after v1 stable |
+| Profile immutability during session | Changing strategy mid-session causes state inconsistencies |
+| Health-check based ResourceDetector | Simpler than GPU detection; just "is vLLM endpoint alive?" |
+
+### Rejected Recommendations
+
+| Recommendation | Why Rejected |
+|---------------|--------------|
+| "vLLM Semantic Router" | **Does not exist.** ChatGPT hallucinated this component. |
+| Skip all domain models | BioMistral provides measurable quality gains for bio tasks |
+| Store profile in SessionManager only | Need profile at orchestrator level, not just session |
+
+### Revised Architecture
+
+```
+BEFORE (Over-Engineered):
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│ ResourceDetector│───▶│ StrategyProfile │───▶│ StrategySelector│───▶│  UnifiedRouter  │
+└─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
+        ↑                                                                    │
+        │                     (4 NEW CLASSES)                                │
+        │                                                                    ▼
+        └──────────────────────────────────────────────────────────── [Response]
+
+AFTER (Integrated):
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                           EXISTING COMPONENTS (Extended)                             │
+├─────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                      │
+│   config/llm_profiles.yaml  ───▶  ResourceDetector (NEW, simple)                    │
+│            │                              │                                          │
+│            ▼                              ▼                                          │
+│   ┌─────────────────┐           ┌─────────────────┐                                 │
+│   │ SessionManager  │◀──────────│  Profile Match  │                                 │
+│   │ .strategy_profile│           └─────────────────┘                                 │
+│   └────────┬────────┘                                                               │
+│            │                                                                         │
+│            ▼                                                                         │
+│   ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────────────┐        │
+│   │   TaskRouter    │───▶│ModelOrchestrator│───▶│CascadingProviderRouter  │        │
+│   │ (task classify) │    │ (uses profile)  │    │ (fallback chains)       │        │
+│   └─────────────────┘    └─────────────────┘    └─────────────────────────┘        │
+│            │                      │                         │                       │
+│            │         ┌────────────┼────────────┐           │                       │
+│            │         ▼            ▼            ▼           ▼                       │
+│            │    [T4 vLLM]   [T4 vLLM]   [T4 vLLM]   [Cloud APIs]                   │
+│            │    Generalist    Coder       Math      DeepSeek/Claude                │
+│            │                                                                        │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+
+NEW CODE: ~300 lines (ResourceDetector + profile loading)
+vs ORIGINAL PLAN: ~1500 lines (4 major new classes)
+```
+
+### Revised Model Deployment (4 Servers, Not 10)
+
+| Server | Model | Quantization | VRAM | Tasks |
+|--------|-------|--------------|------|-------|
+| `t4-generalist` | Qwen2.5-7B-Instruct | AWQ (4-bit) | ~8GB | Intent, Docs, General |
+| `t4-coder` | Qwen2.5-Coder-7B-Instruct | AWQ (4-bit) | ~8GB | CodeGen, Validation |
+| `t4-math` | Qwen2.5-Math-7B-Instruct | INT8 | ~10GB | Math, Statistics |
+| `t4-embeddings` | BAAI/bge-m3 | FP16 | ~4GB | RAG, Semantic Search |
+
+**Optional (Phase 2):**
+| Server | Model | Quantization | VRAM | Tasks |
+|--------|-------|--------------|------|-------|
+| `t4-bio` | BioMistral-7B | INT8 | ~10GB | Biomedical reasoning |
+| `t4-safety` | Llama-Guard-3-1B | FP16 | ~3GB | Content moderation |
+
+### Data Governance Pattern (New)
+
+```yaml
+# config/llm_profiles.yaml
+routes:
+  biomedical:
+    model: "t4-bio"
+    allow_cloud: false      # NEVER send to cloud - potential PHI
+    fallback_to_cloud: false
+    local_only_reason: "May contain sample IDs or clinical metadata"
+  
+  code_generation:
+    model: "t4-coder"
+    allow_cloud: true       # Safe - no sensitive data in code requests
+    fallback_chain:
+      - deepseek-v3
+      - claude-3.5-sonnet
+```
+
+### 2-Stage Routing Pattern (Complexity-Aware)
+
+Only for high-value tasks where complexity significantly affects quality:
+
+```python
+# Tasks that benefit from complexity-based routing
+COMPLEXITY_ROUTING_ENABLED = {
+    "code_generation",   # Simple script vs complex pipeline
+    "biomedical",        # Basic lookup vs multi-step reasoning
+}
+
+# Phase 1: Simple heuristics
+def estimate_complexity(query: str, task: str) -> str:
+    """Returns 'low', 'medium', or 'high'."""
+    indicators = {
+        "high": ["optimize", "debug", "compare", "analyze multiple", 
+                 "step by step", "complex", "advanced"],
+        "medium": ["explain", "modify", "extend", "improve"],
+    }
+    query_lower = query.lower()
+    
+    if any(ind in query_lower for ind in indicators["high"]):
+        return "high"
+    if any(ind in query_lower for ind in indicators["medium"]):
+        return "medium"
+    if len(query.split()) > 100:  # Long queries often complex
+        return "high"
+    return "low"
+
+# Phase 2: RouteLLM integration (future)
+# from routellm import Controller
+# complexity = routellm_controller.predict(query)
+```
+
+### Debug Routing Pattern (New)
+
+```python
+# Add to every routing decision
+class RoutingDecision:
+    """Captures full routing context for debugging."""
+    task_type: str
+    active_profile: str
+    complexity: str  # low/medium/high
+    primary_model: str
+    fallback_chain: List[str]
+    chosen_model: str
+    chosen_provider: str
+    fallback_depth: int  # 0 = primary, 1+ = fallback
+    latency_ms: float
+    reason: str  # Why this model was chosen
+
+# Usage
+if os.getenv("BIOPIPELINES_DEBUG_ROUTING"):
+    logger.info(f"Routing: {decision.to_json()}")
+```
 
 ---
 
@@ -91,18 +270,36 @@ Response
 
 ---
 
-## Gap Analysis
+## Gap Analysis (Revised After Peer Review)
 
-### Missing Components
+### What We Need vs Original Plan
 
-| Component | Purpose | Priority | Effort |
-|-----------|---------|----------|--------|
-| **ResourceDetector** | Detect GPUs, SLURM, cloud APIs | P0 | 1 day |
-| **StrategyProfile** | YAML-defined routing configuration | P0 | 1 day |
-| **StrategySelector** | Match resources → best profile | P0 | 1 day |
-| **UnifiedRouter** | Single entry point for all routing | P1 | 2 days |
-| **SessionManager** | Manage active strategy state | P1 | 1 day |
-| **Strategy CLI** | Interactive strategy selection | P2 | 0.5 days |
+**Original Plan**: 6 new components (ResourceDetector, StrategyProfile, StrategySelector, UnifiedRouter, SessionManager, Strategy CLI)
+
+**Revised Plan**: Extend 3 existing components, add 2 minimal new ones
+
+### Revised Missing Components
+
+| Component | Approach | Priority | Effort |
+|-----------|----------|----------|--------|
+| **`ResourceDetector`** | New but minimal - GPU/SLURM detection only | P0 | 0.5 days |
+| **`StrategyConfig` extension** | Add `profile_name`, `allow_cloud` to existing dataclass | P0 | 0.5 days |
+| **`ModelOrchestrator` extension** | Add `switch_strategy()`, resource-aware init | P0 | 1 day |
+| **Profile YAML files** | 4-5 simple YAML configs in `config/strategies/` | P1 | 0.5 days |
+| **CLI flag** | `--strategy` flag in entry points | P2 | 0.5 days |
+
+**Total Effort: ~3 days** (down from 6.5 days)
+
+### Components We DON'T Need (ChatGPT + Claude Agreement)
+
+| Avoided Component | Why Not Needed |
+|-------------------|----------------|
+| ~~UnifiedRouter~~ | CascadingProviderRouter already does this |
+| ~~SessionManager~~ | ModelOrchestrator can hold state |
+| ~~StrategyProfile class~~ | Just use StrategyConfig + YAML |
+| ~~Dynamic vLLM launcher~~ | Static long-running servers are better |
+| ~~Semantic Router~~ | UnifiedIntentParser already handles this |
+| ~~10 specialized models~~ | 4-5 models cover 95% of use cases |
 
 ### Integration Gaps
 
@@ -115,7 +312,23 @@ Response
 
 ## Proposed Architecture
 
-### High-Level Design
+### ⚠️ Architecture Note (Post Peer Review)
+
+The detailed architecture below was the **original plan** before ChatGPT's review. 
+After the peer review (see "Peer Review & Refined Strategy" section above), we recommend 
+a **simplified approach**:
+
+1. **Don't create new `UnifiedRouter`** → Use `CascadingProviderRouter` 
+2. **Don't create `SessionManager`** → Extend `ModelOrchestrator`
+3. **Don't create complex `StrategyProfile`** → Use `StrategyConfig` + simple YAML
+
+The detailed specs below remain as **reference architecture** showing one possible 
+implementation, but the actual implementation should follow the Phase 1-3 approach 
+in "Refined Architecture" above.
+
+---
+
+### Original High-Level Design (Reference Only)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -180,7 +393,20 @@ config/
 
 ## Implementation Phases
 
-### Phase 1: Core Infrastructure (Days 1-2)
+### ⚠️ Phase Note (Post Peer Review)
+
+The detailed implementation phases below were the **original plan**. After peer review, 
+we recommend the **simplified 3-phase approach** from the "Refined Architecture" section:
+
+1. **Week 1**: ResourceDetector + extend StrategyConfig + YAML profiles
+2. **Week 2**: Extend ModelOrchestrator with `switch_strategy()` + wire T4ModelRouter
+3. **Week 3**: Add complexity routing for CODE_GEN/BIO + debug logging
+
+The detailed specs below remain as **reference** for understanding what each component does.
+
+---
+
+### Original Phase 1: Core Infrastructure (Days 1-2)
 
 **Goal**: Build foundational components without breaking existing code.
 
@@ -1313,7 +1539,309 @@ If you scale to multiple universities/clusters:
 
 ---
 
-## Implementation Timeline
+## Deep Research Analysis
+
+### RouteLLM - Cost-Quality Routing (In-Depth)
+
+**Source:** https://github.com/lm-sys/RouteLLM (4.5k⭐)  
+**Paper:** [arXiv:2406.18665](https://arxiv.org/abs/2406.18665)
+
+#### Key Insights
+
+RouteLLM addresses the exact problem we face: routing between expensive high-quality models and cheaper models while maintaining quality.
+
+**Core Concept:**
+```
+User Query → Router (ML model) → Prediction: "Strong or Weak?"
+     │                                    │
+     │         ┌─────────────────────────┐│
+     ▼         ▼                         ▼▼
+    Strong Model (expensive)    OR    Weak Model (cheap)
+    (GPT-4, Claude-3.5)              (Mixtral, Llama)
+```
+
+**Router Types Available:**
+1. **Matrix Factorization (`mf`)** - Recommended, lightweight
+2. **Similarity-Weighted Ranking (`sw_ranking`)** - Uses Elo scores
+3. **BERT Classifier (`bert`)** - BERT-based classification
+4. **Causal LLM (`causal_llm`)** - LLM-based routing
+
+**Reported Results:**
+- MT Bench: 85% cost reduction while maintaining 95% GPT-4 quality
+- MMLU: 45% cost reduction at 95% performance
+- GSM8K: 35% cost reduction at 95% performance
+
+**BioPipelines Integration Pattern:**
+```python
+from routellm.controller import Controller
+import os
+
+# RouteLLM can replace our cloud cascade
+controller = Controller(
+    routers=["mf"],  # Matrix factorization router
+    strong_model="deepseek-v3",
+    weak_model="local/qwen2.5-coder-7b",  # Our T4-hosted model
+)
+
+# Threshold controls cost-quality tradeoff
+# Lower threshold = more strong model calls = higher quality
+# Higher threshold = more weak model calls = lower cost
+response = controller.chat.completions.create(
+    model="router-mf-0.11593",  # mf router with 0.11593 threshold
+    messages=[{"role": "user", "content": query}]
+)
+```
+
+**Key Insight for BioPipelines:**
+- RouteLLM uses threshold calibration: you specify "I want 50% calls to strong model"
+- It returns the threshold value to achieve that ratio
+- This enables budget-aware routing
+
+**Threshold Calibration:**
+```bash
+python -m routellm.calibrate_threshold --routers mf --strong-model-pct 0.5
+# Output: For 50.0% strong model calls for mf, threshold = 0.11593
+```
+
+**Adaptation for Task-Based Routing:**
+Our system differs because we route by TASK, not just query complexity:
+```python
+# BioPipelines hybrid approach
+class HybridRouter:
+    def route(self, task: str, query: str):
+        # Step 1: Task determines MODEL CAPABILITY requirements
+        required_capability = self.task_capabilities[task]
+        
+        # Step 2: Within capability tier, use RouteLLM for cost optimization
+        if required_capability == "high":
+            # Always use strong model (biomedical, orchestration)
+            return self.strong_model
+        elif required_capability == "medium":
+            # Use RouteLLM to decide (code_gen, analysis)
+            return self.routellm.route(query)
+        else:
+            # Always use weak model (intent, safety check)
+            return self.weak_model
+```
+
+---
+
+### Semantic Router - Embedding-Based Classification
+
+**Source:** https://github.com/aurelio-labs/semantic-router (2.9k⭐)  
+**Docs:** https://docs.aurelio.ai/semantic-router
+
+#### Why This Matters for BioPipelines
+
+Our current task classification uses keyword matching or simple heuristics. Semantic Router provides **semantic understanding** of user queries.
+
+**Current Approach (Fragile):**
+```python
+if "code" in query.lower() or "write" in query.lower():
+    task = "code_generation"
+elif "analyze" in query.lower():
+    task = "data_analysis"
+# Fails: "I need a Python script" → misses "code"
+```
+
+**Semantic Router Approach (Robust):**
+```python
+from semantic_router import Route, SemanticRouter
+from semantic_router.encoders import HuggingFaceEncoder
+
+# Define routes with example utterances
+code_route = Route(
+    name="code_generation",
+    utterances=[
+        "write a Python script",
+        "generate code for",
+        "I need a function that",
+        "can you code this up",
+        "implement an algorithm",
+    ]
+)
+
+bio_route = Route(
+    name="biomedical",
+    utterances=[
+        "analyze this FASTQ file",
+        "what does this gene do",
+        "run differential expression",
+        "variant calling pipeline",
+    ]
+)
+
+# Use local embedding model (runs on T4)
+encoder = HuggingFaceEncoder(name="BAAI/bge-m3")
+router = SemanticRouter(
+    encoder=encoder,
+    routes=[code_route, bio_route, ...]
+)
+
+# Now queries are matched by semantic similarity
+task = router("I need to create a snakemake workflow")  # → "code_generation"
+task = router("What variants are in this VCF")  # → "biomedical"
+```
+
+**Performance:** < 10ms per routing decision (embedding lookup)
+
+**Integration with StrategyProfile:**
+```yaml
+# config/strategies/t4_hybrid.yaml
+classification:
+  method: "semantic_router"  # or "keyword" for legacy
+  embedding_model: "BAAI/bge-m3"
+  routes:
+    code_generation:
+      utterances_file: "config/utterances/code_gen.txt"
+    biomedical:
+      utterances_file: "config/utterances/biomedical.txt"
+```
+
+---
+
+### Speculative Decoding & Medusa
+
+**Sources:**
+- DeepMind Speculative Sampling: [arXiv:2302.01318](https://arxiv.org/abs/2302.01318)
+- HuggingFace Assisted Generation: https://huggingface.co/blog/assisted-generation
+- Medusa: https://github.com/FasterDecoding/Medusa (2.7k⭐)
+
+#### Concept
+
+Instead of generating one token at a time with a large model:
+1. **Draft Model** (small, fast): Generates N candidate tokens
+2. **Target Model** (large, accurate): Verifies/rejects candidates in ONE forward pass
+3. **Accept verified prefix**, repeat
+
+**Why This Matters for BioPipelines:**
+- Our T4 models could serve as draft models
+- Cloud models verify only when needed
+- 2-3x speedup without quality loss
+
+**Medusa Variant (Self-Speculation):**
+- Adds extra "heads" to predict future tokens
+- No separate draft model needed
+- Can achieve 2.2-3.6x speedup
+
+**vLLM Support:**
+vLLM v0.12+ has native speculative decoding:
+```bash
+python -m vllm.entrypoints.openai.api_server \
+    --model Qwen/Qwen2.5-Coder-7B-Instruct \
+    --speculative-model Qwen/Qwen2.5-Coder-1.5B-Instruct \
+    --num-speculative-tokens 5
+```
+
+**BioPipelines Application:**
+```yaml
+# T4 node configuration
+servers:
+  - name: "code_gen_speculative"
+    main_model: "Qwen/Qwen2.5-Coder-7B-Instruct"
+    draft_model: "Qwen/Qwen2.5-Coder-1.5B-Instruct"
+    speculative_tokens: 5
+    # Uses 7B for quality, 1.5B for speed
+```
+
+---
+
+### LiteLLM vs Custom Router - Comparison
+
+| Feature | LiteLLM | Our Custom Router |
+|---------|---------|-------------------|
+| **Provider Support** | 100+ providers | DeepSeek, OpenAI, Anthropic, Groq, Cerebras |
+| **Load Balancing** | ✅ Multiple strategies | ❌ Not implemented |
+| **Fallback** | ✅ Automatic | ✅ Manual cascade |
+| **Cost Tracking** | ✅ Built-in | ❌ Basic |
+| **Task Routing** | ❌ | ✅ Core feature |
+| **Local Models** | ✅ OpenAI-compatible | ✅ vLLM native |
+| **Dependency Weight** | ~20 deps | 0 (custom) |
+| **Customization** | Config-driven | Code-driven |
+
+**Recommendation:** Use LiteLLM as the *underlying* provider layer, build task routing on top.
+
+```python
+# Proposed architecture
+class UnifiedRouter:
+    def __init__(self):
+        # LiteLLM handles provider complexity
+        self.litellm_router = litellm.Router(
+            model_list=[
+                {"model_name": "local-coder", "litellm_params": {"model": "openai/local", "api_base": "http://t4-coder:8000"}},
+                {"model_name": "deepseek", "litellm_params": {"model": "deepseek/deepseek-chat"}},
+                {"model_name": "claude", "litellm_params": {"model": "claude-3-5-sonnet-20241022"}},
+            ]
+        )
+        
+        # Our layer handles task classification
+        self.task_classifier = SemanticRouter(...)
+    
+    async def route(self, query: str):
+        task = self.task_classifier(query)  # "code_gen", "biomedical", etc.
+        model = self.profile.get_route(task)  # Get model for task
+        return await self.litellm_router.acompletion(model=model, messages=[...])
+```
+
+---
+
+### vLLM Advanced Features (v0.12+)
+
+Based on the vLLM documentation structure, key features for BioPipelines:
+
+1. **Automatic Prefix Caching:**
+   - Caches KV for repeated prompt prefixes
+   - Useful for system prompts in chat
+   - Enable: `--enable-prefix-caching`
+
+2. **Speculative Decoding:**
+   - Built-in draft model support
+   - MLP Speculator for self-speculation
+   - Medusa heads support
+
+3. **Multi-LoRA Inference:**
+   - Switch LoRA adapters per request
+   - Could fine-tune for bioinformatics tasks
+   - Enable: `--enable-lora`
+
+4. **Disaggregated Prefilling:**
+   - Separate prefill and decode across GPUs
+   - Better for long-context inputs
+   - Experimental but promising
+
+5. **Quantized KV Cache:**
+   - FP8 or INT8 KV cache
+   - Reduces memory for longer contexts
+   - Enable: `--kv-cache-dtype fp8`
+
+---
+
+### Recommended Integration Priority
+
+Based on research, prioritized integration path:
+
+| Priority | Technology | Effort | Impact | Recommendation |
+|----------|------------|--------|--------|----------------|
+| P1 | **LiteLLM** | 1 day | High | Replace ProviderRouter |
+| P1 | **Semantic Router** | 1 day | High | Replace keyword classification |
+| P2 | **RouteLLM** | 2 days | Medium | Add cost-aware routing layer |
+| P2 | **vLLM Speculative** | 1 day | Medium | Enable on T4 servers |
+| P3 | **Prefix Caching** | 0.5 day | Medium | Enable in vLLM config |
+| P4 | **Medusa** | 3 days | Low | Requires training heads |
+
+---
+
+## Implementation Timeline (Revised)
+
+### After Peer Review: Simplified 3-Week Plan
+
+| Week | Focus | Deliverables |
+|------|-------|--------------|
+| **Week 1** | Foundation | ResourceDetector (minimal), extend StrategyConfig, 4 YAML profiles |
+| **Week 2** | Integration | ModelOrchestrator.switch_strategy(), wire T4ModelRouter |
+| **Week 3** | Polish | Complexity routing (CODE_GEN/BIO), debug logging, tests |
+
+### Original 4-Week Plan (Reference)
 
 | Week | Phase | Deliverables |
 |------|-------|--------------|
@@ -1324,13 +1852,33 @@ If you scale to multiple universities/clusters:
 
 ---
 
-## Next Steps
+## Next Steps (Updated After Peer Review)
 
-1. **Review this plan** - Discuss with team, identify concerns
-2. **Create Phase 1 skeleton** - Empty files, interfaces
-3. **Implement ResourceDetector** - Most foundational piece
-4. **Test on actual cluster** - Verify SLURM/GPU detection works
-5. **Research deep-dive** - Pick 1-2 research topics to prototype
+### Immediate (This Week)
+1. **Deploy 4 static vLLM servers** on T4 nodes:
+   - Generalist: Qwen-2.5-7B-Instruct-AWQ
+   - Coder: Qwen-Coder-7B-AWQ  
+   - Math: Qwen-Math-7B-AWQ
+   - Embeddings: BGE-M3
+
+2. **Extend StrategyConfig** in `llm/strategies.py`:
+   - Add `profile_name: Optional[str]`
+   - Add `allow_cloud: bool = True` (data governance)
+   - Add `debug_routing: bool = False`
+
+3. **Create minimal ResourceDetector** (50 lines):
+   - Just health-check vLLM endpoints
+   - Check for cloud API keys
+
+### Short-Term (Next 2 Weeks)
+4. **Add `switch_strategy()` to ModelOrchestrator**
+5. **Wire T4ModelRouter into CascadingProviderRouter**
+6. **Create 4 YAML profiles** in `config/strategies/`
+
+### Future (Month 2+)
+7. **Add RouteLLM** for complexity routing (CODE_GEN, BIO)
+8. **Evaluate speculative decoding** on T4 (Medusa heads)
+9. **Prefix caching** for bioinformatics reference data
 
 ---
 
@@ -1359,7 +1907,24 @@ START
   └── FAIL → Error: No viable strategy
 ```
 
-### Task Category Mapping
+### Task Category Mapping (Revised: 4-5 Models)
+
+**Instead of 10 specialized models, use 4 models that cover 95% of tasks:**
+
+| Task Category | Primary Model | Fallback |
+|---------------|---------------|----------|
+| intent_parsing | Qwen-2.5-7B-AWQ (Generalist) | DeepSeek-V3 |
+| code_generation | Qwen-Coder-7B-AWQ | DeepSeek-V3 |
+| code_validation | Qwen-Coder-7B-AWQ | DeepSeek-V3 |
+| data_analysis | Qwen-2.5-7B-AWQ (Generalist) | DeepSeek-V3 |
+| math_statistics | Qwen-Math-7B-AWQ | DeepSeek-V3 |
+| biomedical | Qwen-2.5-7B-AWQ (Generalist) | Claude-3.5 |
+| documentation | Qwen-2.5-7B-AWQ (Generalist) | Claude-3.5 |
+| embeddings | BGE-M3 | OpenAI |
+| safety | Qwen-2.5-7B-AWQ (Generalist) | Claude-3.5 |
+| orchestration | DeepSeek-V3 | Claude-3.5 |
+
+### Original Task Mapping (Reference)
 
 | Task | Local Model (T4) | Cloud Fallback |
 |------|------------------|----------------|
@@ -1373,3 +1938,79 @@ START
 | embeddings | BGE-M3 | OpenAI |
 | safety | Llama-Guard-3 | Claude-3.5 |
 | orchestration | (cloud only) | DeepSeek-V3 |
+
+---
+
+## Appendix: Peer Review Synthesis
+
+### Key Insights from ChatGPT Review
+
+ChatGPT's most valuable observation:
+
+> "You're on the edge of over-engineering for a 1-2 person team."
+
+This led to significant simplifications:
+1. Reduce models from 10 to 4-5 (Generalist, Coder, Math, Embeddings)
+2. Extend existing components instead of creating parallel systems
+3. Static vLLM servers instead of dynamic SLURM jobs
+4. Simple YAML profiles instead of complex StrategyProfile class
+
+### Claude's Additional Considerations
+
+Where I diverge from or extend ChatGPT's recommendations:
+
+1. **Keep Math Model (Qwen-Math-7B)**: ChatGPT suggested it might not be needed, 
+   but bioinformatics has heavy statistical workloads (p-values, fold changes, 
+   normalization). The math-specialized model is worth one T4 slot.
+
+2. **Keep Embeddings Model (BGE-M3)**: Essential for semantic search in 
+   workflow documentation and error pattern matching. Not just a "nice to have."
+
+3. **"vLLM Semantic Router" Warning**: ChatGPT mentioned this as if it exists.
+   It doesn't. vLLM is an inference server, not a routing system. Don't go 
+   searching for this feature - it was a hallucination.
+
+4. **Health-Check Simplification**: ChatGPT suggested replacing GPU detection
+   with simple HTTP health checks. I agree this is sufficient for Phase 1:
+   ```python
+   def is_model_available(endpoint: str) -> bool:
+       try:
+           return requests.get(f"{endpoint}/health", timeout=2).ok
+       except:
+           return False
+   ```
+
+5. **LiteLLM Position**: ChatGPT correctly identified LiteLLM as optional.
+   Use it only if you need unified API across many cloud providers. For our
+   case (primarily DeepSeek + local vLLM), direct OpenAI-compatible calls
+   are simpler.
+
+### Agreed Priority Order
+
+Both Claude and ChatGPT agree on this implementation order:
+
+1. **Deploy static vLLM servers** (4 models, long-running)
+2. **Minimal ResourceDetector** (health checks, not GPU introspection)
+3. **Extend StrategyConfig** (add profile_name, allow_cloud)
+4. **Wire T4ModelRouter** into existing provider cascade
+5. **Add complexity routing later** (RouteLLM for CODE_GEN/BIO)
+
+### Final Recommendation
+
+**Start simple, measure, then optimize.**
+
+The original 10-model, 4-component architecture was designed for scale we don't 
+yet have. The refined approach:
+- Gets us running in 1 week instead of 4
+- Uses existing code patterns
+- Leaves room to add complexity when metrics prove it's needed
+
+The detailed specifications in this document remain valuable as a roadmap for 
+future phases, but Phase 1 should be minimal viable: 4 vLLM servers + simple 
+profile switching + cloud fallback.
+
+---
+
+*Document Version: 2.0 (Post Peer Review)*
+*Last Updated: $(date)*
+*Authors: Claude (primary), ChatGPT (peer review)*
